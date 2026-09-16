@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>홀덤펍 키우기 🍺🃏</title>
+<meta name="description" content="작은 홀덤펍을 손님 가득한 대박 펍으로 키우는 방치형(incremental) 게임" />
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2280%22>🍺</text></svg>" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Jua&family=Gowun+Dodum&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+
+<div id="offline-modal" class="modal hidden">
+  <div class="modal-box">
+    <div class="modal-emoji">🌙☕</div>
+    <h2>펍이 문을 닫은 사이에도...</h2>
+    <p id="offline-text">손님들이 다녀갔어요!</p>
+    <button id="offline-close" class="btn btn-primary">영업 시작! 🍺</button>
+  </div>
+</div>
+
+<div id="toast-wrap"></div>
+
+<header class="topbar">
+  <div class="brand">🍺 홀덤펍 키우기 <span class="brand-sub">Hold'em Pub Tycoon</span></div>
+  <div class="stats">
+    <div class="stat">
+      <span class="stat-label">보유 칩</span>
+      <span class="stat-value" id="chips-value">0</span>
+    </div>
+    <div class="stat">
+      <span class="stat-label">초당 수익</span>
+      <span class="stat-value" id="income-value">0 / 초</span>
+    </div>
+    <div class="stat prestige-badge" id="prestige-badge" title="프레스티지 보너스">
+      ✨ x1.00
+    </div>
+  </div>
+</header>
+
+<main class="layout">
+  <section class="pub-scene-wrap">
+    <div class="pub-scene" id="pub-scene">
+      <div class="pub-sign">🍺 <span id="pub-name">사장님의 홀덤펍</span> 🃏</div>
+      <div class="suit-strip">
+        <img src="assets/img/cards/card_spades_A.png" alt="스페이드 A" />
+        <img src="assets/img/cards/card_hearts_A.png" alt="하트 A" />
+        <img src="assets/img/cards/card_diamonds_A.png" alt="다이아몬드 A" />
+        <img src="assets/img/cards/card_clubs_A.png" alt="클럽 A" />
+      </div>
+      <div class="pub-decor-row" id="pub-decor-row"></div>
+      <div class="pub-tables" id="pub-tables"></div>
+      <div class="pub-staff-row" id="pub-staff-row"></div>
+    </div>
+
+    <button id="deal-btn" class="deal-btn">
+      <img src="assets/img/cards/card_back.png" alt="" class="deal-card-img" />
+      <span>딜링하기<br /><small id="click-power-label">+1 칩</small></span>
+    </button>
+  </section>
+
+  <section class="panel">
+    <nav class="tabs" id="tabs">
+      <button class="tab-btn active" data-tab="tables">🎲 테이블</button>
+      <button class="tab-btn" data-tab="staff">🧑‍💼 직원</button>
+      <button class="tab-btn" data-tab="decor">🪴 인테리어</button>
+      <button class="tab-btn" data-tab="prestige">✨ 프레스티지</button>
+      <button class="tab-btn" data-tab="settings">⚙️</button>
+    </nav>
+
+    <div class="tab-panel active" id="tab-tables">
+      <div class="card-row">
+        <div class="item-card">
+          <div class="item-icon">🃏</div>
+          <div class="item-info">
+            <div class="item-title">홀덤 테이블 추가</div>
+            <div class="item-desc">보유 테이블: <span id="table-count">1</span>개 · 테이블당 <span id="table-base-income">0.5</span> 칩/초</div>
+          </div>
+          <button class="btn btn-buy" id="buy-table-btn">구매<br /><small id="buy-table-cost">15 칩</small></button>
+        </div>
+        <div class="item-card">
+          <div class="item-icon">📈</div>
+          <div class="item-info">
+            <div class="item-title">테이블 리모델링 (전체 수익 강화)</div>
+            <div class="item-desc">현재 레벨: <span id="table-level">0</span> · 레벨당 +10% 수익</div>
+          </div>
+          <button class="btn btn-buy" id="upgrade-table-btn">강화<br /><small id="upgrade-table-cost">50 칩</small></button>
+        </div>
+      </div>
+    </div>
+
+    <div class="tab-panel" id="tab-staff">
+      <div class="card-row" id="staff-list"></div>
+    </div>
+
+    <div class="tab-panel" id="tab-decor">
+      <div class="card-row" id="decor-list"></div>
+    </div>
+
+    <div class="tab-panel" id="tab-prestige">
+      <div class="prestige-box">
+        <div class="item-icon">✨</div>
+        <h3>브랜드 리뉴얼</h3>
+        <p>지금까지 누적 <b id="prestige-total-earned">0</b> 칩을 벌었어요.<br />
+          다음 리뉴얼까지 <b id="prestige-requirement">100,000</b> 칩 필요.</p>
+        <p>리뉴얼하면 테이블/직원/칩이 초기화되지만, <b>명성 포인트</b>를 얻어 <b>영구 수익 보너스</b>를 받아요.</p>
+        <p>지금 리뉴얼 시 획득: <b id="prestige-gain">0</b> 포인트 (현재 배율 <span id="prestige-current-mult">x1.00</span> → <span id="prestige-next-mult">x1.00</span>)</p>
+        <button class="btn btn-primary" id="prestige-btn" disabled>브랜드 리뉴얼 하기</button>
+      </div>
+    </div>
+
+    <div class="tab-panel" id="tab-settings">
+      <div class="settings-box">
+        <h3>저장 데이터</h3>
+        <p class="muted">자동 저장은 브라우저 로컬 저장소(localStorage)에 보관됩니다. 아래 코드로 백업/이전할 수 있어요.</p>
+        <div class="settings-row">
+          <button class="btn" id="export-btn">내보내기</button>
+          <button class="btn" id="import-btn">가져오기</button>
+          <button class="btn btn-danger" id="reset-btn">전체 초기화</button>
+        </div>
+        <textarea id="save-code" placeholder="여기에 저장 코드가 표시되거나, 붙여넣어 가져올 수 있어요"></textarea>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="footer">
+  카드 이미지: <a href="https://kenney.nl/assets/playing-cards-pack" target="_blank" rel="noopener">Kenney.nl Playing Cards Pack</a> (CC0) ·
+  <a href="https://github.com" id="repo-link" target="_blank" rel="noopener">GitHub</a>
+</footer>
+
+<script src="js/data.js"></script>
+<script src="js/backend.js"></script>
+<script src="js/game.js"></script>
+</body>
+</html>
