@@ -82,7 +82,7 @@ button, textarea, input { font-family: inherit; }
 .layout {
   max-width: 1000px;
   margin: 20px auto;
-  padding: 0 16px 40px;
+  padding: 0 16px calc(84px + env(safe-area-inset-bottom, 0px));
   display: grid;
   grid-template-columns: 1.1fr 1fr;
   gap: 20px;
@@ -183,18 +183,75 @@ button, textarea, input { font-family: inherit; }
   gap: 12px;
 }
 
-.tabs { display: flex; flex-wrap: wrap; gap: 6px; }
-.tab-btn {
+.icon-btn {
   border: none;
-  background: #f3e6da;
-  color: var(--text-main);
-  padding: 8px 12px;
-  border-radius: 12px;
+  background: #fff;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  font-size: 16px;
   cursor: pointer;
-  font-size: 13px;
-  font-family: "Gowun Dodum", sans-serif;
+  box-shadow: var(--shadow);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
 }
-.tab-btn.active { background: var(--accent); color: white; font-weight: bold; }
+.icon-btn.active { background: var(--accent); }
+
+.bottom-nav {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  background: rgba(255,255,255,0.96);
+  backdrop-filter: blur(8px);
+  box-shadow: 0 -4px 16px rgba(0,0,0,0.08);
+  padding: 6px 6px calc(6px + env(safe-area-inset-bottom, 0px));
+  z-index: 50;
+}
+.bottom-nav .tab-btn {
+  flex: none;
+  width: 20%;
+  min-width: 0;
+  overflow: hidden;
+  appearance: none;
+  -webkit-appearance: none;
+  border: none;
+  background: transparent;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: center;
+  gap: 2px;
+  padding: 6px 2px;
+  border-radius: 14px;
+  cursor: pointer;
+  color: var(--text-muted);
+  font-family: "Gowun Dodum", sans-serif;
+  transition: transform 0.12s ease, color 0.12s ease, background 0.12s ease;
+}
+.bottom-nav .nav-icon {
+  display: block;
+  width: 100%;
+  text-align: center;
+  font-size: 19px;
+  line-height: 1;
+}
+.bottom-nav .nav-label {
+  display: block;
+  width: 100%;
+  text-align: center;
+  font-size: 10px;
+  line-height: 1.15;
+}
+.bottom-nav .tab-btn.active {
+  color: var(--accent-dark);
+  background: #ffe8f0;
+  font-weight: bold;
+  transform: translateY(-3px);
+}
 
 .tab-panel { display: none; flex-direction: column; gap: 10px; }
 .tab-panel.active { display: flex; }
@@ -276,7 +333,7 @@ button, textarea, input { font-family: inherit; }
 
 #toast-wrap {
   position: fixed;
-  bottom: 16px;
+  bottom: calc(84px + env(safe-area-inset-bottom, 0px));
   left: 50%;
   transform: translateX(-50%);
   display: flex;

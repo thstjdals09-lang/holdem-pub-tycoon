@@ -46,6 +46,7 @@
     <div class="stat prestige-badge" id="prestige-badge" title="프레스티지 보너스">
       ✨ x1.00
     </div>
+    <button class="icon-btn tab-btn" data-tab="settings" id="settings-gear-btn" title="설정" aria-label="설정">⚙️</button>
   </div>
 </header>
 
@@ -71,15 +72,6 @@
   </section>
 
   <section class="panel">
-    <nav class="tabs" id="tabs">
-      <button class="tab-btn active" data-tab="store">🏗 매장</button>
-      <button class="tab-btn" data-tab="tables">🎲 테이블</button>
-      <button class="tab-btn" data-tab="staff">🧑‍💼 직원</button>
-      <button class="tab-btn" data-tab="decor">🪴 인테리어</button>
-      <button class="tab-btn" data-tab="prestige">✨ 프레스티지</button>
-      <button class="tab-btn" data-tab="settings">⚙️</button>
-    </nav>
-
     <div class="tab-panel active" id="tab-store">
       <div class="card-row">
         <div class="item-card">
@@ -149,6 +141,24 @@
     </div>
   </section>
 </main>
+
+<nav class="bottom-nav" id="bottom-nav">
+  <button class="tab-btn active" data-tab="store">
+    <span class="nav-icon">🏗</span><span class="nav-label">매장</span>
+  </button>
+  <button class="tab-btn" data-tab="tables">
+    <span class="nav-icon">🎲</span><span class="nav-label">테이블</span>
+  </button>
+  <button class="tab-btn" data-tab="staff">
+    <span class="nav-icon">👥</span><span class="nav-label">직원</span>
+  </button>
+  <button class="tab-btn" data-tab="decor">
+    <span class="nav-icon">🪴</span><span class="nav-label">인테리어</span>
+  </button>
+  <button class="tab-btn" data-tab="prestige">
+    <span class="nav-icon">✨</span><span class="nav-label">프레스티지</span>
+  </button>
+</nav>
 
 <footer class="footer">
   카드 이미지: <a href="https://kenney.nl/assets/playing-cards-pack" target="_blank" rel="noopener">Kenney.nl Playing Cards Pack</a> (CC0) ·
