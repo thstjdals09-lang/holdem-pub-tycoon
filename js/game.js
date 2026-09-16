@@ -118,10 +118,7 @@
     state.tables += 1;
     dirty = true;
     render();
-    const idx = state.tables - 1;
-    if (idx < D.store.maxShownSlots) {
-      spawnPopOnElement(document.getElementById("floor-grid").children[idx]);
-    }
+    toast(`🃏 테이블 ${state.tables}번 오픈!`);
   };
 
   const expandStore = () => {
@@ -162,17 +159,7 @@
     state.staff[id] += 1;
     dirty = true;
     render();
-    if (id === "dealer") {
-      const idx = state.staff.dealer - 1;
-      if (idx >= 0 && idx < state.tables && idx < D.store.maxShownSlots) {
-        spawnPopOnElement(document.getElementById("floor-grid").children[idx]);
-      }
-    } else if (id === "bartender") {
-      const barIndex = D.fixtures.findIndex((f) => f.id === "bar");
-      spawnPopOnElement(document.getElementById("fixtures-row").children[barIndex]);
-    } else {
-      spawnEmojiPop("pub-staff-row");
-    }
+    toast(`${staffDef(id).emoji} ${staffDef(id).name} 고용! (총 ${state.staff[id]}명)`);
   };
 
   const buyDecor = (id) => {
@@ -182,7 +169,6 @@
     state.decor[id] = true;
     dirty = true;
     render();
-    spawnEmojiPop("pub-decor-row");
     toast(`${def.emoji} ${def.name} 설치 완료!`);
   };
 
@@ -192,6 +178,7 @@
     const btn = document.getElementById("deal-btn");
     btn.classList.add("dealing");
     setTimeout(() => btn.classList.remove("dealing"), 180);
+    if (window.PubScene3D) window.PubScene3D.chipBurst();
   };
 
   const doPrestige = () => {
@@ -232,6 +219,14 @@
   };
   const formatChips = (n) => `${formatNumber(n)} 칩`;
 
+  // 초당 수익/클릭 수익처럼 1보다 작을 수 있는 값은 반올림해도 0으로 보이지 않게 소수 1자리 유지
+  const formatRate = (n) => {
+    if (n < 100) {
+      return (Math.round(n * 10) / 10).toLocaleString("ko-KR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+    }
+    return formatNumber(n);
+  };
+
   // ---------- 이펙트: 토스트 / 팝 애니메이션 ----------
   const toast = (msg) => {
     const wrap = document.getElementById("toast-wrap");
@@ -242,120 +237,24 @@
     setTimeout(() => el.remove(), 2600);
   };
 
-  const spawnPopOnElement = (el) => {
-    if (!el) return;
-    el.classList.remove("emoji-pop");
-    void el.offsetWidth;
-    el.classList.add("emoji-pop");
-  };
-
-  const spawnEmojiPop = (containerId) => {
-    const el = document.getElementById(containerId);
-    if (!el) return;
-    spawnPopOnElement(el.lastElementChild);
-  };
-
   // ---------- 렌더링 ----------
-  const TABLE_ICONS = ["🃏", "♠️", "♥️", "♦️", "♣️"];
-  const ROAM_ICONS = { server: "🍽️", marketer: "📣" };
-
-  function renderFixtures() {
-    const wrap = document.getElementById("fixtures-row");
-    wrap.innerHTML = "";
-    D.fixtures.forEach((f) => {
-      const level = state.fixtures[f.id];
-      const box = document.createElement("div");
-      box.className = "fixture-box" + (level > 0 ? "" : " fixture-empty");
-      const staffBadge = f.id === "bar" && state.staff.bartender > 0 ? `<span class="fixture-staff">🍹</span>` : "";
-      const chipStack = f.id === "vault" && level > 0 ? `<span class="fixture-chips">${"🪙".repeat(Math.min(level, 5))}</span>` : "";
-      box.innerHTML = `
-        <span class="fixture-emoji">${f.emoji}</span>
-        <span class="fixture-name">${f.name}${level > 0 ? ` Lv.${level}` : ""}</span>
-        ${staffBadge}${chipStack}
-      `;
-      wrap.appendChild(box);
-    });
-  }
-
-  function renderFloorGrid() {
-    const grid = document.getElementById("floor-grid");
-    const capacity = tableCapacity();
-    const shownCapacity = Math.min(capacity, D.store.maxShownSlots);
-    grid.innerHTML = "";
-    for (let i = 0; i < shownCapacity; i++) {
-      const cell = document.createElement("div");
-      if (i < state.tables) {
-        cell.className = "table-cell filled";
-        const hasDealer = i < state.staff.dealer;
-        cell.innerHTML = `<span class="table-icon">${TABLE_ICONS[i % TABLE_ICONS.length]}</span>${
-          hasDealer ? `<span class="dealer-badge" title="딜러 배치됨">🎩</span>` : ""
-        }`;
-      } else {
-        cell.className = "table-cell empty";
-        cell.innerHTML = `<span class="table-empty-icon">➕</span>`;
-      }
-      grid.appendChild(cell);
-    }
-    const note = document.getElementById("floor-note");
-    if (capacity > shownCapacity) {
-      note.textContent = `+${capacity - shownCapacity}개 테이블 슬롯 더 있음`;
-      note.style.display = "";
-    } else if (state.tables >= capacity) {
-      note.textContent = "매장이 가득 찼어요! 매장 탭에서 확장해보세요 🏗";
-      note.style.display = "";
-    } else {
-      note.style.display = "none";
-    }
-  }
-
-  function renderRoamRow() {
-    const staffEl = document.getElementById("pub-staff-row");
-    const roamIds = Object.keys(ROAM_ICONS);
-    const total = roamIds.reduce((sum, id) => sum + state.staff[id], 0);
-    const shown = Math.min(total, 16);
-    staffEl.innerHTML = "";
-    let count = 0;
-    outer: for (const id of roamIds) {
-      for (let i = 0; i < state.staff[id]; i++) {
-        if (count >= shown) break outer;
-        const span = document.createElement("span");
-        span.textContent = ROAM_ICONS[id];
-        staffEl.appendChild(span);
-        count++;
-      }
-    }
-    if (total > shown) {
-      const more = document.createElement("span");
-      more.style.fontSize = "14px";
-      more.textContent = `+${total - shown}`;
-      staffEl.appendChild(more);
-    }
-  }
-
-  function renderDecorRow() {
-    const decorEl = document.getElementById("pub-decor-row");
-    decorEl.innerHTML = "";
-    D.decor.forEach((d) => {
-      if (state.decor[d.id]) {
-        const span = document.createElement("span");
-        span.textContent = d.emoji;
-        decorEl.appendChild(span);
-      }
-    });
-  }
-
   function renderScene() {
-    renderFixtures();
-    renderFloorGrid();
-    renderRoamRow();
-    renderDecorRow();
+    if (!window.PubScene3D) return;
+    window.PubScene3D.update({
+      tables: state.tables,
+      capacity: tableCapacity(),
+      maxShown: D.store.maxShownSlots,
+      fixtures: state.fixtures,
+      staff: state.staff,
+      decor: state.decor,
+    });
   }
 
   function renderHeader() {
     document.getElementById("chips-value").textContent = formatNumber(state.chips);
-    document.getElementById("income-value").textContent = `${formatNumber(incomePerSecond())} / 초`;
+    document.getElementById("income-value").textContent = `${formatRate(incomePerSecond())} / 초`;
     document.getElementById("prestige-badge").textContent = `✨ x${prestigeMultiplier().toFixed(2)}`;
-    document.getElementById("click-power-label").textContent = `+${formatNumber(clickPower())} 칩`;
+    document.getElementById("click-power-label").textContent = `+${formatRate(clickPower())} 칩`;
   }
 
   function renderTablesTab() {
@@ -556,6 +455,7 @@
   async function init() {
     setupTabs();
     setupSettings();
+    if (window.PubScene3D) window.PubScene3D.init(document.getElementById("pub-3d-container"));
     document.getElementById("buy-table-btn").addEventListener("click", buyTable);
     document.getElementById("upgrade-table-btn").addEventListener("click", upgradeTable);
     document.getElementById("expand-store-btn").addEventListener("click", expandStore);

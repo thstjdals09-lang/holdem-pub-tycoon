@@ -10,6 +10,14 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Jua&family=Gowun+Dodum&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="css/style.css" />
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
 </head>
 <body>
 
@@ -51,11 +59,9 @@
         <img src="assets/img/cards/card_diamonds_A.png" alt="다이아몬드 A" />
         <img src="assets/img/cards/card_clubs_A.png" alt="클럽 A" />
       </div>
-      <div class="pub-decor-row" id="pub-decor-row"></div>
-      <div class="fixtures-row" id="fixtures-row"></div>
-      <div class="floor-grid" id="floor-grid"></div>
+      <div id="pub-3d-container" class="pub-3d-container"></div>
       <div class="floor-note" id="floor-note"></div>
-      <div class="pub-staff-row" id="pub-staff-row"></div>
+      <p class="drag-hint">👆 드래그해서 매장을 둘러보세요 · 꼬집어서 확대/축소</p>
     </div>
 
     <button id="deal-btn" class="deal-btn">
@@ -149,8 +155,9 @@
   <a href="https://github.com/thstjdals09-lang/holdem-pub-tycoon" id="repo-link" target="_blank" rel="noopener">GitHub</a>
 </footer>
 
-<script src="js/data.js"></script>
-<script src="js/backend.js"></script>
-<script src="js/game.js"></script>
+<script src="js/data.js" defer></script>
+<script src="js/backend.js" defer></script>
+<script type="module" src="js/scene3d.js"></script>
+<script src="js/game.js" defer></script>
 </body>
 </html>
