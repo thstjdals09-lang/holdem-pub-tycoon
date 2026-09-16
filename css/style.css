@@ -128,7 +128,7 @@ button, textarea, input { font-family: inherit; }
 }
 .suit-strip img:hover { transform: translateY(-4px) rotate(-4deg); }
 
-.pub-decor-row, .pub-tables, .pub-staff-row {
+.pub-decor-row, .pub-staff-row {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
@@ -137,9 +137,78 @@ button, textarea, input { font-family: inherit; }
   justify-content: center;
 }
 
-.pub-tables { font-size: 26px; }
 .pub-staff-row { font-size: 22px; }
 .pub-decor-row { font-size: 20px; }
+
+.fixtures-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+}
+.fixture-box {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: #fff;
+  border-radius: 10px;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: bold;
+  box-shadow: 0 2px 0 rgba(0,0,0,0.05);
+  position: relative;
+}
+.fixture-box.fixture-empty {
+  background: repeating-linear-gradient(45deg, #f6ecdf, #f6ecdf 6px, #efe1cd 6px, #efe1cd 12px);
+  color: var(--text-muted);
+  font-weight: normal;
+  opacity: 0.8;
+}
+.fixture-emoji { font-size: 18px; }
+.fixture-staff { font-size: 14px; margin-left: 2px; }
+.fixture-chips { font-size: 11px; margin-left: 2px; }
+
+.floor-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(46px, 1fr));
+  gap: 6px;
+  background: #fbe8c8;
+  border-radius: 12px;
+  padding: 10px;
+}
+.table-cell {
+  aspect-ratio: 1 / 1;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  font-size: 20px;
+}
+.table-cell.filled {
+  background: #fff;
+  box-shadow: 0 2px 0 rgba(0,0,0,0.08);
+}
+.table-cell.empty {
+  border: 2px dashed #e0c290;
+  color: #e0c290;
+  font-size: 14px;
+}
+.dealer-badge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  font-size: 13px;
+  background: #fff;
+  border-radius: 50%;
+  padding: 1px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+}
+.floor-note {
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-muted);
+}
 
 .emoji-pop {
   animation: pop 0.35s ease;

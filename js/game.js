@@ -7,6 +7,8 @@
     totalEarned: 0,
     tables: 1,
     tableLevel: 0,
+    store: { expansions: 0 },
+    fixtures: Object.fromEntries(D.fixtures.map((f) => [f.id, 0])),
     staff: Object.fromEntries(D.staff.map((s) => [s.id, 0])),
     decor: Object.fromEntries(D.decor.map((d) => [d.id, false])),
     prestige: keepPrestige || { points: 0 },
@@ -15,6 +17,19 @@
   let state = defaultState();
   let lastTickAt = Date.now();
   let dirty = true;
+
+  // 저장된 데이터에 새 필드(신규 시설/직원 등)가 없어도 기본값으로 채워준다.
+  const mergeWithDefaults = (saved) => {
+    const base = defaultState();
+    return {
+      ...base,
+      ...saved,
+      store: { ...base.store, ...saved.store },
+      fixtures: { ...base.fixtures, ...saved.fixtures },
+      staff: { ...base.staff, ...saved.staff },
+      decor: { ...base.decor, ...saved.decor },
+    };
+  };
 
   // ---------- 비용/수치 계산 ----------
   const costFor = (base, growth, count) => Math.ceil(base * Math.pow(growth, count));
@@ -25,6 +40,14 @@
   const staffCost = (id) => {
     const def = staffDef(id);
     return costFor(def.baseCost, def.costGrowth, state.staff[id]);
+  };
+
+  const tableCapacity = () => D.store.baseCapacity + state.store.expansions * D.store.capacityPerExpansion;
+  const expansionCost = () => costFor(D.store.expansionBaseCost, D.store.expansionCostGrowth, state.store.expansions);
+  const fixtureDef = (id) => D.fixtures.find((f) => f.id === id);
+  const fixtureCost = (id) => {
+    const def = fixtureDef(id);
+    return costFor(def.baseCost, def.costGrowth, state.fixtures[id]);
   };
 
   // 명성 포인트 N점을 얻으려면 baseRequirement * N^2 칩이 누적으로 필요 (역함수: sqrt)
@@ -50,9 +73,17 @@
     return mult;
   };
 
+  const fixtureIncome = () => {
+    let income = 0;
+    D.fixtures.forEach((f) => {
+      if (f.incomePerLevel) income += f.incomePerLevel * state.fixtures[f.id];
+    });
+    return income;
+  };
+
   const incomePerSecond = () => {
-    const base = state.tables * D.table.baseIncome * (1 + state.tableLevel * D.tableUpgrade.bonusPerLevel);
-    return base * incomeMultiplier();
+    const tableIncome = state.tables * D.table.baseIncome * (1 + state.tableLevel * D.tableUpgrade.bonusPerLevel);
+    return (tableIncome + fixtureIncome()) * incomeMultiplier();
   };
 
   const clickPower = () => {
@@ -60,6 +91,8 @@
     D.staff.forEach((s) => {
       if (s.effect.type === "click") power += s.effect.value * state.staff[s.id];
     });
+    const vault = fixtureDef("vault");
+    if (vault) power += vault.clickPerLevel * state.fixtures.vault;
     return power * prestigeMultiplier();
   };
 
@@ -78,13 +111,38 @@
   };
 
   const buyTable = () => {
+    if (state.tables >= tableCapacity()) return;
     const cost = tableCost();
     if (state.chips < cost) return;
     state.chips -= cost;
     state.tables += 1;
     dirty = true;
-    spawnEmojiPop("pub-tables");
     render();
+    const idx = state.tables - 1;
+    if (idx < D.store.maxShownSlots) {
+      spawnPopOnElement(document.getElementById("floor-grid").children[idx]);
+    }
+  };
+
+  const expandStore = () => {
+    const cost = expansionCost();
+    if (state.chips < cost) return;
+    state.chips -= cost;
+    state.store.expansions += 1;
+    dirty = true;
+    render();
+    toast(`🏗 매장을 확장했어요! 테이블 슬롯 +${D.store.capacityPerExpansion}`);
+  };
+
+  const upgradeFixture = (id) => {
+    const cost = fixtureCost(id);
+    if (state.chips < cost) return;
+    const def = fixtureDef(id);
+    state.chips -= cost;
+    state.fixtures[id] += 1;
+    dirty = true;
+    render();
+    toast(`${def.emoji} ${def.name} ${state.fixtures[id] === 1 ? "설치" : `Lv.${state.fixtures[id]}로 업그레이드`} 완료!`);
   };
 
   const upgradeTable = () => {
@@ -103,8 +161,18 @@
     state.chips -= cost;
     state.staff[id] += 1;
     dirty = true;
-    spawnEmojiPop("pub-staff-row");
     render();
+    if (id === "dealer") {
+      const idx = state.staff.dealer - 1;
+      if (idx >= 0 && idx < state.tables && idx < D.store.maxShownSlots) {
+        spawnPopOnElement(document.getElementById("floor-grid").children[idx]);
+      }
+    } else if (id === "bartender") {
+      const barIndex = D.fixtures.findIndex((f) => f.id === "bar");
+      spawnPopOnElement(document.getElementById("fixtures-row").children[barIndex]);
+    } else {
+      spawnEmojiPop("pub-staff-row");
+    }
   };
 
   const buyDecor = (id) => {
@@ -113,8 +181,8 @@
     state.chips -= def.cost;
     state.decor[id] = true;
     dirty = true;
-    spawnEmojiPop("pub-decor-row");
     render();
+    spawnEmojiPop("pub-decor-row");
     toast(`${def.emoji} ${def.name} 설치 완료!`);
   };
 
@@ -174,55 +242,98 @@
     setTimeout(() => el.remove(), 2600);
   };
 
+  const spawnPopOnElement = (el) => {
+    if (!el) return;
+    el.classList.remove("emoji-pop");
+    void el.offsetWidth;
+    el.classList.add("emoji-pop");
+  };
+
   const spawnEmojiPop = (containerId) => {
     const el = document.getElementById(containerId);
     if (!el) return;
-    const last = el.lastElementChild;
-    if (last) {
-      last.classList.remove("emoji-pop");
-      void last.offsetWidth;
-      last.classList.add("emoji-pop");
-    }
+    spawnPopOnElement(el.lastElementChild);
   };
 
   // ---------- 렌더링 ----------
   const TABLE_ICONS = ["🃏", "♠️", "♥️", "♦️", "♣️"];
-  const CUSTOMER_ICONS = ["🧑", "👩", "🧔", "👨", "👵", "👴", "🧑‍🦱", "👩‍🦰"];
+  const ROAM_ICONS = { server: "🍽️", marketer: "📣" };
 
-  function renderScene() {
-    const tablesEl = document.getElementById("pub-tables");
+  function renderFixtures() {
+    const wrap = document.getElementById("fixtures-row");
+    wrap.innerHTML = "";
+    D.fixtures.forEach((f) => {
+      const level = state.fixtures[f.id];
+      const box = document.createElement("div");
+      box.className = "fixture-box" + (level > 0 ? "" : " fixture-empty");
+      const staffBadge = f.id === "bar" && state.staff.bartender > 0 ? `<span class="fixture-staff">🍹</span>` : "";
+      const chipStack = f.id === "vault" && level > 0 ? `<span class="fixture-chips">${"🪙".repeat(Math.min(level, 5))}</span>` : "";
+      box.innerHTML = `
+        <span class="fixture-emoji">${f.emoji}</span>
+        <span class="fixture-name">${f.name}${level > 0 ? ` Lv.${level}` : ""}</span>
+        ${staffBadge}${chipStack}
+      `;
+      wrap.appendChild(box);
+    });
+  }
+
+  function renderFloorGrid() {
+    const grid = document.getElementById("floor-grid");
+    const capacity = tableCapacity();
+    const shownCapacity = Math.min(capacity, D.store.maxShownSlots);
+    grid.innerHTML = "";
+    for (let i = 0; i < shownCapacity; i++) {
+      const cell = document.createElement("div");
+      if (i < state.tables) {
+        cell.className = "table-cell filled";
+        const hasDealer = i < state.staff.dealer;
+        cell.innerHTML = `<span class="table-icon">${TABLE_ICONS[i % TABLE_ICONS.length]}</span>${
+          hasDealer ? `<span class="dealer-badge" title="딜러 배치됨">🎩</span>` : ""
+        }`;
+      } else {
+        cell.className = "table-cell empty";
+        cell.innerHTML = `<span class="table-empty-icon">➕</span>`;
+      }
+      grid.appendChild(cell);
+    }
+    const note = document.getElementById("floor-note");
+    if (capacity > shownCapacity) {
+      note.textContent = `+${capacity - shownCapacity}개 테이블 슬롯 더 있음`;
+      note.style.display = "";
+    } else if (state.tables >= capacity) {
+      note.textContent = "매장이 가득 찼어요! 매장 탭에서 확장해보세요 🏗";
+      note.style.display = "";
+    } else {
+      note.style.display = "none";
+    }
+  }
+
+  function renderRoamRow() {
     const staffEl = document.getElementById("pub-staff-row");
-    const decorEl = document.getElementById("pub-decor-row");
-
-    const shownTables = Math.min(state.tables, 14);
-    tablesEl.innerHTML = "";
-    for (let i = 0; i < shownTables; i++) {
-      const span = document.createElement("span");
-      span.textContent = TABLE_ICONS[i % TABLE_ICONS.length];
-      tablesEl.appendChild(span);
-    }
-    if (state.tables > shownTables) {
-      const more = document.createElement("span");
-      more.style.fontSize = "14px";
-      more.textContent = `+${state.tables - shownTables}`;
-      tablesEl.appendChild(more);
-    }
-
-    const totalStaff = Object.values(state.staff).reduce((a, b) => a + b, 0);
-    const shownStaff = Math.min(totalStaff, 16);
+    const roamIds = Object.keys(ROAM_ICONS);
+    const total = roamIds.reduce((sum, id) => sum + state.staff[id], 0);
+    const shown = Math.min(total, 16);
     staffEl.innerHTML = "";
-    for (let i = 0; i < shownStaff; i++) {
-      const span = document.createElement("span");
-      span.textContent = CUSTOMER_ICONS[i % CUSTOMER_ICONS.length];
-      staffEl.appendChild(span);
+    let count = 0;
+    outer: for (const id of roamIds) {
+      for (let i = 0; i < state.staff[id]; i++) {
+        if (count >= shown) break outer;
+        const span = document.createElement("span");
+        span.textContent = ROAM_ICONS[id];
+        staffEl.appendChild(span);
+        count++;
+      }
     }
-    if (totalStaff > shownStaff) {
+    if (total > shown) {
       const more = document.createElement("span");
       more.style.fontSize = "14px";
-      more.textContent = `+${totalStaff - shownStaff}`;
+      more.textContent = `+${total - shown}`;
       staffEl.appendChild(more);
     }
+  }
 
+  function renderDecorRow() {
+    const decorEl = document.getElementById("pub-decor-row");
     decorEl.innerHTML = "";
     D.decor.forEach((d) => {
       if (state.decor[d.id]) {
@@ -233,6 +344,13 @@
     });
   }
 
+  function renderScene() {
+    renderFixtures();
+    renderFloorGrid();
+    renderRoamRow();
+    renderDecorRow();
+  }
+
   function renderHeader() {
     document.getElementById("chips-value").textContent = formatNumber(state.chips);
     document.getElementById("income-value").textContent = `${formatNumber(incomePerSecond())} / 초`;
@@ -241,19 +359,55 @@
   }
 
   function renderTablesTab() {
+    const capacity = tableCapacity();
     document.getElementById("table-count").textContent = state.tables;
+    document.getElementById("table-capacity").textContent = capacity;
     document.getElementById("table-level").textContent = state.tableLevel;
     document.getElementById("table-base-income").textContent = D.table.baseIncome;
 
     const buyBtn = document.getElementById("buy-table-btn");
+    const atCapacity = state.tables >= capacity;
     const cost = tableCost();
-    buyBtn.querySelector("small").textContent = `${formatChips(cost)}`;
-    buyBtn.disabled = state.chips < cost;
+    if (atCapacity) {
+      buyBtn.querySelector("small").textContent = "매장 확장 필요";
+      buyBtn.disabled = true;
+    } else {
+      buyBtn.querySelector("small").textContent = `${formatChips(cost)}`;
+      buyBtn.disabled = state.chips < cost;
+    }
 
     const upBtn = document.getElementById("upgrade-table-btn");
     const upCost = tableUpgradeCost();
     upBtn.querySelector("small").textContent = `${formatChips(upCost)}`;
     upBtn.disabled = state.chips < upCost;
+  }
+
+  function renderStoreTab() {
+    const capacity = tableCapacity();
+    document.getElementById("store-capacity").textContent = capacity;
+    const expandBtn = document.getElementById("expand-store-btn");
+    const expandCost = expansionCost();
+    expandBtn.querySelector("small").textContent = `${formatChips(expandCost)}`;
+    expandBtn.disabled = state.chips < expandCost;
+
+    const wrap = document.getElementById("fixture-list");
+    wrap.innerHTML = "";
+    D.fixtures.forEach((f) => {
+      const cost = fixtureCost(f.id);
+      const level = state.fixtures[f.id];
+      const card = document.createElement("div");
+      card.className = "item-card";
+      card.innerHTML = `
+        <div class="item-icon">${f.emoji}</div>
+        <div class="item-info">
+          <div class="item-title">${f.name} <span class="muted">(Lv.${level})</span></div>
+          <div class="item-desc">${f.desc}</div>
+        </div>
+        <button class="btn btn-buy" ${state.chips < cost ? "disabled" : ""}>${level === 0 ? "설치" : "업그레이드"}<br/><small>${formatChips(cost)}</small></button>
+      `;
+      card.querySelector("button").addEventListener("click", () => upgradeFixture(f.id));
+      wrap.appendChild(card);
+    });
   }
 
   function renderStaffTab() {
@@ -314,6 +468,7 @@
 
   function render() {
     renderHeader();
+    renderStoreTab();
     renderTablesTab();
     renderStaffTab();
     renderDecorTab();
@@ -349,12 +504,7 @@
       if (!code.trim()) return toast("가져올 코드를 붙여넣어 주세요.");
       const res = await GameBackend.importState(code);
       if (res.ok) {
-        state = {
-          ...defaultState(),
-          ...res.state,
-          staff: { ...defaultState().staff, ...res.state.staff },
-          decor: { ...defaultState().decor, ...res.state.decor },
-        };
+        state = mergeWithDefaults(res.state);
         dirty = true;
         render();
         toast("가져오기 완료!");
@@ -374,7 +524,7 @@
     const res = await GameBackend.loadState();
     if (res.ok && res.state) {
       const loaded = res.state;
-      state = { ...defaultState(), ...loaded, staff: { ...defaultState().staff, ...loaded.staff }, decor: { ...defaultState().decor, ...loaded.decor } };
+      state = mergeWithDefaults(loaded);
       const savedAt = loaded.savedAt || Date.now();
       const elapsedSec = Math.max(0, Math.min((Date.now() - savedAt) / 1000, D.offline.maxSeconds));
       if (elapsedSec > 20) {
@@ -408,6 +558,7 @@
     setupSettings();
     document.getElementById("buy-table-btn").addEventListener("click", buyTable);
     document.getElementById("upgrade-table-btn").addEventListener("click", upgradeTable);
+    document.getElementById("expand-store-btn").addEventListener("click", expandStore);
     document.getElementById("deal-btn").addEventListener("click", manualDeal);
     document.getElementById("prestige-btn").addEventListener("click", doPrestige);
     document.getElementById("offline-close").addEventListener("click", () => {

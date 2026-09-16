@@ -1,5 +1,41 @@
 // 게임 밸런스 데이터 정의 (한 곳에서 관리)
 const GAME_DATA = {
+  store: {
+    baseCapacity: 6, // 매장 기본 테이블 슬롯 수
+    capacityPerExpansion: 4, // 확장 1회당 늘어나는 슬롯 수
+    expansionBaseCost: 300,
+    expansionCostGrowth: 1.6,
+    maxShownSlots: 24, // 화면에 그리는 슬롯 상한 (그 이상은 "+N"으로 표시)
+  },
+  fixtures: [
+    {
+      id: "bar",
+      name: "바 카운터",
+      emoji: "🍸",
+      desc: "칵테일 판매로 초당 수익 증가",
+      baseCost: 300,
+      costGrowth: 1.35,
+      incomePerLevel: 1.2,
+    },
+    {
+      id: "fridge",
+      name: "냉장고",
+      emoji: "🧊",
+      desc: "주류/안주 재고 확보로 초당 수익 증가",
+      baseCost: 200,
+      costGrowth: 1.3,
+      incomePerLevel: 0.7,
+    },
+    {
+      id: "vault",
+      name: "칩 금고",
+      emoji: "🗄️",
+      desc: "칩 보관 용량 증가로 클릭(딜링) 수익 증가",
+      baseCost: 400,
+      costGrowth: 1.32,
+      clickPerLevel: 0.6,
+    },
+  ],
   table: {
     baseCost: 15,
     costGrowth: 1.15,
@@ -14,8 +50,8 @@ const GAME_DATA = {
     {
       id: "bartender",
       name: "바텐더",
-      emoji: "🍸",
-      desc: "클릭(직접 딜링) 수익 +1",
+      emoji: "🍹",
+      desc: "클릭(직접 딜링) 수익 +1 · 바 카운터에 배치됨",
       baseCost: 80,
       costGrowth: 1.14,
       effect: { type: "click", value: 1 },
@@ -23,8 +59,8 @@ const GAME_DATA = {
     {
       id: "dealer",
       name: "딜러",
-      emoji: "🃏",
-      desc: "테이블 수익 +8%",
+      emoji: "🎩",
+      desc: "테이블 수익 +8% · 테이블에 1명씩 배치됨",
       baseCost: 100,
       costGrowth: 1.16,
       effect: { type: "incomeMult", value: 0.08 },
@@ -32,8 +68,8 @@ const GAME_DATA = {
     {
       id: "server",
       name: "서빙 직원",
-      emoji: "🦂",
-      desc: "오프라인 수익 효율 +5%",
+      emoji: "🍽️",
+      desc: "오프라인 수익 효율 +5% · 매장을 돌아다님",
       baseCost: 250,
       costGrowth: 1.18,
       effect: { type: "offline", value: 0.05 },
@@ -42,7 +78,7 @@ const GAME_DATA = {
       id: "marketer",
       name: "마케터",
       emoji: "📣",
-      desc: "테이블 수익 +12% (신규 손님 유치)",
+      desc: "테이블 수익 +12% (신규 손님 유치) · 입구에서 홍보",
       baseCost: 1200,
       costGrowth: 1.22,
       effect: { type: "incomeMult", value: 0.12 },

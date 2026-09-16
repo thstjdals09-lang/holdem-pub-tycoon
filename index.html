@@ -52,7 +52,9 @@
         <img src="assets/img/cards/card_clubs_A.png" alt="클럽 A" />
       </div>
       <div class="pub-decor-row" id="pub-decor-row"></div>
-      <div class="pub-tables" id="pub-tables"></div>
+      <div class="fixtures-row" id="fixtures-row"></div>
+      <div class="floor-grid" id="floor-grid"></div>
+      <div class="floor-note" id="floor-note"></div>
       <div class="pub-staff-row" id="pub-staff-row"></div>
     </div>
 
@@ -64,20 +66,35 @@
 
   <section class="panel">
     <nav class="tabs" id="tabs">
-      <button class="tab-btn active" data-tab="tables">🎲 테이블</button>
+      <button class="tab-btn active" data-tab="store">🏗 매장</button>
+      <button class="tab-btn" data-tab="tables">🎲 테이블</button>
       <button class="tab-btn" data-tab="staff">🧑‍💼 직원</button>
       <button class="tab-btn" data-tab="decor">🪴 인테리어</button>
       <button class="tab-btn" data-tab="prestige">✨ 프레스티지</button>
       <button class="tab-btn" data-tab="settings">⚙️</button>
     </nav>
 
-    <div class="tab-panel active" id="tab-tables">
+    <div class="tab-panel active" id="tab-store">
+      <div class="card-row">
+        <div class="item-card">
+          <div class="item-icon">🏗</div>
+          <div class="item-info">
+            <div class="item-title">매장 확장</div>
+            <div class="item-desc">현재 테이블 슬롯: <span id="store-capacity">6</span>칸 · 확장 시 +4칸</div>
+          </div>
+          <button class="btn btn-buy" id="expand-store-btn">확장<br /><small id="expand-store-cost">300 칩</small></button>
+        </div>
+      </div>
+      <div class="card-row" id="fixture-list"></div>
+    </div>
+
+    <div class="tab-panel" id="tab-tables">
       <div class="card-row">
         <div class="item-card">
           <div class="item-icon">🃏</div>
           <div class="item-info">
             <div class="item-title">홀덤 테이블 추가</div>
-            <div class="item-desc">보유 테이블: <span id="table-count">1</span>개 · 테이블당 <span id="table-base-income">0.5</span> 칩/초</div>
+            <div class="item-desc">보유 테이블: <span id="table-count">1</span> / <span id="table-capacity">6</span>개 · 테이블당 <span id="table-base-income">0.5</span> 칩/초</div>
           </div>
           <button class="btn btn-buy" id="buy-table-btn">구매<br /><small id="buy-table-cost">15 칩</small></button>
         </div>
