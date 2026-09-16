@@ -6,7 +6,7 @@
 
 ## 🎮 플레이
 
-GitHub Pages 링크: **https://<GITHUB_USERNAME>.github.io/holdem-pub-tycoon/**
+GitHub Pages 링크: **https://thstjdals09-lang.github.io/holdem-pub-tycoon/**
 (저장소를 clone 후 `index.html`을 브라우저로 열어도 바로 플레이할 수 있습니다.)
 
 ## 🕹 게임 방법

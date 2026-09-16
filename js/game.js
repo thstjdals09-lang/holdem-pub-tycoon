@@ -414,9 +414,6 @@
       document.getElementById("offline-modal").classList.add("hidden");
     });
 
-    const repoLink = document.getElementById("repo-link");
-    if (repoLink) repoLink.href = window.location.href.split("#")[0];
-
     await loadGameAndComputeOffline();
     dirty = true;
     render();
