@@ -129,17 +129,44 @@ GitHub Pages: **https://thstjdals09-lang.github.io/holdem-pub-tycoon/**
 - **자동 업그레이드** — 켜두면 살 수 있는 것 중 가장 싼 항목부터 알아서 구매
 - **딜러 자동 배치** — 수익 높은 딜러부터 테이블에 배치(설정에서 끌 수 있어요)
 
+## 👤 계정
+
+Firebase Authentication 기반 아이디/비밀번호 로그인. 처음 접속하면 로그인/계정 만들기 화면부터 뜨고,
+로그인한 계정으로 진행 상황이 클라우드(Firestore)에 자동 저장돼 **여러 기기에서 같은 아이디로 이어할 수 있어요.**
+설정(⚙️) 탭의 "계정" 섹션에서 비밀번호 변경 / 로그아웃 / 계정 삭제가 가능합니다.
+
+## 💎 상점 (수익모델)
+
+재화(다이아) 옆 **＋** 버튼으로 상점을 열 수 있어요.
+
+- **창업 지원팩** — 신규 계정 전용 1회 한정 특가
+- **다이아 패키지** 5종 — 금액이 클수록 보너스 비율이 커짐
+- **사장님 월 정기권** — 즉시 다이아 + 30일간 매일 접속 다이아 + 전체 수익 +10%
+- 계정당 **첫 결제 1회는 다이아 2배** 지급
+
+결제는 [PortOne(아임포트)](https://portone.io) V2 SDK로 연동돼 있지만, **아직 PG 가맹점 가입 전이라
+`js/data.js`의 `payment.storeId`/`channelKey`가 비어 있는 동안은 "결제 준비중"으로 막혀 있어요.**
+가입 후 그 두 값만 채우면 바로 실 결제로 전환됩니다.
+
+> ⚠️ 지금은 결제 성공 응답을 클라이언트가 그대로 신뢰해 재화를 지급하는 구조입니다(정적 사이트라 서버가 없음).
+> 실제로 돈을 받기 시작하기 전에는 반드시 서버(Firebase Cloud Functions 등)에서 PortOne 결제를 검증한 뒤
+> 재화를 지급하도록 바꿔야 합니다. 자세한 내용은 `CLAUDE.md` 참고.
+
 ## 🧩 프로젝트 구조
 
 ```
 holdem-pub-tycoon/
-├── index.html          # 풀스크린 셸 (3D 레이어 + HUD 오버레이 + 바텀시트 + 모달)
+├── index.html          # 풀스크린 셸 (3D 레이어 + HUD 오버레이 + 바텀시트 + 모달 + 로그인 게이트)
 ├── css/style.css        # 오버레이 UI 스타일 (두툼한 입체 버튼, 프로스티드 글래스)
-├── js/data.js            # 밸런스/콘텐츠 데이터 전부
+├── js/data.js            # 밸런스/콘텐츠/상점 데이터 전부
 ├── js/portraits.js        # 딜러 16명 치비 초상화를 SVG로 생성 (외부 이미지 없음)
-├── js/backend.js           # 저장 데이터 어댑터 (localStorage 기반, 실제 API로 교체 가능)
-├── js/scene3d.js            # Three.js 3D 매장 씬 (ES 모듈)
-└── js/game.js                # 게임 루프·경제 로직·UI 렌더링
+├── js/firebase-init.js     # Firebase 앱/Auth/Firestore 초기화 (ES 모듈)
+├── js/account.js            # 회원가입/로그인/로그아웃/계정설정 (ES 모듈)
+├── js/auth-gate.js           # 로그인 전 풀스크린 게이트 UI (ES 모듈)
+├── js/backend.js              # 저장 데이터 어댑터 (로그인 시 Firestore, 아니면 localStorage)
+├── js/shop.js                  # 다이아 결제(PortOne V2) (ES 모듈)
+├── js/scene3d.js                 # Three.js 3D 매장 씬 (ES 모듈)
+└── js/game.js                     # 게임 루프·경제 로직·UI 렌더링 (상점/계정 탭 렌더링 포함)
 ```
 
 `js/scene3d.js`는 ES 모듈이라 `window.PubScene3D = { init, update, chipBurst }`로 전역에 노출되고,
@@ -161,8 +188,9 @@ holdem-pub-tycoon/
 ### 백엔드 연결 방식
 
 `js/backend.js`의 `GameBackend` 모듈이 저장/불러오기 API 역할을 합니다.
-지금은 `localStorage`를 쓰지만 함수 시그니처(`saveState`, `loadState`, `resetState`)를 그대로 두고
-내부만 `fetch()` 호출로 바꾸면 실제 서버(Node/Express, Firebase 등)로 교체할 수 있는 어댑터 패턴입니다.
+로그인된 계정이 있으면 Firestore(`holdemPub_saves/{uid}`)를 우선 사용하고, `localStorage`는
+오프라인 캐시 + 내보내기/가져오기 코드 생성용으로 계속 씁니다. 함수 시그니처(`saveState`, `loadState`,
+`resetState`)는 그대로라 다른 백엔드로 바꿀 때도 `game.js`는 건드릴 필요가 없는 어댑터 패턴입니다.
 설정 탭에서 저장 데이터를 base64 코드로 내보내기/가져오기 할 수도 있어요.
 
 ## 🎨 에셋 출처

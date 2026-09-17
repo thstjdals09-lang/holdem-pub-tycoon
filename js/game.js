@@ -48,6 +48,15 @@
     settings: { showTableIncome: true, autoAssign: true },
     ui: { buyQty: 1, autoUpgrade: false, codexFilter: "all" },
 
+    // 상점(결제) 관련 — 계정과 함께 클라우드에 저장된다
+    purchases: keep.purchases ?? {
+      firstPurchaseDone: false,
+      starterBought: false,
+      vipUntil: 0,
+      vipLastDailyDate: null,
+      totalSpentKRW: 0,
+    },
+
     attendance: keep.attendance ?? { lastDate: null, cycleDay: 0 },
     missions: { date: null, list: [], allClaimed: false },
     // 성장 미션(튜토리얼)과 반복 퀘스트는 프레스티지를 해도 이어진다
@@ -84,6 +93,7 @@
     s.attendance = { ...base.attendance, ...saved.attendance };
     s.boosts = { ...base.boosts, ...saved.boosts };
     s.boosts.active = s.boosts.active || {};
+    s.purchases = { ...base.purchases, ...saved.purchases };
     s.missions = { ...base.missions, ...saved.missions };
     s.tutorial = { ...base.tutorial, ...saved.tutorial };
     s.tutorial.counts = s.tutorial.counts || {};
@@ -213,10 +223,13 @@
       mult += d.bonusPerLevel * (state.decor[d.id] || 0);
     });
     mult += D.themeUpgrade.bonusPerLevel * themeLevel();
+    if (vipActive()) mult *= 1 + D.shop.vip.incomeBonusPct / 100;
     mult *= prestigeMultiplier();
     mult *= boostMultiplier();
     return mult;
   }
+
+  const vipActive = () => state.purchases.vipUntil > Date.now();
 
   function fixtureIncome() {
     let income = 0;
@@ -392,6 +405,11 @@
   function ensureDailyState() {
     const key = todayKey();
     if (state.missions.date !== key) rollMissions();
+    if (vipActive() && state.purchases.vipLastDailyDate !== key) {
+      state.purchases.vipLastDailyDate = key;
+      addDiamonds(D.shop.vip.dailyDiamonds);
+      toast(`👑 월 정기권 · 오늘의 다이아 💎${D.shop.vip.dailyDiamonds} 지급!`);
+    }
   }
 
   function claimMission(index) {
@@ -852,6 +870,7 @@
       attendance: state.attendance,
       boosts: state.boosts,
       lifetimeEarned: state.lifetimeEarned,
+      purchases: state.purchases,
     });
     ensureDailyState();
     sceneDirty = true;
@@ -1209,6 +1228,145 @@
   function renderSettingsTab() {
     $("show-table-income-toggle").checked = state.settings.showTableIncome;
     $("auto-assign-toggle").checked = state.settings.autoAssign;
+    renderAccountInfo();
+  }
+
+  function renderAccountInfo() {
+    const box = $("account-info");
+    if (!box) return;
+    const username = window.Account ? window.Account.getCurrentUsername() : null;
+    box.innerHTML = `
+      <p class="muted">아이디 <b>${username ?? "-"}</b> · 진행 상황은 이 계정에 자동으로 클라우드 저장돼요.</p>
+      <div class="settings-row">
+        <button class="btn" id="change-password-btn">비밀번호 변경</button>
+        <button class="btn" id="logout-btn">로그아웃</button>
+        <button class="btn btn-danger" id="delete-account-btn">계정 삭제</button>
+      </div>
+    `;
+    $("logout-btn").addEventListener("click", async () => {
+      if (!window.confirm("로그아웃할까요?")) return;
+      await saveGame();
+      await window.Account.logout();
+      window.location.reload();
+    });
+    $("change-password-btn").addEventListener("click", async () => {
+      const next = window.prompt("새 비밀번호를 입력해주세요 (6자 이상)");
+      if (!next) return;
+      const res = await window.Account.changePassword(next);
+      toast(res.ok ? "비밀번호를 변경했어요" : res.error);
+    });
+    $("delete-account-btn").addEventListener("click", async () => {
+      if (!window.confirm("정말 계정을 삭제할까요? 클라우드에 저장된 진행 상황도 함께 사라지고 되돌릴 수 없어요.")) return;
+      const res = await window.Account.deleteAccount();
+      if (res.ok) window.location.reload();
+      else toast(res.error);
+    });
+  }
+
+  // ============================================================
+  // 상점 (다이아 결제)
+  // ============================================================
+  function shopItemCard({ id, emoji, name, desc, priceLabel, tag, owned, action }) {
+    return `
+      <div class="item-card shop-card ${owned ? "shop-card-owned" : ""}">
+        <div class="item-icon">${emoji}</div>
+        <div class="item-info">
+          <div class="item-title">${name}${tag ? `<span class="shop-tag">${tag}</span>` : ""}</div>
+          <div class="item-desc">${desc}</div>
+        </div>
+        ${owned ? '<button class="btn btn-owned" disabled>보유중</button>' : `<button class="btn btn-buy" data-shop="${id}">${action ?? "구매"}<small>${priceLabel}</small></button>`}
+      </div>`;
+  }
+
+  function renderShopTab() {
+    const list = $("shop-list");
+    if (!list) return;
+    const parts = [];
+
+    if (vipActive()) {
+      const daysLeft = Math.ceil((state.purchases.vipUntil - Date.now()) / (24 * 60 * 60 * 1000));
+      parts.push(shopItemCard({
+        id: "vip_monthly",
+        emoji: D.shop.vip.emoji,
+        name: D.shop.vip.name,
+        desc: `이용중 · ${daysLeft}일 남음 · 매일 💎${D.shop.vip.dailyDiamonds} + 수익 +${D.shop.vip.incomeBonusPct}%`,
+        owned: true,
+      }));
+    } else {
+      parts.push(shopItemCard({
+        id: D.shop.vip.id,
+        emoji: D.shop.vip.emoji,
+        name: D.shop.vip.name,
+        desc: D.shop.vip.desc,
+        priceLabel: D.shop.vip.priceLabel,
+      }));
+    }
+
+    if (!state.purchases.starterBought) {
+      const s = D.shop.starter;
+      parts.push(shopItemCard({ id: s.id, emoji: s.emoji, name: s.name, desc: s.desc, priceLabel: s.priceLabel, tag: s.tag }));
+    }
+
+    D.shop.diamondPacks.forEach((pack) => {
+      const bonus = pack.bonusPct ? ` (+${pack.bonusPct}% 보너스)` : "";
+      parts.push(shopItemCard({
+        id: pack.id,
+        emoji: pack.emoji,
+        name: pack.name,
+        desc: `💎${pack.diamonds}${bonus}`,
+        priceLabel: pack.priceLabel,
+        tag: pack.tag,
+      }));
+    });
+
+    list.innerHTML = parts.join("");
+    list.querySelectorAll("[data-shop]").forEach((btn) => btn.addEventListener("click", () => buyShopItem(btn.dataset.shop, btn)));
+  }
+
+  function findShopItem(id) {
+    if (id === D.shop.starter.id) return { ...D.shop.starter, kind: "starter" };
+    if (id === D.shop.vip.id) return { ...D.shop.vip, kind: "vip" };
+    const pack = D.shop.diamondPacks.find((p) => p.id === id);
+    return pack ? { ...pack, kind: "diamond" } : null;
+  }
+
+  async function buyShopItem(id, btn) {
+    const item = findShopItem(id);
+    if (!item || !window.Shop) return;
+    if (btn) btn.disabled = true;
+    const result = await window.Shop.checkout(item);
+    if (btn) btn.disabled = false;
+    if (!result.ok) {
+      toast(result.notReady ? "🛠 " + result.error : "❌ " + result.error);
+      return;
+    }
+
+    const firstPurchase = !state.purchases.firstPurchaseDone;
+    const bonusMult = firstPurchase ? D.shop.firstPurchaseBonusMult : 1;
+    state.purchases.firstPurchaseDone = true;
+    state.purchases.totalSpentKRW += item.amountKRW;
+
+    if (item.kind === "starter") {
+      state.purchases.starterBought = true;
+      addDiamonds(item.diamonds * bonusMult);
+      addChips(chipSecondsToChips(item.chipSeconds));
+      toast(`🎉 창업 지원팩! 💎${item.diamonds * bonusMult} 지급${firstPurchase ? " (첫 구매 2배!)" : ""}`);
+    } else if (item.kind === "vip") {
+      const now = Date.now();
+      const base = Math.max(now, state.purchases.vipUntil);
+      state.purchases.vipUntil = base + item.durationDays * 24 * 60 * 60 * 1000;
+      addDiamonds(item.instantDiamonds * bonusMult);
+      toast(`👑 월 정기권 시작! 💎${item.instantDiamonds * bonusMult} 지급`);
+    } else {
+      addDiamonds(item.diamonds * bonusMult);
+      toast(`💎 다이아 +${item.diamonds * bonusMult} 충전 완료${firstPurchase ? " (첫 구매 2배!)" : ""}`);
+    }
+
+    burst(0x7fd4ff);
+    sceneDirty = true;
+    renderShopTab();
+    await saveGame();
+    refresh();
   }
 
   const TAB_RENDERERS = {
@@ -1218,6 +1376,7 @@
     codex: renderCodexTab,
     decor: renderDecorTab,
     prestige: renderPrestigeTab,
+    shop: renderShopTab,
     settings: renderSettingsTab,
   };
 
@@ -1704,5 +1863,6 @@
     });
   }
 
-  document.addEventListener("DOMContentLoaded", init);
+  // 로그인 게이트(auth-gate.js)가 로그인 성공을 확인한 뒤에만 게임을 시작시킨다.
+  window.HoldemGame = { start: init };
 })();

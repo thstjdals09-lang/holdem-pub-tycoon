@@ -316,4 +316,52 @@ const GAME_DATA = {
     intervalMs: 200,
     autosaveMs: 10000,
   },
+
+  // ---------- 수익모델(상점) ----------
+  // 방치형 타이쿤 장르의 표준 구성을 참고: 신규유저 전환용 스타터팩(초저가·고효율) +
+  // 단계별 다이아 패키지(고액일수록 보너스% 증가) + 월 정기권(구독형 리텐션+매출).
+  // 광고는 이번 단계에서는 넣지 않음(사용자 결정) — 나중에 넣는다면 "무료로 다이아 받기" 카드로 추가.
+  shop: {
+    firstPurchaseBonusMult: 2, // 계정당 첫 결제 1회는 다이아 2배 지급(전환 유도)
+    starter: {
+      id: "starter",
+      name: "창업 지원팩",
+      emoji: "🎉",
+      tag: "최초 1회 한정",
+      desc: "신규 사장님 전용 특가 · 계정당 1번만 구매할 수 있어요",
+      amountKRW: 1200,
+      priceLabel: "₩1,200",
+      diamonds: 150,
+      chipSeconds: 1800, // 현재 초당 수익 x 30분치 칩도 함께 지급
+    },
+    diamondPacks: [
+      { id: "dia_s", name: "다이아 한 줌", emoji: "💎", amountKRW: 1200, priceLabel: "₩1,200", diamonds: 80 },
+      { id: "dia_m", name: "다이아 주머니", emoji: "💎", amountKRW: 4900, priceLabel: "₩4,900", diamonds: 360, bonusPct: 12 },
+      { id: "dia_l", name: "다이아 상자", emoji: "💎", amountKRW: 9900, priceLabel: "₩9,900", diamonds: 800, bonusPct: 25, tag: "인기" },
+      { id: "dia_xl", name: "다이아 금고", emoji: "💎", amountKRW: 19900, priceLabel: "₩19,900", diamonds: 1800, bonusPct: 40 },
+      { id: "dia_xxl", name: "다이아 트럭", emoji: "💎", amountKRW: 49900, priceLabel: "₩49,900", diamonds: 5000, bonusPct: 56, tag: "최고 혜택" },
+    ],
+    vip: {
+      id: "vip_monthly",
+      name: "사장님 월 정기권",
+      emoji: "👑",
+      desc: "즉시 💎100 · 30일간 매일 💎20 + 전체 수익 +10%",
+      amountKRW: 4900,
+      priceLabel: "₩4,900",
+      durationDays: 30,
+      instantDiamonds: 100,
+      dailyDiamonds: 20,
+      incomeBonusPct: 10,
+    },
+  },
+
+  // PortOne(아임포트) V2 결제 연동 자리. 사업자등록/PG 가맹점 가입 전이라 아직 빈 값 —
+  // storeId/channelKey를 채우기 전까지 상점은 "결제 준비중" 상태로 표시된다.
+  // js/shop.js 참고: 지금은 결제 성공 응답을 클라이언트가 그대로 신뢰해 재화를 지급하므로,
+  // 실 서비스 오픈 전 반드시 서버(Cloud Function 등) 검증을 추가해야 한다.
+  payment: {
+    provider: "portone",
+    storeId: "",
+    channelKey: "",
+  },
 };

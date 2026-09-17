@@ -22,6 +22,9 @@
 </head>
 <body>
 
+<!-- ===== 로그인/회원가입 게이트: 로그인 전까지 이 위에서 게임을 가린다 ===== -->
+<div id="auth-gate" class="auth-gate hidden"></div>
+
 <!-- ===== 3D 매장: 화면 전체를 채우는 배경 레이어 ===== -->
 <div id="pub-3d-container" class="pub-3d-container"></div>
 
@@ -61,6 +64,7 @@
         <b class="cur-value" id="diamonds-value">0</b>
         <small class="cur-rate" id="diamond-rate">0/분</small>
       </span>
+      <button class="add-currency-btn tab-btn" id="shop-plus-btn" data-tab="shop" data-title="상점" title="다이아 충전" aria-label="상점">＋</button>
     </div>
     <div class="boost-strip" id="boost-strip"></div>
   </div>
@@ -221,7 +225,16 @@
       </div>
     </div>
 
+    <div class="tab-panel" id="tab-shop">
+      <div class="card-row" id="shop-list"></div>
+      <p class="muted shop-disclaimer">결제는 PortOne(아임포트)으로 처리돼요. 문의는 설정 &gt; 계정에서 남겨주세요.</p>
+    </div>
+
     <div class="tab-panel" id="tab-settings">
+      <div class="settings-box" id="account-settings-box">
+        <h4>계정</h4>
+        <div id="account-info"></div>
+      </div>
       <div class="settings-box">
         <h4>화면 표시</h4>
         <label class="toggle-row">
@@ -326,7 +339,11 @@
 
 <script src="js/data.js" defer></script>
 <script src="js/portraits.js" defer></script>
-<script src="js/backend.js" defer></script>
+<script src="https://cdn.portone.io/v2/browser-sdk.js" defer></script>
+<script type="module" src="js/account.js"></script>
+<script type="module" src="js/backend.js"></script>
+<script type="module" src="js/shop.js"></script>
+<script type="module" src="js/auth-gate.js"></script>
 <script type="module" src="js/scene3d.js"></script>
 <script src="js/game.js" defer></script>
 </body>
