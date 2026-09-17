@@ -60,6 +60,9 @@ const DEALER_RARITY_LOOK = {
   rare: { suit: 0x2f4a7a, accent: 0x4fa3ff },
   epic: { suit: 0x4a2f6b, accent: 0xc86bff },
   legendary: { suit: 0x6b4a10, accent: 0xffc83c },
+  mythic: { suit: 0x7a1a5c, accent: 0xff5fd0 },
+  // "staff" = 이름 붙은 운영진이 배치 안 된 테이블을 채우는 기본 운영진(보너스 없음, 시각적 필러 전용)
+  staff: { suit: 0x4a4a52, accent: 0x8a8a92 },
 };
 
 const CUSTOMER_SHIRT_COLORS = [0xff8fab, 0xffc85c, 0x7bc67e, 0x6fc1ff, 0xd98cff, 0xffa8a8, 0xffe08a];
@@ -950,7 +953,7 @@ function buildHoldemTable({ index, dealer, feltColor, seatCount }) {
     person.rotation.y = dealerFacing;
     person.scale.setScalar(0.94);
     g.add(person);
-    if (dealer.rarity === "legendary" || dealer.rarity === "epic") {
+    if (dealer.rarity === "legendary" || dealer.rarity === "epic" || dealer.rarity === "mythic") {
       const halo = new THREE.Mesh(
         new THREE.RingGeometry(0.42, 0.66, 24),
         new THREE.MeshBasicMaterial({ color: look.accent, transparent: true, opacity: 0.5, side: THREE.DoubleSide })

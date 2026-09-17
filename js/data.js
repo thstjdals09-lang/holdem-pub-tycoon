@@ -78,53 +78,129 @@ const GAME_DATA = {
       id: "marketer",
       name: "마케터",
       emoji: "📣",
-      desc: "테이블 수익 +12% (신규 손님 유치) · 입구에서 홍보",
+      desc: "홍보로 시간당 방문객 수를 늘림 → 방문객이 많을수록 전체 매출 증가(체감 곡선)",
       baseCost: 1200,
       costGrowth: 1.22,
-      effect: { type: "incomeMult", value: 0.12 },
+      effect: { type: "visitor", value: 0.15 }, // 레벨당 방문객 +15% (customerFlow()에서 사용)
     },
   ],
 
-  // ---------- 딜러 가챠 ----------
-  // 딜러는 칩으로 고용하지 않고 다이아 가챠로 뽑는다.
-  // 중복으로 뽑으면 조각이 쌓이고, 조각으로 개별 딜러를 ★승급시킨다.
+  // ---------- 방문객(마케터가 늘리는 값, 매출에 직접 반영됨) ----------
+  customerFlow: {
+    baseVisitorsPerHour: 20,
+    visitorsPerTable: 8,
+    incomePerVisitorLog: 0.5, // 방문객이 늘수록 매출도 늘지만 로그형으로 완만하게 체감
+    visitorDivisor: 40,
+  },
+
+  // ---------- 운영진 가챠 ----------
+  // 운영진(구 "딜러")은 칩이 아니라 다이아 가챠로 스카우트한다.
+  // 중복으로 뽑으면 조각이 쌓이고, 조각으로 개별 운영진을 ★승급시킨다.
+  // 배치(동시 운영 가능 인원)는 최대 D.deployment.maxDeployed명 — 배치된 인원의 보너스만 실제로 적용되고,
+  // 서로 다른 역할(role)을 고루 배치하면 시너지 보너스가 추가로 붙는다.
+  //
+  // 가챠에는 "가챠 레벨"(1~10)이 있다 — 뽑을수록(pullsPerLevel회마다) 레벨이 올라가고,
+  // 레벨이 높을수록 SSR/SR/R 확률이 커진다(levelTable, %). U는 항상 20% 고정, N(일반)은 나머지 전부.
   gacha: {
     costDiamonds: 80,
     multiCount: 10,
     multiCost: 720, // 10연차는 1회분 할인
     multiGuarantee: "rare", // 10연차는 희귀 이상 1장 확정
+    pullsPerLevel: 20, // 누적 20회 뽑을 때마다 가챠 레벨 +1
+    maxLevel: 10,
     rarities: [
-      { id: "common", name: "일반", short: "N", weight: 58, bonus: 0.05, color: "#9b9b9b", emoji: "🃏" },
-      { id: "rare", name: "희귀", short: "R", weight: 27, bonus: 0.1, color: "#4fa3ff", emoji: "🎩" },
-      { id: "epic", name: "영웅", short: "SR", weight: 12, bonus: 0.2, color: "#c86bff", emoji: "👑" },
-      { id: "legendary", name: "전설", short: "SSR", weight: 3, bonus: 0.4, color: "#ffb400", emoji: "✨" },
+      { id: "common", name: "일반", short: "N", bonus: 0.05, color: "#9b9b9b", emoji: "🃏" },
+      { id: "uncommon", name: "고급", short: "U", bonus: 0.07, color: "#7bc67e", emoji: "🍀" },
+      { id: "rare", name: "희귀", short: "R", bonus: 0.1, color: "#4fa3ff", emoji: "🎩" },
+      { id: "epic", name: "영웅", short: "SR", bonus: 0.2, color: "#c86bff", emoji: "👑" },
+      { id: "legendary", name: "전설", short: "SSR", bonus: 0.4, color: "#ffb400", emoji: "✨" },
+    ],
+    // 신화 등급은 기본 가챠 확률표에 없다 — 상점에서 해당 인물을 1번 구매하면 그 순간부터
+    // 낮은 고정 확률로 가챠 풀에 합류한다(계정별로 state.purchases.unlockedMythic에 기록).
+    mythicRarity: { id: "mythic", name: "신화", short: "MR", weight: 1, bonus: 0.7, color: "#ff5fd0", emoji: "👑" },
+    // 레벨 1~10 확률표(%). ssr/sr/r/u 4개만 정의하고 나머지(100-합계)는 전부 N으로 채워진다.
+    levelTable: [
+      { ssr: 0.0, sr: 2.5, r: 3.0, u: 20.0 },
+      { ssr: 1.6, sr: 3.0, r: 4.0, u: 20.0 },
+      { ssr: 1.7, sr: 3.5, r: 5.0, u: 20.0 },
+      { ssr: 1.8, sr: 4.0, r: 6.0, u: 20.0 },
+      { ssr: 1.9, sr: 4.5, r: 7.0, u: 20.0 },
+      { ssr: 2.0, sr: 5.0, r: 8.0, u: 20.0 },
+      { ssr: 2.1, sr: 5.5, r: 9.0, u: 20.0 },
+      { ssr: 2.2, sr: 6.0, r: 10.0, u: 20.0 },
+      { ssr: 2.3, sr: 6.5, r: 11.0, u: 20.0 },
+      { ssr: 2.4, sr: 7.0, r: 12.0, u: 20.0 },
     ],
   },
   dealerStar: {
     maxStar: 5,
-    bonusPerStar: 0.25, // ★1당 해당 딜러 기본 보너스의 +25%
-    shardsPerStar: [2, 4, 8, 14, 22], // ★2로 올릴 때 필요한 조각부터 순서대로
+    bonusPerStar: 0.25, // ★1당 해당 운영진 기본 보너스의 +25%
+    // 등급별로 다른 승급 곡선 — 낮은 등급일수록 가챠에서 훨씬 자주 나오므로
+    // 별을 올리는 데 필요한 조각 수도 그만큼 크게 잡는다(그렇지 않으면 하위 등급이 너무 쉽게 만성됨).
+    shardsPerStarByRarity: {
+      common: [6, 12, 24, 40, 64],
+      uncommon: [5, 10, 20, 34, 55],
+      rare: [4, 8, 16, 28, 45],
+      epic: [3, 5, 10, 17, 28],
+      legendary: [2, 3, 6, 10, 16],
+      mythic: [1, 2, 3, 5, 8],
+    },
   },
-  // 이름 붙은 딜러 로스터 — 도감 탭에서 개별로 확인/승급한다.
+  // 이름 붙은 운영진 로스터 — 도감 탭에서 개별로 확인/승급, "운영" 탭에서 배치(최대 10명)한다.
+  // role은 개별 능력치가 아니라 배치 시너지 계산용 태그(서로 다른 role을 고루 배치할수록 보너스가 커짐).
   // 초상화는 js/portraits.js가 SVG로 그린다 (외부 이미지 에셋 없음).
   dealerRoster: [
-    { id: "minsu", name: "알바 민수", rarity: "common", emoji: "🧢", desc: "첫 출근이라 손이 조금 떨려요" },
-    { id: "jieun", name: "신입 지은", rarity: "common", emoji: "🎀", desc: "칩 정리는 누구보다 깔끔하게" },
-    { id: "taeho", name: "견습 태호", rarity: "common", emoji: "🥤", desc: "셔플 연습만 3개월째" },
-    { id: "sujin", name: "아르바이트 수진", rarity: "common", emoji: "📚", desc: "룰북을 통째로 외웠어요" },
-    { id: "doyun", name: "연습생 도윤", rarity: "common", emoji: "🎧", desc: "리듬감 하나는 타고났다" },
-    { id: "haneul", name: "새내기 하늘", rarity: "common", emoji: "☁️", desc: "손님 이름을 다 기억해요" },
-    { id: "jungwoo", name: "베테랑 정우", rarity: "rare", emoji: "🕶️", desc: "10년째 같은 자리를 지킨다" },
-    { id: "soyeon", name: "칵테일 소연", rarity: "rare", emoji: "🍹", desc: "딜링과 셰이킹을 동시에" },
-    { id: "leo", name: "마술사 레오", rarity: "rare", emoji: "🎪", desc: "카드가 사라졌다 나타나요" },
-    { id: "yuna", name: "미소천사 유나", rarity: "rare", emoji: "😊", desc: "테이블 분위기 메이커" },
-    { id: "jun", name: "카드핸들러 준", rarity: "rare", emoji: "🤹", desc: "한 손으로 리플 셔플" },
-    { id: "sera", name: "프로딜러 세라", rarity: "epic", emoji: "💼", desc: "국제 대회 공식 딜러 출신" },
-    { id: "kangtae", name: "하이롤러 강태", rarity: "epic", emoji: "🐉", desc: "큰 판만 골라서 맡는다" },
-    { id: "mina", name: "럭키걸 미나", rarity: "epic", emoji: "🍀", desc: "그녀의 테이블은 늘 북적인다" },
-    { id: "royal", name: "전설의 딜러 로열", rarity: "legendary", emoji: "👑", desc: "로열 스트레이트만 12번 봤다" },
-    { id: "diana", name: "카지노 여왕 다이애나", rarity: "legendary", emoji: "💎", desc: "그녀가 앉으면 펍이 바뀐다" },
+    { id: "jiseok", name: "강지석", rarity: "common", role: "서비스", emoji: "📋", desc: "성실함으로 승부하는 신입" },
+    { id: "jihyung", name: "이지형", rarity: "common", role: "인맥", emoji: "🗺️", desc: "동네 상권은 이미 다 꿰고 있다" },
+    { id: "taewoong", name: "김태웅", rarity: "uncommon", role: "영업", emoji: "🔥", desc: "패기 하나는 최고참 못지않다" },
+    { id: "yeonju", name: "조연주", rarity: "uncommon", role: "영업", emoji: "😊", desc: "웃는 얼굴로 재방문율을 끌어올린다" },
+    { id: "hyeyeon", name: "윤혜연", rarity: "rare", role: "서비스", emoji: "🧾", desc: "디테일 하나 놓치지 않는 꼼꼼함" },
+    { id: "yujin", name: "최유진", rarity: "rare", role: "이벤트", emoji: "🎶", desc: "분위기 메이커, 테이블이 늘 시끌시끌" },
+    { id: "hyeseo", name: "김혜서", rarity: "epic", role: "서비스", emoji: "🍹", desc: "손님 취향을 한 번에 기억하는 감각파" },
+    { id: "seongmin", name: "손성민", rarity: "epic", role: "이벤트", emoji: "🎉", desc: "판을 키우는 이벤트 기획의 달인" },
+    { id: "minhyuk", name: "강민혁", rarity: "legendary", role: "영업", emoji: "💼", desc: "이 바닥에서 모르면 간첩인 전설의 영업통" },
+    { id: "taegyu", name: "정태규", rarity: "legendary", role: "인맥", emoji: "🤝", desc: "그의 명함첩엔 없는 사람이 없다" },
+    // 신화 등급 — 가챠로는 절대 안 나오고 상점(D.shop.operators)에서만 구매 가능.
+    // 구매하는 순간 이 자리에 실제 존재가 추가되고, 그 이후로는 가챠에도 낮은 확률로 등장하기 시작한다.
+    { id: "chairman", name: "왕회장", rarity: "mythic", role: "영업", emoji: "👑", desc: "전설의 투자자, 그가 오면 매출이 요동친다", shopOnly: true },
   ],
+
+  // ---------- 배치(운영) — 동시에 몇 명까지 "일하게" 할지 + 조합 시너지 ----------
+  deployment: {
+    maxDeployed: 10,
+    synergyPerRole: 0.05, // 배치된 인원 중 서로 다른 role 1종류당 +5% (곱연산)
+    fullSquadBonus: 0.2, // 정확히 10명 전원 배치 시 추가 +20%
+  },
+
+  // ---------- 영구 업그레이드(다이아) — 리뉴얼(프레스티지)해도 절대 초기화되지 않는다 ----------
+  // 칩으로 사는 테이블/시설/직원/장식은 리뉴얼하면 초기화되는 "이번 회차용" 성장이고,
+  // 여기 있는 건 계정에 영구히 남는 성장이라 다이아(또는 결제)로만 살 수 있다.
+  permanentUpgrades: [
+    { id: "incomeCore", name: "영구 매출 코어", emoji: "🏆", desc: "레벨당 전체 수익 영구 +3% (리뉴얼해도 유지)", baseCostDiamonds: 150, costGrowth: 1.35, bonusPerLevel: 0.03 },
+    { id: "offlineCore", name: "영구 오프라인 코어", emoji: "🌙", desc: "레벨당 오프라인 수익 효율 영구 +4%", baseCostDiamonds: 120, costGrowth: 1.32, bonusPerLevel: 0.04 },
+    { id: "gachaCore", name: "영구 행운 코어", emoji: "🍀", desc: "레벨당 희귀 등급 이상 가챠 확률 영구 +3%(상대비율)", baseCostDiamonds: 200, costGrowth: 1.4, bonusPerLevel: 0.03 },
+  ],
+
+  // ---------- 광고(리워드) ----------
+  // 실제 광고 SDK는 아직 연동 전 — js/ads.js가 D.ads.network가 비어 있으면 "광고 준비중"으로 막아둔다
+  // (상점 결제 준비중 패턴과 동일). 광고 제거는 D.shop.removeAds로 판매.
+  ads: {
+    network: "", // TODO: 애드센스/애드몹 등 실제 광고 SDK 연동 후 채우기
+    dailyFreePull: { id: "dailyFreePull", label: "무료 1회 뽑기", desc: "광고 시청하고 운영진 가챠 1회 무료로 뽑기", cooldownMs: 24 * 60 * 60 * 1000 },
+    upgradeBoost: { id: "upgradeBoost", label: "업그레이드 가속", desc: "광고 시청 시 5분간 자동 업그레이드 속도 3배", durationMs: 5 * 60 * 1000, mult: 3, cooldownMs: 20 * 60 * 1000 },
+  },
+
+  // ---------- 유명인 방문 특수 이벤트 ----------
+  celebrity: {
+    minIntervalMs: 25 * 60 * 1000,
+    maxIntervalMs: 55 * 60 * 1000,
+    visitDurationMs: 45 * 1000,
+    guests: [
+      { name: "강민혁", emoji: "🕶️", line: "\"오, 여기 요즘 물 좋다며?\"" },
+      { name: "정태규", emoji: "🎩", line: "\"사장님, 저 VIP 대우 좀 해주시죠?\"" },
+    ],
+    reward: { chipSeconds: 3600, diamonds: 25 },
+  },
 
   diamond: {
     baseRatePerTableSecond: 0.0018, // 테이블 1개당 초당 다이아
@@ -248,6 +324,11 @@ const GAME_DATA = {
       diamondsBase: 5,
       diamondsPerRound: 0.6,
       diamondsMax: 80,
+      // 성장 미션(튜토리얼) 20단계를 다 끝내고 반복 퀘스트로 넘어간 뒤부터는
+      // 소량의 재화와 함께 "무료 뽑기권"도 준다(디디아 없이도 가챠를 계속 즐길 수 있게).
+      ticketsBase: 1,
+      ticketsEveryNRounds: 3, // 3회차마다 1장씩 추가로
+      ticketsMax: 3,
     },
   },
 
@@ -319,8 +400,8 @@ const GAME_DATA = {
 
   // ---------- 수익모델(상점) ----------
   // 방치형 타이쿤 장르의 표준 구성을 참고: 신규유저 전환용 스타터팩(초저가·고효율) +
-  // 단계별 다이아 패키지(고액일수록 보너스% 증가) + 월 정기권(구독형 리텐션+매출).
-  // 광고는 이번 단계에서는 넣지 않음(사용자 결정) — 나중에 넣는다면 "무료로 다이아 받기" 카드로 추가.
+  // 단계별 다이아 패키지(고액일수록 보너스% 증가) + 월 정기권(구독형 리텐션+매출) +
+  // 상점 전용 신화 운영진(구매하면 그 순간부터 가챠에도 등장) + 광고 제거.
   shop: {
     firstPurchaseBonusMult: 2, // 계정당 첫 결제 1회는 다이아 2배 지급(전환 유도)
     starter: {
@@ -352,6 +433,20 @@ const GAME_DATA = {
       instantDiamonds: 100,
       dailyDiamonds: 20,
       incomeBonusPct: 10,
+    },
+    // 상점에서만 살 수 있는 신화 등급 운영진 — dealerRoster 안의 shopOnly:true 항목과 id로 연결된다.
+    // 구매하면 즉시 보유하게 되고, 이후로는 이 운영진이 가챠(mythicRarity) 확률로도 등장하기 시작한다.
+    operators: [
+      { id: "chairman", rosterId: "chairman", name: "왕회장 영입", emoji: "👑", desc: "신화 등급 '왕회장' 즉시 영입 + 이후 가챠에도 등장", amountKRW: 29900, priceLabel: "₩29,900" },
+    ],
+    // 광고 제거 — 구매하면 리워드 광고 버튼이 전부 "무료로 즉시 받기"로 바뀐다(js/ads.js 참고).
+    removeAds: {
+      id: "remove_ads",
+      name: "광고 제거",
+      emoji: "🚫",
+      desc: "이후로 모든 무료 보상을 광고 없이 바로 받아요(1회 구매, 영구 적용)",
+      amountKRW: 3900,
+      priceLabel: "₩3,900",
     },
   },
 
