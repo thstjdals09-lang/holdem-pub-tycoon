@@ -388,7 +388,7 @@ const GAME_DATA = {
       { id: "gacha", title: "운영진 스카우트", desc: "운영진 가챠 {n}회", base: 1, growth: 1.12, max: 5 },
       { id: "boost", title: "영업 스퍼트", desc: "부스트 {n}회 사용", base: 1, growth: 1.1, max: 2 },
       // 그냥 가만히 둬도 달성되는 퀘스트 — 방치형답게 하나는 섞어둔다
-      { id: "earn", title: "매출 올리기", desc: "칩 {n} 벌기", incomeSeconds: 150, growth: 1.07, maxSeconds: 600 },
+      { id: "earn", title: "매출 올리기", desc: "{n} BB 벌기", incomeSeconds: 150, growth: 1.07, maxSeconds: 600 },
     ],
     reward: {
       chipSecondsBase: 200,

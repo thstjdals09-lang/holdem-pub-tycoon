@@ -696,12 +696,24 @@
     const list = candidates.length ? candidates : pool;
     const def = list[Math.floor(Math.random() * list.length)];
     const round = state.repeat.round;
-    // 회차에 따라 목표가 커지되 항목별 상한까지만 — 후반에 깰 수 없는 퀘스트가 나오지 않게 한다
+    // 회차에 따라 목표가 커지되 항목별 상한까지만 — 후반에 깰 수 없는 퀘스트가 나오지 않게 한다.
+    // 매출 목표는 부스트를 뺀 기본 수익으로 잡는다(부스트 켜진 순간에 뽑히면 목표가 몇 배로 부풀어 사실상 못 깸)
     const target =
       def.id === "earn"
-        ? Math.max(200, Math.ceil(incomePerSecond() * Math.min(def.maxSeconds || Infinity, def.incomeSeconds * Math.pow(def.growth, round))))
+        ? Math.max(200, Math.ceil((incomePerSecond() / boostMultiplier()) * Math.min(def.maxSeconds || Infinity, def.incomeSeconds * Math.pow(def.growth, round))))
         : Math.max(1, capMissionTarget(def.id, Math.min(def.max || Infinity, Math.ceil(def.base * Math.pow(def.growth, round)))));
-    state.repeat.quest = { id: def.id, target, progress: 0, startEarned: state.totalEarned };
+    state.repeat.quest = { id: def.id, target, progress: 0, startLifetime: state.lifetimeEarned };
+  }
+
+  // "매출 올리기" 진행도 = 퀘스트를 받은 뒤 번 돈. 리뉴얼하면 이번 회차 누적(totalEarned)은 0이 되므로
+  // 줄어들지 않는 평생 누적(lifetimeEarned) 차이로 센다.
+  function earnProgress(q) {
+    if (q.startLifetime == null) {
+      // 예전 방식(startEarned = 이번 회차 누적 기준)으로 저장된 퀘스트는 지금까지 번 만큼을 살려서 옮긴다
+      q.startLifetime = state.lifetimeEarned - Math.max(0, state.totalEarned - (q.startEarned || 0));
+      delete q.startEarned;
+    }
+    return Math.max(0, state.lifetimeEarned - q.startLifetime);
   }
 
   function repeatReward() {
@@ -722,8 +734,8 @@
     if (!q0 || !repeatDef(q0.id) || stuck) rollRepeatQuest();
     const q = state.repeat.quest;
     const def = repeatDef(q.id);
-    // "칩 벌기"는 별도 카운터 없이 누적 수익 차이로 판정한다
-    const raw = q.id === "earn" ? Math.max(0, state.totalEarned - q.startEarned) : q.progress;
+    // "매출 올리기"는 별도 카운터 없이 누적 수익 차이로 판정한다
+    const raw = q.id === "earn" ? earnProgress(q) : q.progress;
     return {
       def,
       cur: Math.min(raw, q.target),
@@ -1403,16 +1415,36 @@
     const n = plannedQty(base, growth, owned, cap);
     const cost = bulkCost(base, growth, owned, Math.max(n, 1));
     const qtyLabel = state.ui.buyQty === "MAX" ? (n > 0 ? `x${n}` : "MAX") : `x${state.ui.buyQty}`;
-    btn.innerHTML = `${label} ${qtyLabel}<small>${formatChips(cost)}</small>`;
+    setHtml(btn, `${label} ${qtyLabel}<small>${formatChips(cost)}</small>`);
     btn.disabled = n <= 0 || state.chips < cost;
     return n;
+  }
+
+  // 내용이 바뀔 때만 다시 쓴다(0.5초마다 같은 내용을 덮어쓰면 누르는 도중 버튼 속 글자가 교체됨)
+  function setHtml(el, html) {
+    if (el.dataset.html === html) return;
+    el.innerHTML = html;
+    el.dataset.html = html;
+  }
+
+  // 목록 카드는 구성이 바뀔 때만 새로 만들고, 평소엔 만들어 둔 카드의 내용만 갱신한다.
+  // 탭이 열려 있으면 0.5초마다 다시 그리는데, 그때마다 카드를 통째로 새로 만들면
+  // 손가락을 떼기 전에 버튼이 바뀌어 탭이 씹힌다(구매가 안 되고 퀘스트도 안 오름).
+  function keyedCards(wrap, items, keyOf, build) {
+    const keys = items.map(keyOf).join("|");
+    if (wrap.dataset.keys !== keys) {
+      wrap.innerHTML = "";
+      items.forEach((it) => wrap.appendChild(build(it)));
+      wrap.dataset.keys = keys;
+    }
+    return Array.from(wrap.children);
   }
 
   function renderStoreTab() {
     $("store-capacity").textContent = tableCapacity();
     const expandBtn = $("expand-store-btn");
     if (isStoreMaxed()) {
-      expandBtn.textContent = "최대 확장 완료";
+      setHtml(expandBtn, "최대 확장 완료");
       expandBtn.disabled = true;
     } else {
       setBuyButton(expandBtn, {
@@ -1425,23 +1457,23 @@
     const visitorsEl = $("store-visitors");
     if (visitorsEl) visitorsEl.textContent = `👣 시간당 방문객 약 ${formatNumber(visitorsPerHour())}명`;
 
-    const wrap = $("fixture-list");
-    wrap.innerHTML = "";
-    D.fixtures.forEach((f) => {
-      const level = state.fixtures[f.id];
+    const cards = keyedCards($("fixture-list"), D.fixtures, (f) => f.id, (f) => {
       const card = document.createElement("div");
       card.className = "item-card";
       card.innerHTML = `
         <div class="item-icon">${f.emoji}</div>
         <div class="item-info">
-          <div class="item-title">${f.name} <span class="lvl-chip">Lv.${level}</span></div>
+          <div class="item-title">${f.name} <span class="lvl-chip"></span></div>
           <div class="item-desc">${f.desc}</div>
         </div>
         <button class="btn btn-buy"></button>`;
-      const btn = card.querySelector("button");
-      setBuyButton(btn, { base: f.baseCost, growth: f.costGrowth, owned: level, label: level === 0 ? "설치" : "강화" });
-      btn.addEventListener("click", () => upgradeFixture(f.id));
-      wrap.appendChild(card);
+      card.querySelector("button").addEventListener("click", () => upgradeFixture(f.id));
+      return card;
+    });
+    D.fixtures.forEach((f, i) => {
+      const level = state.fixtures[f.id];
+      setHtml(cards[i].querySelector(".lvl-chip"), `Lv.${level}`);
+      setBuyButton(cards[i].querySelector("button"), { base: f.baseCost, growth: f.costGrowth, owned: level, label: level === 0 ? "설치" : "강화" });
     });
   }
 
@@ -1454,7 +1486,7 @@
 
     const buyBtn = $("buy-table-btn");
     if (state.tables >= capacity) {
-      buyBtn.innerHTML = `구매<small>매장 확장 필요</small>`;
+      setHtml(buyBtn, `구매<small>매장 확장 필요</small>`);
       buyBtn.disabled = true;
     } else {
       setBuyButton(buyBtn, {
@@ -1474,23 +1506,23 @@
   }
 
   function renderStaffTab() {
-    const wrap = $("staff-list");
-    wrap.innerHTML = "";
-    D.staff.forEach((s) => {
-      const owned = state.staff[s.id];
+    const cards = keyedCards($("staff-list"), D.staff, (s) => s.id, (s) => {
       const card = document.createElement("div");
       card.className = "item-card";
       card.innerHTML = `
         <div class="item-icon">${s.emoji}</div>
         <div class="item-info">
-          <div class="item-title">${s.name} <span class="lvl-chip">${owned}명</span></div>
+          <div class="item-title">${s.name} <span class="lvl-chip"></span></div>
           <div class="item-desc">${s.desc}</div>
         </div>
         <button class="btn btn-buy"></button>`;
-      const btn = card.querySelector("button");
-      setBuyButton(btn, { base: s.baseCost, growth: s.costGrowth, owned, label: "고용" });
-      btn.addEventListener("click", () => hireStaff(s.id));
-      wrap.appendChild(card);
+      card.querySelector("button").addEventListener("click", () => hireStaff(s.id));
+      return card;
+    });
+    D.staff.forEach((s, i) => {
+      const owned = state.staff[s.id];
+      setHtml(cards[i].querySelector(".lvl-chip"), `${owned}명`);
+      setBuyButton(cards[i].querySelector("button"), { base: s.baseCost, growth: s.costGrowth, owned, label: "고용" });
     });
 
     renderPullButtons();
@@ -1587,52 +1619,63 @@
   }
 
   function renderDecorTab() {
-    const themeWrap = $("theme-list");
-    themeWrap.innerHTML = "";
-    D.themes.forEach((t) => {
-      const owned = state.ownedThemes.includes(t.id);
-      const equipped = state.theme === t.id;
-      const lv = themeLevel(t.id);
+    // 테마 버튼 역할(구매 → 적용 → 등급↑)이 바뀔 때만 카드를 새로 만든다
+    const themeAct = (t) => (state.theme === t.id ? "up" : state.ownedThemes.includes(t.id) ? "equip" : "buy");
+    const themeCards = keyedCards($("theme-list"), D.themes, (t) => `${t.id}:${themeAct(t)}`, (t) => {
+      const act = themeAct(t);
       const card = document.createElement("div");
-      card.className = "theme-card" + (equipped ? " equipped" : "");
+      card.className = "theme-card" + (act === "up" ? " equipped" : "");
       card.innerHTML = `
         <div class="theme-swatch" style="background:${THEME_SWATCH_COLORS[t.id] || "#ccc"}"></div>
-        <div class="theme-name">${t.emoji} ${t.name} ${owned ? `<span class="lvl-chip">Lv.${lv}</span>` : ""}</div>
-        <div class="theme-cost">${owned ? (equipped ? `적용중 · +${Math.round(lv * D.themeUpgrade.bonusPerLevel * 100)}% 수익` : "보유중") : `💰${formatChips(t.cost)}`}</div>
-        <button class="btn ${equipped ? "btn-buy" : "btn-buy"}" data-act="${equipped ? "up" : owned ? "equip" : "buy"}"></button>`;
+        <div class="theme-name"></div>
+        <div class="theme-cost"></div>
+        <button class="btn btn-buy"></button>`;
       const btn = card.querySelector("button");
-      const act = btn.dataset.act;
+      if (act === "up") btn.addEventListener("click", () => upgradeTheme(t.id));
+      else if (act === "equip") btn.addEventListener("click", () => equipTheme(t.id));
+      else btn.addEventListener("click", () => buyTheme(t.id));
+      return card;
+    });
+    D.themes.forEach((t, i) => {
+      const card = themeCards[i];
+      const act = themeAct(t);
+      const owned = act !== "buy";
+      const lv = themeLevel(t.id);
+      setHtml(card.querySelector(".theme-name"), `${t.emoji} ${t.name} ${owned ? `<span class="lvl-chip">Lv.${lv}</span>` : ""}`);
+      setHtml(
+        card.querySelector(".theme-cost"),
+        owned ? (act === "up" ? `적용중 · +${Math.round(lv * D.themeUpgrade.bonusPerLevel * 100)}% 수익` : "보유중") : `💰${formatChips(t.cost)}`
+      );
+      const btn = card.querySelector("button");
       if (act === "up") {
         setBuyButton(btn, { base: D.themeUpgrade.baseCost, growth: D.themeUpgrade.costGrowth, owned: lv, label: "등급↑" });
-        btn.addEventListener("click", () => upgradeTheme(t.id));
       } else if (act === "equip") {
-        btn.innerHTML = "적용하기";
-        btn.addEventListener("click", () => equipTheme(t.id));
+        setHtml(btn, "적용하기");
       } else {
-        btn.innerHTML = `구매<small>${formatChips(t.cost)}</small>`;
+        setHtml(btn, `구매<small>${formatChips(t.cost)}</small>`);
         btn.disabled = state.chips < t.cost;
-        btn.addEventListener("click", () => buyTheme(t.id));
       }
-      themeWrap.appendChild(card);
     });
 
-    const wrap = $("decor-list");
-    wrap.innerHTML = "";
-    D.decor.forEach((d) => {
-      const lv = state.decor[d.id] || 0;
+    const decorCards = keyedCards($("decor-list"), D.decor, (d) => d.id, (d) => {
       const card = document.createElement("div");
       card.className = "item-card";
       card.innerHTML = `
         <div class="item-icon">${d.emoji}</div>
         <div class="item-info">
-          <div class="item-title">${d.name} <span class="lvl-chip">Lv.${lv}</span></div>
-          <div class="item-desc">현재 +${(lv * d.bonusPerLevel * 100).toFixed(0)}% · 레벨당 +${(d.bonusPerLevel * 100).toFixed(0)}% 수익</div>
+          <div class="item-title">${d.name} <span class="lvl-chip"></span></div>
+          <div class="item-desc"></div>
         </div>
         <button class="btn btn-buy"></button>`;
-      const btn = card.querySelector("button");
-      setBuyButton(btn, { base: d.baseCost, growth: d.costGrowth, owned: lv, label: lv === 0 ? "설치" : "강화" });
-      btn.addEventListener("click", () => upgradeDecor(d.id));
-      wrap.appendChild(card);
+      card.querySelector("button").addEventListener("click", () => upgradeDecor(d.id));
+      return card;
+    });
+    D.decor.forEach((d, i) => {
+      const card = decorCards[i];
+      const lv = state.decor[d.id] || 0;
+      setHtml(card.querySelector(".lvl-chip"), `Lv.${lv}`);
+      setHtml(card.querySelector(".item-desc"), `현재 +${(lv * d.bonusPerLevel * 100).toFixed(0)}% · 레벨당 +${(d.bonusPerLevel * 100).toFixed(0)}% 수익`);
+      setBuyButton(card.querySelector("button"), { base: d.baseCost, growth: d.costGrowth, owned: lv, label: lv === 0 ? "설치" : "강화" });
     });
   }
 
@@ -1923,6 +1966,7 @@
       const b = D.boosts.adBoost;
       state.boosts.active.adBoost = Date.now() + b.durationMs;
       state.ads.boostCooldownUntil = Date.now() + D.ads.incomeBoost.cooldownMs;
+      trackMission("boost"); // 광고 부스트도 "부스트 사용" 미션/퀘스트에 센다
       sceneDirty = true;
       toast(`${testPrefix}🎬 ${Math.round(b.durationMs / 60000)}분간 수익 ${b.mult}배!`);
     }
