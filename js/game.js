@@ -50,8 +50,9 @@
 
     attendance: keep.attendance ?? { lastDate: null, cycleDay: 0 },
     missions: { date: null, list: [], allClaimed: false },
-    // 성장 미션(튜토리얼)은 프레스티지를 해도 이어진다
+    // 성장 미션(튜토리얼)과 반복 퀘스트는 프레스티지를 해도 이어진다
     tutorial: keep.tutorial ?? { step: 0, counts: {} },
+    repeat: keep.repeat ?? { round: 0, quest: null },
     boosts: keep.boosts ?? { freeReadyAt: 0, active: {}, goldenNextAt: Date.now() + 8 * 60 * 1000 },
   });
 
@@ -86,6 +87,7 @@
     s.missions = { ...base.missions, ...saved.missions };
     s.tutorial = { ...base.tutorial, ...saved.tutorial };
     s.tutorial.counts = s.tutorial.counts || {};
+    s.repeat = { ...base.repeat, ...saved.repeat };
     s.themeLevels = { ...base.themeLevels, ...saved.themeLevels };
     s.ownedThemes = Array.isArray(saved.ownedThemes) ? saved.ownedThemes : base.ownedThemes;
     s.codexNew = Array.isArray(saved.codexNew) ? saved.codexNew : [];
@@ -358,8 +360,14 @@
   // 미션 추적
   // ============================================================
   function trackMission(actionId, amount = 1) {
-    // 성장 미션(튜토리얼)의 일회성 목표도 같은 이벤트로 센다
+    // 성장 미션(튜토리얼)의 일회성 목표도 같은 이벤트로 센다.
+    // 이 카운터는 프레스티지·날짜 변경에도 초기화하지 않는다 — 초기화하면
+    // "출석 보상 받기" 같은 하루 한 번짜리 목표에서 진행이 막혀버린다.
     state.tutorial.counts[actionId] = (state.tutorial.counts[actionId] || 0) + amount;
+    // 반복 퀘스트 진행도
+    if (state.repeat.quest && state.repeat.quest.id === actionId) {
+      state.repeat.quest.progress += amount;
+    }
     let changed = false;
     state.missions.list.forEach((m) => {
       if (m.id === actionId && !m.claimed && m.progress < m.target) {
@@ -454,7 +462,64 @@
     burst("#ffd166");
     const next = tutorialState();
     if (next) setTimeout(() => toast(`📜 다음 목표: ${next.def.title}`), 1200);
-    else setTimeout(() => toast("🏆 성장 미션을 전부 완료했어요!"), 1200);
+    else setTimeout(() => toast("🏆 성장 미션 완료! 이제 반복 퀘스트가 계속 이어져요"), 1200);
+    refresh();
+  }
+
+  // ============================================================
+  // 반복 퀘스트 (무한) — 성장 미션이 끝나면 같은 배너에서 이어진다
+  // ============================================================
+  const repeatDef = (id) => D.repeatQuests.pool.find((p) => p.id === id);
+
+  function rollRepeatQuest() {
+    const pool = D.repeatQuests.pool;
+    const prev = state.repeat.quest && state.repeat.quest.id;
+    // 같은 퀘스트가 연달아 나오지 않게 한 번 걸러준다
+    const candidates = pool.filter((p) => p.id !== prev);
+    const list = candidates.length ? candidates : pool;
+    const def = list[Math.floor(Math.random() * list.length)];
+    const round = state.repeat.round;
+    // 회차에 따라 목표가 커지되 항목별 상한까지만 — 후반에 깰 수 없는 퀘스트가 나오지 않게 한다
+    const target =
+      def.id === "earn"
+        ? Math.max(200, Math.ceil(incomePerSecond() * Math.min(def.maxSeconds || Infinity, def.incomeSeconds * Math.pow(def.growth, round))))
+        : Math.max(1, Math.min(def.max || Infinity, Math.ceil(def.base * Math.pow(def.growth, round))));
+    state.repeat.quest = { id: def.id, target, progress: 0, startEarned: state.totalEarned };
+  }
+
+  function repeatReward() {
+    const R = D.repeatQuests.reward;
+    const r = state.repeat.round;
+    return {
+      chipSeconds: Math.min(R.chipSecondsMax, R.chipSecondsBase + r * R.chipSecondsPerRound),
+      diamonds: Math.min(R.diamondsMax, Math.round(R.diamondsBase + r * R.diamondsPerRound)),
+    };
+  }
+
+  function repeatState() {
+    if (!state.repeat.quest || !repeatDef(state.repeat.quest.id)) rollRepeatQuest();
+    const q = state.repeat.quest;
+    const def = repeatDef(q.id);
+    // "칩 벌기"는 별도 카운터 없이 누적 수익 차이로 판정한다
+    const raw = q.id === "earn" ? Math.max(0, state.totalEarned - q.startEarned) : q.progress;
+    return {
+      def,
+      cur: Math.min(raw, q.target),
+      target: q.target,
+      done: raw >= q.target,
+      round: state.repeat.round,
+      reward: repeatReward(),
+    };
+  }
+
+  function claimRepeat() {
+    const r = repeatState();
+    if (!r.done) return;
+    const got = grantReward(r.reward);
+    state.repeat.round += 1;
+    rollRepeatQuest();
+    toast(`🔁 반복 퀘스트 #${r.round + 1} 완료! 💰${formatChips(got.chips)} 💎${got.dia}`);
+    burst("#7bc67e");
     refresh();
   }
 
@@ -783,6 +848,7 @@
       themeLevels: state.themeLevels,
       giftReadyAt: state.giftReadyAt,
       tutorial: state.tutorial,
+      repeat: state.repeat,
       attendance: state.attendance,
       boosts: state.boosts,
       lifetimeEarned: state.lifetimeEarned,
@@ -870,28 +936,55 @@
       .join("");
   }
 
-  // 하단 성장 미션 배너 (튜토리얼 역할)
-  function renderQuestBanner() {
-    const banner = $("quest-banner");
+  // 하단 퀘스트 배너 — 성장 미션이 남아 있으면 그걸, 끝났으면 반복 퀘스트를 보여준다.
+  // 배너는 절대 비지 않는다 (항상 다음 목표와 보상이 걸려 있다).
+  function currentQuest() {
     const t = tutorialState();
-    if (!t) {
-      banner.hidden = true;
-      return;
+    if (t) {
+      return {
+        kind: "tutorial",
+        icon: t.done ? "🎉" : "📜",
+        title: t.def.title,
+        step: `${t.step + 1}/${D.tutorial.length}`,
+        desc: t.def.hint ? `${t.def.desc} · ${t.def.hint}` : t.def.desc,
+        cur: t.cur,
+        target: t.target,
+        done: t.done,
+        reward: t.def.reward,
+      };
     }
+    const r = repeatState();
+    return {
+      kind: "repeat",
+      icon: r.done ? "🎉" : "🔁",
+      title: r.def.title,
+      step: `반복 #${r.round + 1}`,
+      desc: r.def.desc.replace("{n}", r.def.id === "earn" ? formatNumber(r.target) : r.target),
+      cur: r.cur,
+      target: r.target,
+      done: r.done,
+      reward: r.reward,
+    };
+  }
+
+  function renderQuestBanner() {
+    const q = currentQuest();
+    const banner = $("quest-banner");
     banner.hidden = false;
-    banner.classList.toggle("ready", t.done);
-    $("quest-icon").textContent = t.done ? "🎉" : "📜";
-    $("quest-title").textContent = t.def.title;
-    $("quest-step").textContent = `${t.step + 1}/${D.tutorial.length}`;
-    $("quest-desc").textContent = t.done
-      ? `보상 ${rewardLabel(t.def.reward)}`
-      : t.def.hint
-      ? `${t.def.desc} · ${t.def.hint}`
-      : t.def.desc;
-    $("quest-fill").style.width = `${((t.cur / t.target) * 100).toFixed(1)}%`;
+    banner.classList.toggle("ready", q.done);
+    $("quest-icon").textContent = q.icon;
+    $("quest-title").textContent = q.title;
+    $("quest-step").textContent = q.step;
+    $("quest-desc").textContent = q.done ? `보상 ${rewardLabel(q.reward)}` : q.desc;
+    $("quest-fill").style.width = `${((q.cur / q.target) * 100).toFixed(1)}%`;
     const btn = $("quest-claim");
-    btn.disabled = !t.done;
-    btn.textContent = t.done ? "받기" : `${t.cur}/${t.target}`;
+    btn.disabled = !q.done;
+    btn.textContent = q.done ? "받기" : `${formatNumber(q.cur)}/${formatNumber(q.target)}`;
+  }
+
+  function claimQuest() {
+    if (tutorialState()) claimTutorial();
+    else claimRepeat();
   }
 
   function refreshDots() {
@@ -1543,7 +1636,7 @@
       toast(`Lv.${li.level} ${li.title} · 다음 레벨까지 💰${formatChips(li.toNext)}`);
     });
     $("prestige-badge").addEventListener("click", () => openSheet("prestige", "브랜드 리뉴얼"));
-    $("quest-claim").addEventListener("click", claimTutorial);
+    $("quest-claim").addEventListener("click", claimQuest);
 
     // 모달 닫기
     const closers = [

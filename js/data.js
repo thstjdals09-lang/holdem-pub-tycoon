@@ -221,6 +221,36 @@ const GAME_DATA = {
     { id: "t20", title: "브랜드 리뉴얼", desc: "프레스티지를 1회 진행하세요", hint: "영구 수익 배율을 얻어요", goal: { kind: "state", stat: "prestigePoints", target: 1 }, reward: { chipSeconds: 1200, diamonds: 60 } },
   ],
 
+  // ---------- 반복 퀘스트 (무한) ----------
+  // 성장 미션 20단계가 끝나면 같은 배너에서 이어서 돌아간다.
+  // 하나 깰 때마다 회차가 오르고 목표치와 보상이 같이 커져서, 계속 재화가 들어온다.
+  // 출석처럼 하루 한 번만 가능한 행동은 넣지 않는다 (진행이 막히면 안 된다).
+  // 목표치는 회차마다 커지지만 항목별 상한(max)이 있다. 매장 확장은 비용이 1.6배씩, 선물·부스트는
+  // 쿨타임이 있어서 상한 없이 키우면 후반에 사실상 깰 수 없는 퀘스트가 된다.
+  repeatQuests: {
+    pool: [
+      { id: "buyTable", title: "테이블 증설", desc: "홀덤 테이블 {n}개 구매", base: 2, growth: 1.2, max: 4 },
+      { id: "upgradeTable", title: "리모델링", desc: "테이블 {n}회 강화", base: 6, growth: 1.26, max: 25 },
+      { id: "upgradeFixture", title: "시설 정비", desc: "매장 시설 {n}회 업그레이드", base: 5, growth: 1.24, max: 20 },
+      { id: "hireStaff", title: "직원 충원", desc: "직원 {n}명 고용", base: 4, growth: 1.22, max: 15 },
+      { id: "upgradeDecor", title: "인테리어 손질", desc: "장식품 {n}회 강화", base: 4, growth: 1.23, max: 15 },
+      { id: "expand", title: "매장 확장", desc: "매장 {n}회 확장", base: 1, growth: 1.14, max: 1 },
+      { id: "gift", title: "선물 수령", desc: "사장님 선물 {n}회 받기", base: 1, growth: 1.1, max: 2 },
+      { id: "gacha", title: "딜러 스카우트", desc: "딜러 가챠 {n}회", base: 1, growth: 1.12, max: 5 },
+      { id: "boost", title: "영업 스퍼트", desc: "부스트 {n}회 사용", base: 1, growth: 1.1, max: 2 },
+      // 그냥 가만히 둬도 달성되는 퀘스트 — 방치형답게 하나는 섞어둔다
+      { id: "earn", title: "매출 올리기", desc: "칩 {n} 벌기", incomeSeconds: 150, growth: 1.07, maxSeconds: 600 },
+    ],
+    reward: {
+      chipSecondsBase: 200,
+      chipSecondsPerRound: 16,
+      chipSecondsMax: 2400,
+      diamondsBase: 5,
+      diamondsPerRound: 0.6,
+      diamondsMax: 80,
+    },
+  },
+
   boosts: {
     free: {
       id: "free",

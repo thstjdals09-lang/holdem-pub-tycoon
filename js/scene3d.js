@@ -72,10 +72,14 @@ const TABLE_TOP_Y = 0.62;
 const SEAT_OUT = 0.5; // 레일 바깥으로 의자가 떨어진 거리
 const DEALER_OUT = 0.62;
 
-// 타원 테이블 + 의자까지 고려한 격자 간격
-const SPACING_X = 4.6;
-const SPACING_Z = 3.9;
+// 타원 테이블 + 의자 + "사람이 지나갈 통로"까지 고려한 격자 간격.
+// 테이블+의자 폭이 약 4.3이라 간격을 그보다 1 이상 넉넉히 둬야 손님이 사이로 지나갈 수 있다.
+const SPACING_X = 5.4;
+const SPACING_Z = 4.4;
 const MAX_COLS = 3;
+
+// 손님이 통과하지 못하는 영역 (XZ 평면의 타원). update()에서 다시 채운다.
+let obstacles = [];
 
 const ROOM_CENTER_Z = -1;
 const ROOM_MIN_W = 17;
@@ -367,75 +371,223 @@ function stadiumPointAt(s, a, r) {
 const dealerArcPos = (a, r) => Math.PI * r + 2 * a + Math.PI * r + a;
 
 // ============================================================
-// 사람 (서 있는 / 앉아 있는)
+// 캐릭터
+// 머리카락과 표정은 "머리 텍스처 한 장"에 전부 그려 넣는다.
+// 눈·볼터치·앞머리를 따로 메시로 만들면 손님 한 명당 메시가 10개 넘게 늘어나
+// 모바일에서 드로우콜이 감당이 안 된다. 구(sphere) UV에 직접 그리면 메시 1개로 끝난다.
+//   u = 0.25 → 얼굴 정면(+Z), u = 0.75 → 뒤통수, v = 1 → 정수리
 // ============================================================
 const personGeo = {
-  bodyStand: new THREE.CapsuleGeometry(0.26, 0.42, 4, 8),
-  bodySit: new THREE.CapsuleGeometry(0.26, 0.26, 4, 8),
-  head: new THREE.SphereGeometry(0.27, 14, 14),
-  thigh: new RoundedBoxGeometry(0.2, 0.17, 0.42, 2, 0.07),
-  arm: new THREE.CapsuleGeometry(0.075, 0.28, 3, 6),
-  hat: new THREE.CylinderGeometry(0.2, 0.2, 0.09, 12),
-  hatTop: new THREE.CylinderGeometry(0.14, 0.14, 0.16, 12),
-  collar: new THREE.TorusGeometry(0.26, 0.035, 8, 16),
+  head: new THREE.SphereGeometry(0.29, 18, 14),
+  torso: new THREE.CapsuleGeometry(0.23, 0.22, 4, 10),
+  torsoSit: new THREE.CapsuleGeometry(0.23, 0.14, 4, 10),
+  hips: new THREE.CylinderGeometry(0.235, 0.19, 0.36, 12),
+  thigh: new RoundedBoxGeometry(0.19, 0.16, 0.42, 2, 0.06),
+  arm: new THREE.CapsuleGeometry(0.068, 0.24, 3, 6),
+  vest: new THREE.CapsuleGeometry(0.245, 0.14, 4, 10),
+  // theta -90°~+90° 구간 = 앞쪽(+Z) 반원. 이게 모자 챙이 된다.
+  capBrim: new THREE.CylinderGeometry(0.3, 0.3, 0.035, 14, 1, false, -Math.PI / 2, Math.PI),
+  capCrown: new THREE.SphereGeometry(0.295, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2),
+  visorBand: new THREE.CylinderGeometry(0.3, 0.3, 0.07, 14),
+  bowKnot: new THREE.SphereGeometry(0.035, 8, 8),
+  bowWing: new RoundedBoxGeometry(0.09, 0.07, 0.04, 1, 0.02),
+  bun: new THREE.SphereGeometry(0.13, 10, 10),
 };
 
-// seated=true면 의자에 앉은 자세(허벅지가 앞으로 나오고 몸통이 낮아짐)
-function makePersonMesh(shirtColor, accentColor, opts = {}) {
-  const { hat = false, seated = false, arms = false } = opts;
+const HEAD_TEX = new Map();
+
+// 머리 텍스처: 머리카락 라인 + 눈/볼터치/입
+function headTexture(skinHex, hairHex, style) {
+  const key = `${skinHex}|${hairHex}|${style}`;
+  if (HEAD_TEX.has(key)) return HEAD_TEX.get(key);
+
+  const W = 256;
+  const H = 128;
+  const c = document.createElement("canvas");
+  c.width = W;
+  c.height = H;
+  const g = c.getContext("2d");
+  const FACE_X = 64; // u = 0.25
+
+  g.fillStyle = skinHex;
+  g.fillRect(0, 0, W, H);
+
+  // ---- 머리카락 ----
+  // 옆/뒤는 길게, 얼굴 쪽은 이마가 보이도록 짧게 (컬럼 단위로 헤어라인을 그린다)
+  const sideExtra = { short: 8, spiky: 6, bob: 34, long: 64, ponytail: 12, bun: 8 }[style] ?? 8;
+  const base = 40;
+  g.fillStyle = hairHex;
+  for (let px = 0; px < W; px++) {
+    const d = Math.min(Math.abs(px - FACE_X), Math.abs(px - FACE_X - W), Math.abs(px - FACE_X + W));
+    const faceness = Math.max(0, 1 - d / 36);
+    let hb = base + sideExtra * (1 - faceness) - 9 * faceness;
+    if (style === "spiky") hb += Math.sin(px * 0.55) * 7;
+    g.fillRect(px, 0, 1, Math.max(6, hb));
+  }
+  if (style === "ponytail") {
+    // 뒤통수(u=0.75)에 묶은 머리
+    g.beginPath();
+    g.ellipse(192, 66, 22, 34, 0, 0, Math.PI * 2);
+    g.fill();
+  }
+
+  // ---- 표정 ----
+  const eyeY = 70;
+  const eyeDX = 17;
+  g.fillStyle = "#3a2a30";
+  for (const s of [-1, 1]) {
+    g.beginPath();
+    g.ellipse(FACE_X + s * eyeDX, eyeY, 8, 10.5, 0, 0, Math.PI * 2);
+    g.fill();
+  }
+  g.fillStyle = "#ffffff";
+  for (const s of [-1, 1]) {
+    g.beginPath();
+    g.ellipse(FACE_X + s * eyeDX + 3, eyeY - 3.5, 3, 3.6, 0, 0, Math.PI * 2);
+    g.fill();
+  }
+  // 볼터치
+  g.fillStyle = "rgba(255,140,175,0.5)";
+  for (const s of [-1, 1]) {
+    g.beginPath();
+    g.ellipse(FACE_X + s * 31, eyeY + 13, 10, 6, 0, 0, Math.PI * 2);
+    g.fill();
+  }
+  // 입
+  g.strokeStyle = "#3a2a30";
+  g.lineWidth = 3;
+  g.lineCap = "round";
+  g.beginPath();
+  g.arc(FACE_X, eyeY + 15, 8, 0.25 * Math.PI, 0.75 * Math.PI);
+  g.stroke();
+
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  HEAD_TEX.set(key, tex);
+  return tex;
+}
+
+const hex = (n) => "#" + n.toString(16).padStart(6, "0");
+
+// 손님 외형 팔레트 (셔츠 / 바지 / 머리색 / 헤어스타일)
+const HAIR_COLORS = [0x3b2b20, 0x1f1a18, 0x6b4a2f, 0x8a6a4a, 0xc98a4a, 0x5a4632, 0x2b2440];
+const PANTS_COLORS = [0x4a5a7a, 0x3a3a4a, 0x6b5a4a, 0x2f4a5a, 0x5a4a6b, 0x7a5a5a];
+const DEALER_HAIR = [0x2b2440, 0x3b2b20, 0x1f1a18, 0x6b4a2f, 0xc98a4a];
+const DEALER_STYLES = ["short", "ponytail", "bob", "spiky", "bun"];
+const HAIR_STYLES = ["short", "bob", "long", "ponytail", "spiky", "bun"];
+
+function randomCustomerLook() {
+  const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+  return {
+    shirt: pick(CUSTOMER_SHIRT_COLORS),
+    pants: pick(PANTS_COLORS),
+    hair: pick(HAIR_COLORS),
+    style: pick(HAIR_STYLES),
+  };
+}
+
+// 캐릭터 조립.
+//   shirt/pants/hair/style : 외형
+//   seated                 : 의자에 앉은 자세 (허벅지가 앞으로 나온다)
+//   vest / bowtie / hat    : 딜러·바텐더 같은 유니폼 요소
+//   armsOnTable            : 딜러가 테이블 위로 팔을 뻗은 자세
+function makePersonMesh(opts = {}) {
+  const {
+    shirt = 0xff8fab,
+    pants = 0x4a5a7a,
+    hair = 0x3b2b20,
+    skin = COLORS.skin,
+    style = "short",
+    seated = false,
+    vest = null,
+    bowtie = null,
+    hat = null, // null | "cap" | "visor"
+    hatColor = 0x2a2436,
+    armsOnTable = false,
+  } = opts;
+
   const group = new THREE.Group();
+  const headMat = toonMat(0xffffff, { map: headTexture(hex(skin), hex(hair), style) });
+
+  // 앉은 자세는 의자 좌면(y≈0.45) 위에 몸이 올라간다
+  const hipY = seated ? 0.52 : 0.18;
+  const torsoGeo = seated ? personGeo.torsoSit : personGeo.torso;
+  const torsoY = seated ? 0.86 : 0.7;
+  const headY = seated ? 1.35 : 1.19;
 
   if (seated) {
-    const body = meshWO(personGeo.bodySit, shirtColor, 1.08);
-    body.position.y = 0.78;
-    const head = meshWO(personGeo.head, COLORS.skin, 1.07);
-    head.position.y = 1.16;
-    const thighL = plain(personGeo.thigh, shirtColor);
-    thighL.position.set(-0.13, 0.5, 0.2);
-    const thighR = plain(personGeo.thigh, shirtColor);
-    thighR.position.set(0.13, 0.5, 0.2);
-    group.add(body, head, thighL, thighR);
-    if (accentColor) {
-      const collar = new THREE.Mesh(personGeo.collar, toonMat(accentColor));
-      collar.rotation.x = Math.PI / 2;
-      collar.position.y = 0.94;
-      group.add(collar);
-    }
-    if (arms) {
-      const armL = plain(personGeo.arm, shirtColor);
-      armL.position.set(-0.28, 0.8, 0.22);
-      armL.rotation.x = Math.PI / 2.4;
-      const armR = plain(personGeo.arm, shirtColor);
-      armR.position.set(0.28, 0.8, 0.22);
-      armR.rotation.x = Math.PI / 2.4;
-      group.add(armL, armR);
-    }
-    if (hat) {
-      const brim = plain(personGeo.hat, 0x2a2436);
-      brim.position.y = 1.4;
-      const crown = plain(personGeo.hatTop, 0x2a2436);
-      crown.position.y = 1.5;
-      group.add(brim, crown);
+    for (const s of [-1, 1]) {
+      const thigh = plain(personGeo.thigh, pants);
+      thigh.position.set(s * 0.13, 0.5, 0.2);
+      group.add(thigh);
     }
   } else {
-    const body = meshWO(personGeo.bodyStand, shirtColor, 1.08);
-    body.position.y = 0.5;
-    const head = meshWO(personGeo.head, COLORS.skin, 1.07);
-    head.position.y = 1.05;
-    group.add(body, head);
-    if (accentColor) {
-      const collar = new THREE.Mesh(personGeo.collar, toonMat(accentColor));
-      collar.rotation.x = Math.PI / 2;
-      collar.position.y = 0.68;
-      group.add(collar);
+    const hips = plain(personGeo.hips, pants);
+    hips.position.y = hipY;
+    group.add(hips);
+  }
+
+  const torso = meshWO(torsoGeo, shirt, 1.07);
+  torso.position.y = torsoY;
+  group.add(torso);
+
+  if (vest !== null) {
+    const v = plain(personGeo.vest, vest);
+    v.position.y = torsoY - 0.05;
+    group.add(v);
+  }
+
+  const head = meshWO(personGeo.head, 0xffffff, 1.06);
+  head.material = headMat;
+  head.position.y = headY;
+  group.add(head);
+
+  if (style === "bun") {
+    const bun = plain(personGeo.bun, hair);
+    bun.position.set(0, headY + 0.24, -0.08);
+    group.add(bun);
+  }
+
+  // 팔
+  const armY = seated ? torsoY + 0.02 : torsoY - 0.02;
+  for (const s of [-1, 1]) {
+    const arm = plain(personGeo.arm, shirt);
+    if (armsOnTable) {
+      arm.position.set(s * 0.26, armY, 0.24);
+      arm.rotation.x = Math.PI / 2.3;
+    } else {
+      arm.position.set(s * 0.29, armY, 0.02);
+      arm.rotation.z = s * -0.18;
     }
-    if (hat) {
-      const brim = plain(personGeo.hat, 0x2a2436);
-      brim.position.y = 1.29;
-      const crown = plain(personGeo.hatTop, 0x2a2436);
-      crown.position.y = 1.39;
-      group.add(brim, crown);
+    group.add(arm);
+  }
+
+  if (bowtie !== null) {
+    const knot = plain(personGeo.bowKnot, bowtie);
+    knot.position.set(0, headY - 0.26, 0.2);
+    group.add(knot);
+    for (const s of [-1, 1]) {
+      const wing = plain(personGeo.bowWing, bowtie);
+      wing.position.set(s * 0.07, headY - 0.26, 0.19);
+      wing.rotation.z = s * 0.35;
+      group.add(wing);
     }
+  }
+
+  if (hat === "cap") {
+    const crown = plain(personGeo.capCrown, hatColor);
+    crown.position.y = headY + 0.03;
+    const brim = plain(personGeo.capBrim, hatColor);
+    brim.position.set(0, headY + 0.04, 0.02);
+    brim.scale.set(1, 1, 1.25);
+    group.add(crown, brim);
+  } else if (hat === "visor") {
+    const band = plain(personGeo.visorBand, hatColor);
+    band.position.y = headY + 0.12;
+    const brim = plain(personGeo.capBrim, hatColor);
+    brim.position.set(0, headY + 0.11, 0.02);
+    brim.scale.set(1, 1, 1.15);
+    group.add(band, brim);
   }
 
   return group;
@@ -781,7 +933,19 @@ function buildHoldemTable({ index, dealer, feltColor, seatCount }) {
 
   if (dealer) {
     const look = DEALER_RARITY_LOOK[dealer.rarity] || DEALER_RARITY_LOOK.common;
-    const person = makePersonMesh(look.suit, look.accent, { hat: true, seated: true, arms: true });
+    // 딜러 유니폼: 흰 셔츠 + 등급색 조끼 + 보타이 + 딜러 바이저
+    const person = makePersonMesh({
+      shirt: 0xfdfdfd,
+      pants: look.suit,
+      vest: look.suit,
+      bowtie: look.accent,
+      hat: "visor",
+      hatColor: look.accent,
+      hair: DEALER_HAIR[index % DEALER_HAIR.length],
+      style: DEALER_STYLES[index % DEALER_STYLES.length],
+      seated: true,
+      armsOnTable: true,
+    });
     person.position.copy(dealerPos);
     person.rotation.y = dealerFacing;
     person.scale.setScalar(0.94);
@@ -1143,6 +1307,7 @@ export function update(snapshot) {
   const feltPalette = (THEMES[theme] || THEMES.classic).felt;
 
   const shownCapacity = Math.min(capacity, maxShown);
+  const obstacleList = [];
   const cols = Math.min(MAX_COLS, Math.max(1, Math.ceil(Math.sqrt(shownCapacity * 0.8))));
   const rows = Math.ceil(shownCapacity / cols);
 
@@ -1178,6 +1343,15 @@ export function update(snapshot) {
       lamp.position.set(x, 0, z);
       groups.tables.add(lamp);
 
+      // 테이블 + 의자 범위는 손님이 통과할 수 없다
+      obstacleList.push({
+        id: `tbl${i}`,
+        x,
+        z,
+        rx: TABLE_HALF_LEN + 0.16 + SEAT_OUT + 0.15,
+        rz: TABLE_RADIUS + 0.16 + SEAT_OUT + 0.15,
+      });
+
       obj.userData.seats.forEach((s, si) => {
         spots.push({
           id: `t${i}s${si}`,
@@ -1187,6 +1361,7 @@ export function update(snapshot) {
           rot: s.rot,
           seated: true,
           duration: [10, 22],
+          ignore: `tbl${i}`, // 자기 자리로 가려면 자기 테이블은 통과해야 한다
         });
       });
     } else {
@@ -1224,7 +1399,7 @@ export function update(snapshot) {
   groups.fixtures.add(shelf);
 
   if (staff.bartender > 0) {
-    const bartender = makePersonMesh(COLORS.bartenderShirt, COLORS.bartenderAccent, {});
+    const bartender = makePersonMesh({ shirt: 0xffffff, pants: 0x3a3a4a, vest: 0x4a3a52, bowtie: COLORS.bartenderAccent, hair: 0x3b2b20, style: "short" });
     bartender.position.set(barX, 0, zWall - 0.35);
     bartender.rotation.y = Math.PI;
     bartender.userData.bobPhase = 0.5;
@@ -1239,7 +1414,7 @@ export function update(snapshot) {
     const stool = buildBarStool();
     stool.position.set(sx, 0, sz);
     groups.fixtures.add(stool);
-    spots.push({ id: `bar${i}`, type: "bar", x: sx, z: sz, rot: Math.PI, seated: true, sitY: 0.24, duration: [12, 24] });
+    spots.push({ id: `bar`, type: "bar", x: sx, z: sz, rot: Math.PI, seated: true, sitY: 0.24, duration: [12, 24], ignore: "bar" });
   }
 
   // 냉장고
@@ -1326,7 +1501,7 @@ export function update(snapshot) {
   roamDefs.forEach((r) => {
     const count = Math.min(staff[r.id] || 0, 8);
     for (let i = 0; i < count; i++) {
-      const person = makePersonMesh(r.color, null, {});
+      const person = makePersonMesh({ shirt: r.color, pants: 0x3a3a4a, hair: HAIR_COLORS[idx % HAIR_COLORS.length], style: HAIR_STYLES[idx % HAIR_STYLES.length], hat: r.id === "marketer" ? "cap" : null, hatColor: r.color });
       const angle = (idx / 9) * Math.PI * 2;
       person.position.set(Math.cos(angle) * (halfW - 1.6), 0, ROOM_CENTER_Z + roomD / 2 - 3.2 + Math.sin(angle) * 1.6);
       person.rotation.y = angle;
@@ -1390,6 +1565,11 @@ export function update(snapshot) {
     groups.decor.add(vip);
   }
 
+  // 바 카운터·캐셔 카운터도 통과 불가 영역
+  obstacleList.push({ id: "bar", x: barX, z: zWall + 0.5, rx: 2.3, rz: 1.0 });
+  obstacleList.push({ id: "cash", x: vaultX, z: zWall + 0.4, rx: 1.4, rz: 0.9 });
+  obstacles = obstacleList;
+
   activitySpots = spots.map((s) => ({ ...s, taken: false }));
   clearGroup(groups.customers);
   customers = [];
@@ -1421,9 +1601,9 @@ function spawnCustomer() {
   const spot = free[Math.floor(Math.random() * free.length)];
   spot.taken = true;
 
-  const color = CUSTOMER_SHIRT_COLORS[Math.floor(Math.random() * CUSTOMER_SHIRT_COLORS.length)];
-  const standing = makePersonMesh(color, null, {});
-  const seated = makePersonMesh(color, null, { seated: true });
+  const look = randomCustomerLook();
+  const standing = makePersonMesh(look);
+  const seated = makePersonMesh({ ...look, seated: true });
   seated.visible = false;
   const wrap = new THREE.Group();
   wrap.add(standing, seated);
@@ -1438,7 +1618,6 @@ function spawnCustomer() {
     mesh: wrap,
     standing,
     seated,
-    color,
     spot,
     phase: "enter",
     target: new THREE.Vector3(spot.x, 0, spot.z),
@@ -1514,6 +1693,49 @@ function activityEffect(c) {
   }
 }
 
+// 장애물(테이블/카운터)을 피해 돌아가도록 진행 방향을 꺾는다.
+// 반발력만 주면 장애물 정면에서 제자리걸음을 하므로, 접선 방향 성분을 함께 더해
+// "옆으로 돌아서 지나가는" 움직임을 만든다.
+const _steer = new THREE.Vector3();
+function steerAround(pos, desired, ignoreId) {
+  _steer.copy(desired);
+  let pushed = false;
+  for (const ob of obstacles) {
+    if (ob.id === ignoreId) continue;
+    const dx = (pos.x - ob.x) / ob.rx;
+    const dz = (pos.z - ob.z) / ob.rz;
+    const d = Math.hypot(dx, dz);
+    if (d >= 1.5 || d === 0) continue;
+    const push = (1.5 - d) / 1.5;
+    const nx = dx / d;
+    const nz = dz / d;
+    _steer.x += nx * push * 2.4; // 바깥으로 밀어내기
+    _steer.z += nz * push * 2.4;
+    const tx = -nz; // 접선 방향으로 돌아가기
+    const tz = nx;
+    const side = desired.x * tx + desired.z * tz >= 0 ? 1 : -1;
+    _steer.x += tx * side * push * 2.0;
+    _steer.z += tz * side * push * 2.0;
+    pushed = true;
+  }
+  if (!pushed || _steer.lengthSq() < 1e-6) return desired;
+  return _steer.normalize();
+}
+
+// 그래도 파고들었으면 타원 밖으로 밀어낸다 (테이블을 뚫고 지나가지 않도록)
+function pushOutOfObstacles(pos, ignoreId) {
+  for (const ob of obstacles) {
+    if (ob.id === ignoreId) continue;
+    const dx = (pos.x - ob.x) / ob.rx;
+    const dz = (pos.z - ob.z) / ob.rz;
+    const d = Math.hypot(dx, dz);
+    if (d > 0 && d < 1) {
+      pos.x = ob.x + (dx / d) * ob.rx;
+      pos.z = ob.z + (dz / d) * ob.rz;
+    }
+  }
+}
+
 function updateCustomers(dt, t) {
   spawnTimer -= dt;
   if (spawnTimer <= 0) {
@@ -1541,8 +1763,10 @@ function updateCustomers(dt, t) {
         }
       } else {
         dir.normalize();
-        m.position.addScaledVector(dir, Math.min(walkSpeed * dt, dist));
-        m.rotation.y = Math.atan2(dir.x, dir.z);
+        const move = steerAround(m.position, dir, c.spot.ignore);
+        m.position.addScaledVector(move, Math.min(walkSpeed * dt, dist));
+        pushOutOfObstacles(m.position, c.spot.ignore);
+        m.rotation.y = Math.atan2(move.x, move.z);
       }
       m.position.y = Math.abs(Math.sin(t * 7 + c.bobPhase)) * 0.06;
     } else if (c.phase === "act") {
@@ -1708,3 +1932,26 @@ function animate() {
 }
 
 window.PubScene3D = { init, update, chipBurst };
+
+// 개발용 점검 훅: 손님이 테이블/카운터 안으로 파고들었는지 실측한다.
+window.__pubDebug = () => {
+  let inside = 0;
+  customers.forEach((c) => {
+    for (const ob of obstacles) {
+      if (ob.id === c.spot.ignore) continue;
+      const dx = (c.mesh.position.x - ob.x) / ob.rx;
+      const dz = (c.mesh.position.z - ob.z) / ob.rz;
+      if (Math.hypot(dx, dz) < 0.95) {
+        inside++;
+        break;
+      }
+    }
+  });
+  return {
+    customers: customers.length,
+    insideObstacles: inside,
+    spots: activitySpots.length,
+    obstacles: obstacles.length,
+    meshes: scene ? scene.children.reduce((n, g) => n + (g.children ? g.children.length : 0), 0) : 0,
+  };
+};
