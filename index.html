@@ -14,7 +14,7 @@
      올리지 않으면 index.html만 새로 받고 js/css는 브라우저 캐시의 옛 파일이 섞여서
      (예: 옛 game.js가 지금은 없는 요소를 건드려 게임이 멈추고 매장이 안 그려짐) 화면이 깨진다.
      js/account.js·backend.js·shop.js 안의 "./firebase-init.js?v=" 도 같은 숫자로 맞출 것. -->
-<link rel="stylesheet" href="css/style.css?v=7" />
+<link rel="stylesheet" href="css/style.css?v=8" />
 <script type="importmap">
 {
   "imports": {
@@ -237,19 +237,30 @@
     </div>
 
     <div class="tab-panel" id="tab-codex">
+      <!-- 편성 스테이지: 배치된 운영진을 한눈에 + 팀 프리셋 5개 -->
+      <div class="squad-stage">
+        <div class="squad-top">
+          <span class="squad-power">⚔️ 전투력 <b id="squad-power">0</b></span>
+          <span class="squad-synergy" id="squad-synergy"></span>
+        </div>
+        <div class="squad-slots" id="squad-slots"></div>
+        <div class="squad-bottom">
+          <div class="squad-presets" id="squad-presets" role="group" aria-label="편성 프리셋"></div>
+          <button class="btn btn-primary squad-auto" id="codex-quick-deploy">⚡ 자동 편성</button>
+        </div>
+      </div>
       <div class="codex-head">
         <div class="codex-progress">
-          <b id="codex-owned">0</b> / <span id="codex-total">16</span>종 수집
+          <b id="codex-owned">0</b> / <span id="codex-total">16</span>종
           <span class="xp-bar codex-bar"><i id="codex-fill"></i></span>
         </div>
         <div class="codex-filter" id="codex-filter"></div>
       </div>
-      <div class="codex-actions">
-        <button class="btn btn-buy" id="codex-starup-all">⭐ 일괄 승급</button>
-        <button class="btn btn-primary" id="codex-quick-deploy">⚡ 빠른 배치</button>
-        <span class="codex-deploy-summary" id="codex-deploy-summary"></span>
-      </div>
       <div class="codex-grid" id="codex-grid"></div>
+      <!-- 목록 아래 고정 바 -->
+      <div class="codex-bottom-bar">
+        <button class="btn btn-buy btn-wide" id="codex-starup-all">⭐ 일괄 승급</button>
+      </div>
     </div>
 
     <!-- ===== 대회: 대회 참가 · 트로피 상점 ===== -->
@@ -429,14 +440,14 @@
 
 <div id="toast-wrap"></div>
 
-<script src="js/data.js?v=7" defer></script>
-<script src="js/portraits.js?v=7" defer></script>
-<script src="js/ads.js?v=7" defer></script>
-<script type="module" src="js/account.js?v=7"></script>
-<script type="module" src="js/backend.js?v=7"></script>
-<script type="module" src="js/shop.js?v=7"></script>
-<script type="module" src="js/auth-gate.js?v=7"></script>
-<script type="module" src="js/scene3d.js?v=7"></script>
-<script src="js/game.js?v=7" defer></script>
+<script src="js/data.js?v=8" defer></script>
+<script src="js/portraits.js?v=8" defer></script>
+<script src="js/ads.js?v=8" defer></script>
+<script type="module" src="js/account.js?v=8"></script>
+<script type="module" src="js/backend.js?v=8"></script>
+<script type="module" src="js/shop.js?v=8"></script>
+<script type="module" src="js/auth-gate.js?v=8"></script>
+<script type="module" src="js/scene3d.js?v=8"></script>
+<script src="js/game.js?v=8" defer></script>
 </body>
 </html>

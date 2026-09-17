@@ -13,7 +13,7 @@ import {
   onAuthStateChanged,
   doc,
   deleteDoc,
-} from "./firebase-init.js?v=7";
+} from "./firebase-init.js?v=8";
 
 const EMAIL_SUFFIX = "@holdem-pub-tycoon.local";
 const toEmail = (username) => `${username.trim().toLowerCase()}${EMAIL_SUFFIX}`;

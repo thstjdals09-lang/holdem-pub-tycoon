@@ -243,6 +243,7 @@ const GAME_DATA = {
   // ---------- 배치(운영) — 동시에 몇 명까지 "일하게" 할지 + 조합 시너지 ----------
   deployment: {
     maxDeployed: 10,
+    presets: 5, // 편성 프리셋(팀) 개수 — 도감 위 스테이지에서 번호로 전환한다
     synergyPerRole: 0.05, // 배치된 인원 중 서로 다른 role 1종류당 +5% (곱연산)
     fullSquadBonus: 0.2, // 정확히 10명 전원 배치 시 추가 +20%
   },

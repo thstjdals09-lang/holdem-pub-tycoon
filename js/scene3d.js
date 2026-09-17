@@ -2213,6 +2213,7 @@ window.PubScene3D = { init, update, chipBurst, spawnDiamondBubble };
 
 // 개발용 점검 훅: 손님이 테이블/카운터 안으로 파고들었는지 실측한다.
 window.__pubDebug = () => {
+  if (!ready) return { ready: false };
   let inside = 0;
   customers.forEach((c) => {
     for (const ob of obstacles) {
@@ -2227,6 +2228,7 @@ window.__pubDebug = () => {
   });
   const rect = renderer.domElement.getBoundingClientRect();
   return {
+    ready: true,
     customers: customers.length,
     // 테이블에 앉아 있는 손님 / 테이블 좌석 / 목표
     pokerSeated: customers.filter((c) => c.phase === "act" && c.spot.type === "poker").length,

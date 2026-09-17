@@ -41,8 +41,9 @@
     // 운영진 도감: { [dealerId]: { star, shards } } — 프레스티지에도 유지된다
     dealers: keep.dealers ?? {},
     codexNew: keep.codexNew ?? [],
-    // 동시 배치(운영) 중인 운영진 id 목록 — 최대 D.deployment.maxDeployed명. 프레스티지에도 유지.
-    deployedIds: keep.deployedIds ?? [],
+    // 편성 프리셋 5개 — 각각 최대 D.deployment.maxDeployed명, 지금 쓰는 팀은 activeSquad. 프레스티지에도 유지.
+    squads: keep.squads ?? Array.from({ length: D.deployment.presets }, () => []),
+    activeSquad: keep.activeSquad ?? 0,
 
     // 가챠 레벨(뽑을수록 오름, 최대 10) + 누적 뽑기 횟수 + 무료 뽑기권(반복 퀘스트 보상) — 전부 계정 단위로 유지
     gachaLevel: keep.gachaLevel ?? 1,
@@ -158,7 +159,13 @@
     s.permanentUpgrades = { ...base.permanentUpgrades, ...saved.permanentUpgrades };
     s.ads = { ...base.ads, ...saved.ads };
     s.celebrity = { ...base.celebrity, ...saved.celebrity };
-    s.deployedIds = Array.isArray(saved.deployedIds) ? saved.deployedIds : [];
+    // 편성 프리셋 — 예전 세이브의 단일 배치 목록(deployedIds)은 1번 팀으로 옮긴다
+    s.squads = Array.from({ length: D.deployment.presets }, (_, i) => {
+      const from = Array.isArray(saved.squads) ? saved.squads[i] : i === 0 ? saved.deployedIds : null;
+      return Array.isArray(from) ? from.slice(0, D.deployment.maxDeployed) : [];
+    });
+    s.activeSquad = Math.min(D.deployment.presets - 1, Math.max(0, Number(saved.activeSquad) || 0));
+    delete s.deployedIds;
     s.gachaLevel = saved.gachaLevel ?? 1;
     s.gachaPulls = saved.gachaPulls ?? 0;
     s.gachaTickets = saved.gachaTickets ?? 0;
@@ -266,9 +273,23 @@
   }
   const ownedDealerIds = () => Object.keys(state.dealers).filter((id) => rosterDef(id));
 
-  // ---------- 배치(운영) ----------
-  // 로스터에서 사라진 id(예전 이름 변경 등)가 세이브에 남아 있어도 매장 렌더가 깨지지 않게 로스터에 있는 것만 인정
-  const deployedIds = () => (state.deployedIds || []).filter((id) => state.dealers[id] && rosterDef(id));
+  // ---------- 배치(편성) ----------
+  // 지금 쓰는 팀(프리셋)의 목록. 로스터에서 사라진 id(예전 이름 변경 등)가 세이브에 남아 있어도
+  // 매장 렌더가 깨지지 않게, 읽을 때 로스터에 있는 것만 인정한다.
+  function squadList(index = state.activeSquad) {
+    if (!Array.isArray(state.squads[index])) state.squads[index] = [];
+    return state.squads[index];
+  }
+  const deployedIds = () => squadList().filter((id) => state.dealers[id] && rosterDef(id));
+  const squadCount = (index) => squadList(index).filter((id) => state.dealers[id] && rosterDef(id)).length;
+  function setActiveSquad(index) {
+    if (index === state.activeSquad) return;
+    state.activeSquad = index;
+    sceneDirty = true;
+    toast(`🧑‍💼 ${index + 1}번 편성 적용 · ${squadCount(index)}명`);
+    renderCodexTab();
+    refresh();
+  }
   const isDeployed = (id) => deployedIds().includes(id);
   // 배치된 인원끼리 서로 다른 역할(role)을 고루 갖추면 시너지, 정원(10명)을 꽉 채우면 추가 보너스
   function deploymentSynergyMultiplier() {
@@ -314,7 +335,7 @@
   const effectLabel = (e) => `${D.dealerEffects.emojis[e.type]} ${D.dealerEffects.labels[e.type]} +${(e.value * 100).toFixed(1)}%`;
 
   function toggleDeploy(dealerId) {
-    const list = state.deployedIds || (state.deployedIds = []);
+    const list = squadList();
     const idx = list.indexOf(dealerId);
     if (idx >= 0) {
       list.splice(idx, 1);
@@ -332,7 +353,7 @@
   // 새로 스카우트한 운영진은 자동배치 설정이 켜져 있고 자리가 남아있으면 바로 배치된다
   function autoDeployIfRoom(dealerId) {
     if (!state.settings.autoAssign) return;
-    const list = state.deployedIds || (state.deployedIds = []);
+    const list = squadList();
     if (list.length < D.deployment.maxDeployed && !list.includes(dealerId)) list.push(dealerId);
   }
 
@@ -1581,9 +1602,10 @@
       if (best) bestPerRole.push(best);
     });
     const diverse = [...bestPerRole, ...owned.filter((id) => !bestPerRole.includes(id))].slice(0, max);
-    state.deployedIds = score(diverse) >= score(topOnly) ? diverse : topOnly;
+    state.squads[state.activeSquad] = score(diverse) >= score(topOnly) ? diverse : topOnly;
     sceneDirty = true;
-    toast(`⚡ 빠른 배치 완료 · ${state.deployedIds.length}명 · 시너지 +${Math.round((deploymentSynergyMultiplier() - 1) * 100)}%`);
+    toast(`⚡ ${state.activeSquad + 1}번 편성 완료 · ${deployedIds().length}명 · 시너지 +${Math.round((deploymentSynergyMultiplier() - 1) * 100)}%`);
+    renderCodexTab();
     refresh();
   }
 
@@ -1614,7 +1636,8 @@
       tournament: state.tournament,
       dealers: state.dealers,
       codexNew: state.codexNew,
-      deployedIds: state.deployedIds,
+      squads: state.squads,
+      activeSquad: state.activeSquad,
       gachaLevel: state.gachaLevel,
       gachaPulls: state.gachaPulls,
       gachaTickets: state.gachaTickets,
@@ -2121,7 +2144,7 @@
     const readyCount = ownedDealerIds().filter((id) => canStarUp(id)).length;
     $("codex-starup-all").innerHTML = `⭐ 일괄 승급${readyCount ? ` <b>${readyCount}</b>` : ""}`;
     $("codex-starup-all").disabled = readyCount === 0;
-    $("codex-deploy-summary").textContent = `배치 ${deployedIds().length}/${D.deployment.maxDeployed} · 시너지 +${Math.round((deploymentSynergyMultiplier() - 1) * 100)}%`;
+    renderSquadStage();
 
     const filters = [{ id: "all", name: "전체" }, ...D.gacha.rarities.map((r) => ({ id: r.id, name: r.short }))];
     $("codex-filter").innerHTML = filters
@@ -2136,36 +2159,41 @@
         })
       );
 
+    // 보유 → 등급 → 별 순으로, 편성 중인 운영진이 맨 앞에 오게 정렬한다(쿠키런식 목록)
     const list = D.dealerRoster
       .filter((d) => !d.shopOnly || state.dealers[d.id])
-      .filter((d) => state.ui.codexFilter === "all" || d.rarity === state.ui.codexFilter);
+      .filter((d) => state.ui.codexFilter === "all" || d.rarity === state.ui.codexFilter)
+      .map((d) => ({ d, own: state.dealers[d.id] }))
+      .sort((a, b) => {
+        const key = (x) =>
+          (x.own ? 1000 : 0) + (isDeployed(x.d.id) ? 2000 : 0) + rarityRank(x.d.rarity) * 20 + (x.own ? x.own.star : 0);
+        return key(b) - key(a);
+      });
     const grid = $("codex-grid");
     grid.innerHTML = list
-      .map((d) => {
-        const own = state.dealers[d.id];
+      .map(({ d, own }) => {
         const r = rarityDef(d.rarity) || D.gacha.mythicRarity;
         const isNew = codexNewSnapshot.includes(d.id);
-        const stars = own ? starsHtml(own.star) : "";
         const need = own ? starUpCost(d.id) : null;
         const shardPct = own && need ? Math.min(100, (own.shards / need) * 100) : own ? 100 : 0;
         const deployed = own && isDeployed(d.id);
         const upReady = own && canStarUp(d.id);
         return `
-          <div class="codex-card ${own ? "" : "locked"}" data-dealer="${d.id}" style="--rc:${r.color}">
+          <div class="codex-card ${own ? "" : "locked"} ${deployed ? "deployed" : ""}" data-dealer="${d.id}" style="--rc:${r.color}">
             <span class="codex-rank">${r.short}</span>
+            ${own ? `<span class="codex-star-chip">★${own.star}</span>` : ""}
             ${isNew ? '<span class="badge-new">NEW</span>' : ""}
             <img src="${DealerPortraits.url(d.id, d.rarity)}" alt="${d.name}" loading="lazy" />
             ${own ? "" : '<span class="codex-lock">🔒</span>'}
             <div class="codex-name">${own ? d.name : "???"}</div>
-            <div class="codex-stars">${stars}</div>
+            <div class="codex-stars">${own ? starsHtml(own.star) : ""}</div>
             ${own ? `<div class="shard-bar ${upReady ? "ready" : ""}"><i style="width:${shardPct}%"></i></div>` : ""}
-            ${own ? `<button class="deploy-toggle ${deployed ? "on" : ""}" data-deploy="${d.id}">${deployed ? "배치중" : "배치"}</button>` : ""}
+            ${own ? `<button class="deploy-toggle ${deployed ? "on" : ""}" data-deploy="${d.id}">${deployed ? "편성중" : "편성"}</button>` : ""}
           </div>`;
       })
       .join("");
-    grid.querySelectorAll("[data-dealer]").forEach((el) =>
-      el.querySelector("img").addEventListener("click", () => openDealerModal(el.dataset.dealer))
-    );
+    // 카드를 누르면 상세, 아래 띠를 누르면 바로 편성/해제
+    grid.querySelectorAll("[data-dealer]").forEach((el) => el.addEventListener("click", () => openDealerModal(el.dataset.dealer)));
     grid.querySelectorAll("[data-deploy]").forEach((btn) =>
       btn.addEventListener("click", (e) => {
         e.stopPropagation();
@@ -2173,6 +2201,44 @@
         renderCodexTab();
       })
     );
+  }
+
+  // 도감 위 "편성 스테이지" — 지금 팀(프리셋)에 들어간 운영진을 10칸으로 보여준다
+  function renderSquadStage() {
+    const deployed = deployedIds();
+    const max = D.deployment.maxDeployed;
+    setText($("squad-power"), formatNumber(tournamentPower()));
+    setText(
+      $("squad-synergy"),
+      `편성 ${deployed.length}/${max} · 시너지 +${Math.round((deploymentSynergyMultiplier() - 1) * 100)}%`
+    );
+
+    const slots = $("squad-slots");
+    slots.innerHTML = Array.from({ length: max }, (_, i) => {
+      const id = deployed[i];
+      if (!id) return `<div class="squad-slot empty"><span>+</span></div>`;
+      const def = rosterDef(id);
+      const r = rarityDef(def.rarity) || D.gacha.mythicRarity;
+      return `
+        <button class="squad-slot" data-squad-member="${id}" style="--rc:${r.color}" title="${def.name}">
+          <img src="${DealerPortraits.url(id, def.rarity)}" alt="${def.name}" />
+          <span class="squad-slot-star">★${state.dealers[id].star}</span>
+          <span class="squad-slot-name">${def.name}</span>
+        </button>`;
+    }).join("");
+    slots.querySelectorAll("[data-squad-member]").forEach((el) =>
+      el.addEventListener("click", () => openDealerModal(el.dataset.squadMember))
+    );
+    slots.querySelectorAll(".squad-slot.empty").forEach((el) =>
+      el.addEventListener("click", () => toast("🧑‍💼 아래 목록에서 운영진을 눌러 편성하세요"))
+    );
+
+    const presets = $("squad-presets");
+    presets.innerHTML = Array.from({ length: D.deployment.presets }, (_, i) => {
+      const n = squadCount(i);
+      return `<button class="squad-preset ${i === state.activeSquad ? "active" : ""}" data-preset="${i}">${i + 1}<small>${n ? `${n}명` : "비어있음"}</small></button>`;
+    }).join("");
+    presets.querySelectorAll("[data-preset]").forEach((b) => b.addEventListener("click", () => setActiveSquad(Number(b.dataset.preset))));
   }
 
   function renderDecorTab() {
