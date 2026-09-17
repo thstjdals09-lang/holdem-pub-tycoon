@@ -76,12 +76,27 @@
   <!-- 좌측 하단 안내 -->
   <div class="floor-note" id="floor-note" hidden></div>
 
-  <!-- 하단 컨트롤 바: 일괄 구매 배수 + 자동 업그레이드 -->
-  <div class="control-bar">
-    <div class="qty-group" id="qty-group" role="group" aria-label="일괄 구매 배수"></div>
-    <button class="auto-toggle" id="auto-toggle">
-      <span class="auto-led"></span><span class="auto-text">자동 <b>OFF</b></span>
-    </button>
+  <!-- 하단 스택: 성장 미션 배너 + 컨트롤 바 (시트가 열리면 함께 올라간다) -->
+  <div class="bottom-stack" id="bottom-stack">
+    <div class="quest-banner" id="quest-banner" hidden>
+      <div class="quest-icon" id="quest-icon">📜</div>
+      <div class="quest-body">
+        <div class="quest-head">
+          <b class="quest-title" id="quest-title">성장 미션</b>
+          <span class="quest-step" id="quest-step">1/20</span>
+        </div>
+        <div class="quest-desc" id="quest-desc"></div>
+        <div class="quest-prog"><i id="quest-fill"></i></div>
+      </div>
+      <button class="btn btn-buy quest-claim" id="quest-claim" disabled>받기</button>
+    </div>
+
+    <div class="control-bar">
+      <div class="qty-group" id="qty-group" role="group" aria-label="일괄 구매 배수"></div>
+      <button class="auto-toggle" id="auto-toggle">
+        <span class="auto-led"></span><span class="auto-text">자동 <b>OFF</b></span>
+      </button>
+    </div>
   </div>
 
   <!-- 하단 네비게이션 -->

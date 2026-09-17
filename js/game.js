@@ -50,6 +50,8 @@
 
     attendance: keep.attendance ?? { lastDate: null, cycleDay: 0 },
     missions: { date: null, list: [], allClaimed: false },
+    // 성장 미션(튜토리얼)은 프레스티지를 해도 이어진다
+    tutorial: keep.tutorial ?? { step: 0, counts: {} },
     boosts: keep.boosts ?? { freeReadyAt: 0, active: {}, goldenNextAt: Date.now() + 8 * 60 * 1000 },
   });
 
@@ -82,6 +84,8 @@
     s.boosts = { ...base.boosts, ...saved.boosts };
     s.boosts.active = s.boosts.active || {};
     s.missions = { ...base.missions, ...saved.missions };
+    s.tutorial = { ...base.tutorial, ...saved.tutorial };
+    s.tutorial.counts = s.tutorial.counts || {};
     s.themeLevels = { ...base.themeLevels, ...saved.themeLevels };
     s.ownedThemes = Array.isArray(saved.ownedThemes) ? saved.ownedThemes : base.ownedThemes;
     s.codexNew = Array.isArray(saved.codexNew) ? saved.codexNew : [];
@@ -354,6 +358,8 @@
   // 미션 추적
   // ============================================================
   function trackMission(actionId, amount = 1) {
+    // 성장 미션(튜토리얼)의 일회성 목표도 같은 이벤트로 센다
+    state.tutorial.counts[actionId] = (state.tutorial.counts[actionId] || 0) + amount;
     let changed = false;
     state.missions.list.forEach((m) => {
       if (m.id === actionId && !m.claimed && m.progress < m.target) {
@@ -398,6 +404,61 @@
   }
 
   // ============================================================
+  // 성장 미션 (튜토리얼을 가장한 순차 퀘스트)
+  // ============================================================
+  function tutorialStat(key) {
+    switch (key) {
+      case "tables": return state.tables;
+      case "tableLevel": return state.tableLevel;
+      case "store.expansions": return state.store.expansions;
+      case "fixtures.bar": return state.fixtures.bar || 0;
+      case "fixtures.fridge": return state.fixtures.fridge || 0;
+      case "fixtures.vault": return state.fixtures.vault || 0;
+      case "staff.bartender": return state.staff.bartender || 0;
+      case "staff.server": return state.staff.server || 0;
+      case "staff.marketer": return state.staff.marketer || 0;
+      case "dealerCount": return ownedDealerIds().length;
+      case "decorTotal": return D.decor.reduce((sum, d) => sum + (state.decor[d.id] || 0), 0);
+      case "themeCount": return state.ownedThemes.length;
+      case "prestigePoints": return state.prestige.points;
+      case "maxStar": return ownedDealerIds().reduce((m, id) => Math.max(m, state.dealers[id].star), 0);
+      case "level": return levelInfo().level;
+      default: return 0;
+    }
+  }
+
+  // 현재 단계와 진행도. 전부 끝났으면 null.
+  function tutorialState() {
+    const step = state.tutorial.step;
+    if (step >= D.tutorial.length) return null;
+    const def = D.tutorial[step];
+    const raw =
+      def.goal.kind === "state"
+        ? tutorialStat(def.goal.stat)
+        : state.tutorial.counts[def.goal.action] || 0;
+    return {
+      def,
+      step,
+      cur: Math.min(raw, def.goal.target),
+      target: def.goal.target,
+      done: raw >= def.goal.target,
+    };
+  }
+
+  function claimTutorial() {
+    const t = tutorialState();
+    if (!t || !t.done) return;
+    const got = grantReward(t.def.reward);
+    state.tutorial.step += 1;
+    toast(`📜 ${t.def.title} 완료! 💰${formatChips(got.chips)} 💎${got.dia}`);
+    burst("#ffd166");
+    const next = tutorialState();
+    if (next) setTimeout(() => toast(`📜 다음 목표: ${next.def.title}`), 1200);
+    else setTimeout(() => toast("🏆 성장 미션을 전부 완료했어요!"), 1200);
+    refresh();
+  }
+
+  // ============================================================
   // 출석
   // ============================================================
   const attendanceReady = () => state.attendance.lastDate !== todayKey();
@@ -411,6 +472,7 @@
     const got = grantReward({ chipSeconds: def.chipSeconds, diamonds: def.diamonds });
     state.attendance.lastDate = todayKey();
     state.attendance.cycleDay = day % D.attendance.cycleLength;
+    trackMission("attendance");
     toast(`📅 ${day}일차 출석! ${got.chips ? `💰${formatChips(got.chips)} ` : ""}${got.dia ? `💎${got.dia}` : ""}`);
     burst("#ffd166");
     renderAttendanceModal();
@@ -720,6 +782,7 @@
       ownedThemes: state.ownedThemes,
       themeLevels: state.themeLevels,
       giftReadyAt: state.giftReadyAt,
+      tutorial: state.tutorial,
       attendance: state.attendance,
       boosts: state.boosts,
       lifetimeEarned: state.lifetimeEarned,
@@ -787,6 +850,7 @@
     $("diamonds-value").textContent = formatNumber(state.diamonds);
     $("diamond-rate").textContent = `${(diamondPerSecond() * 60).toFixed(1)}/분`;
     $("prestige-mult").textContent = `x${prestigeMultiplier().toFixed(2)}`;
+    renderQuestBanner();
 
     const li = levelInfo();
     $("avatar-lv").textContent = li.level;
@@ -804,6 +868,30 @@
         return `<span class="boost-pill">${def.emoji} x${def.mult} ${formatDuration(until - now)}</span>`;
       })
       .join("");
+  }
+
+  // 하단 성장 미션 배너 (튜토리얼 역할)
+  function renderQuestBanner() {
+    const banner = $("quest-banner");
+    const t = tutorialState();
+    if (!t) {
+      banner.hidden = true;
+      return;
+    }
+    banner.hidden = false;
+    banner.classList.toggle("ready", t.done);
+    $("quest-icon").textContent = t.done ? "🎉" : "📜";
+    $("quest-title").textContent = t.def.title;
+    $("quest-step").textContent = `${t.step + 1}/${D.tutorial.length}`;
+    $("quest-desc").textContent = t.done
+      ? `보상 ${rewardLabel(t.def.reward)}`
+      : t.def.hint
+      ? `${t.def.desc} · ${t.def.hint}`
+      : t.def.desc;
+    $("quest-fill").style.width = `${((t.cur / t.target) * 100).toFixed(1)}%`;
+    const btn = $("quest-claim");
+    btn.disabled = !t.done;
+    btn.textContent = t.done ? "받기" : `${t.cur}/${t.target}`;
   }
 
   function refreshDots() {
@@ -1334,7 +1422,9 @@
     auto.addEventListener("click", () => {
       state.ui.autoUpgrade = !state.ui.autoUpgrade;
       syncAuto();
+      if (state.ui.autoUpgrade) trackMission("autoUpgrade");
       toast(state.ui.autoUpgrade ? "🤖 자동 업그레이드 ON" : "🤖 자동 업그레이드 OFF");
+      refresh();
     });
     syncAuto();
   }
@@ -1453,6 +1543,7 @@
       toast(`Lv.${li.level} ${li.title} · 다음 레벨까지 💰${formatChips(li.toNext)}`);
     });
     $("prestige-badge").addEventListener("click", () => openSheet("prestige", "브랜드 리뉴얼"));
+    $("quest-claim").addEventListener("click", claimTutorial);
 
     // 모달 닫기
     const closers = [

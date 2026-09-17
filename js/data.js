@@ -191,6 +191,36 @@ const GAME_DATA = {
     ],
     allClearReward: { chipSeconds: 900, diamonds: 25 },
   },
+
+  // ---------- 성장 미션 (튜토리얼을 가장한 순차 퀘스트) ----------
+  // 쿠키런/메이플 키우기처럼 하단 배너에 한 단계씩 떠서, 따라가다 보면
+  // 게임의 모든 시스템을 자연스럽게 한 번씩 써보게 된다.
+  // goal.kind:
+  //   "state" - 현재 상태값이 target 이상이면 달성 (진행도가 사라지지 않는다)
+  //   "count" - 해당 행동을 target번 하면 달성 (일회성 행동용)
+  tutorial: [
+    { id: "t1", title: "두 번째 테이블", desc: "홀덤 테이블을 하나 더 놓아보세요", hint: "3D 화면의 빈 자리를 직접 탭해도 돼요", goal: { kind: "state", stat: "tables", target: 2 }, reward: { chipSeconds: 120, diamonds: 5 } },
+    { id: "t2", title: "테이블 리모델링", desc: "테이블을 1회 강화하세요", hint: "테이블 탭에서 강화할 수 있어요", goal: { kind: "state", stat: "tableLevel", target: 1 }, reward: { chipSeconds: 150, diamonds: 5 } },
+    { id: "t3", title: "바 카운터 오픈", desc: "바 카운터를 설치하세요", hint: "매장 탭 → 매장 시설", goal: { kind: "state", stat: "fixtures.bar", target: 1 }, reward: { chipSeconds: 180, diamonds: 8 } },
+    { id: "t4", title: "첫 직원 채용", desc: "바텐더를 1명 고용하세요", hint: "직원 탭에서 고용해요", goal: { kind: "state", stat: "staff.bartender", target: 1 }, reward: { chipSeconds: 200, diamonds: 8 } },
+    { id: "t5", title: "사장님 선물", desc: "🎁 선물을 1회 받으세요", hint: "우측 레일의 선물 버튼", goal: { kind: "count", action: "gift", target: 1 }, reward: { chipSeconds: 220, diamonds: 10 } },
+    { id: "t6", title: "손님이 북적북적", desc: "테이블을 4개까지 늘리세요", goal: { kind: "state", stat: "tables", target: 4 }, reward: { chipSeconds: 260, diamonds: 10 } },
+    { id: "t7", title: "매장 확장", desc: "매장을 1회 확장하세요", hint: "테이블 슬롯이 4칸 늘어나요", goal: { kind: "state", stat: "store.expansions", target: 1 }, reward: { chipSeconds: 300, diamonds: 12 } },
+    { id: "t8", title: "재고 확보", desc: "냉장고를 설치하세요", goal: { kind: "state", stat: "fixtures.fridge", target: 1 }, reward: { chipSeconds: 320, diamonds: 12 } },
+    { id: "t9", title: "영업 스퍼트", desc: "⚡ 부스트를 1회 사용하세요", hint: "응원 부스트는 무료예요", goal: { kind: "count", action: "boost", target: 1 }, reward: { chipSeconds: 340, diamonds: 15 } },
+    { id: "t10", title: "다이아 금고", desc: "다이아 금고를 설치하세요", hint: "다이아 적립 속도가 빨라져요", goal: { kind: "state", stat: "fixtures.vault", target: 1 }, reward: { chipSeconds: 360, diamonds: 20 } },
+    { id: "t11", title: "첫 딜러 스카우트", desc: "딜러 가챠를 1회 뽑으세요", hint: "직원 탭 → 딜러 스카우트", goal: { kind: "count", action: "gacha", target: 1 }, reward: { chipSeconds: 400, diamonds: 15 } },
+    { id: "t12", title: "출석 체크", desc: "📅 출석 보상을 받으세요", goal: { kind: "count", action: "attendance", target: 1 }, reward: { chipSeconds: 420, diamonds: 15 } },
+    { id: "t13", title: "분위기 잡기", desc: "장식품을 1개 설치하세요", hint: "인테리어 탭 → 장식품", goal: { kind: "state", stat: "decorTotal", target: 1 }, reward: { chipSeconds: 450, diamonds: 15 } },
+    { id: "t14", title: "사장님은 바빠", desc: "자동 업그레이드를 켜보세요", hint: "화면 아래 '자동' 버튼", goal: { kind: "count", action: "autoUpgrade", target: 1 }, reward: { chipSeconds: 500, diamonds: 18 } },
+    { id: "t15", title: "딜러 도감", desc: "딜러를 3종 모으세요", hint: "📖 도감 탭에서 확인해요", goal: { kind: "state", stat: "dealerCount", target: 3 }, reward: { chipSeconds: 560, diamonds: 25 } },
+    { id: "t16", title: "본격 리모델링", desc: "테이블 리모델링 Lv.10 달성", hint: "x10 일괄 강화를 써보세요", goal: { kind: "state", stat: "tableLevel", target: 10 }, reward: { chipSeconds: 640, diamonds: 25 } },
+    { id: "t17", title: "에이스 딜러", desc: "딜러 1명을 ★2로 승급하세요", hint: "중복으로 뽑은 조각으로 승급해요", goal: { kind: "state", stat: "maxStar", target: 2 }, reward: { chipSeconds: 720, diamonds: 30 } },
+    { id: "t18", title: "매장 분위기 변신", desc: "인테리어 테마를 1개 구매하세요", goal: { kind: "state", stat: "themeCount", target: 2 }, reward: { chipSeconds: 820, diamonds: 35 } },
+    { id: "t19", title: "대박 홀덤펍", desc: "테이블을 10개까지 늘리세요", goal: { kind: "state", stat: "tables", target: 10 }, reward: { chipSeconds: 950, diamonds: 40 } },
+    { id: "t20", title: "브랜드 리뉴얼", desc: "프레스티지를 1회 진행하세요", hint: "영구 수익 배율을 얻어요", goal: { kind: "state", stat: "prestigePoints", target: 1 }, reward: { chipSeconds: 1200, diamonds: 60 } },
+  ],
+
   boosts: {
     free: {
       id: "free",

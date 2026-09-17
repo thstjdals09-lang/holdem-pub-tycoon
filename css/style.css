@@ -304,7 +304,7 @@ body.sheet-open .side-rail {
   position: absolute;
   left: 50%;
   transform: translateX(-50%);
-  bottom: calc(var(--nav-h) + var(--safe-b) + 58px);
+  bottom: calc(var(--nav-h) + var(--safe-b) + 116px);
   padding: 6px 14px;
   border-radius: 999px;
   background: rgba(58, 42, 48, 0.72);
@@ -314,22 +314,100 @@ body.sheet-open .side-rail {
   backdrop-filter: blur(4px);
 }
 
-/* ===== 하단 컨트롤 바 (배수 / 자동) ===== */
-.control-bar {
+/* ===== 하단 스택: 성장 미션 배너 + 컨트롤 바 ===== */
+.bottom-stack {
   position: absolute;
   left: 10px;
   right: 10px;
   bottom: calc(var(--nav-h) + var(--safe-b) + 8px);
   display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+  /* 스택 자체는 좌우로 넓게 깔리므로, 빈 공간이 3D 탭을 가로채지 않게 한다 */
+  pointer-events: none;
+}
+.bottom-stack > * { pointer-events: auto; }
+body.sheet-open .bottom-stack { transform: translateY(calc(-1 * var(--sheet-h))); }
+
+.control-bar {
+  display: flex;
   justify-content: space-between;
   align-items: center;
   gap: 8px;
-  transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1);
-  /* 바 자체는 좌우로 넓게 깔리므로, 가운데 빈 공간이 3D 탭을 가로채지 않게 한다 */
   pointer-events: none;
 }
 .control-bar > * { pointer-events: auto; }
-body.sheet-open .control-bar { transform: translateY(calc(-1 * var(--sheet-h))); }
+
+/* ===== 성장 미션 배너 (튜토리얼 역할) ===== */
+.quest-banner {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 8px 7px 7px;
+  border-radius: 16px;
+  background: var(--glass);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 2px solid var(--glass-line);
+  box-shadow: 0 3px 0 rgba(58, 42, 48, 0.1), 0 6px 14px rgba(120, 70, 60, 0.18);
+  max-width: 460px;
+  margin: 0 auto;
+  width: 100%;
+}
+.quest-banner.ready { border-color: var(--gold); box-shadow: 0 3px 0 var(--gold-sh), 0 0 0 3px rgba(255, 200, 92, 0.3); }
+.quest-icon {
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  font-size: 18px;
+  background: linear-gradient(180deg, #fff3e2, #ffdcc0);
+  border: 2px solid rgba(58, 42, 48, 0.12);
+}
+.quest-body { flex: 1 1 auto; min-width: 0; }
+.quest-head { display: flex; align-items: baseline; gap: 6px; }
+.quest-title {
+  font-family: "Jua", sans-serif;
+  font-size: 12.5px;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.quest-step { font-size: 10px; color: var(--muted); margin-left: auto; flex: 0 0 auto; }
+.quest-desc {
+  font-size: 10.5px;
+  color: var(--ink-soft);
+  margin-top: 1px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.quest-prog {
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(58, 42, 48, 0.14);
+  margin-top: 4px;
+  overflow: hidden;
+}
+.quest-prog i {
+  display: block;
+  height: 100%;
+  width: 0%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--gold-l), var(--gold));
+  transition: width 0.35s ease;
+}
+.quest-claim {
+  flex: 0 0 auto;
+  min-width: 58px;
+  padding: 7px 10px;
+  font-size: 12px;
+}
+.quest-banner.ready .quest-claim { animation: boostPulse 1.1s ease-in-out infinite; }
 
 .qty-group {
   display: flex;
@@ -1014,7 +1092,7 @@ body.sheet-open .control-bar { transform: translateY(calc(-1 * var(--sheet-h)));
   position: fixed;
   left: 50%;
   transform: translateX(-50%);
-  bottom: calc(var(--nav-h) + var(--safe-b) + 98px);
+  bottom: calc(var(--nav-h) + var(--safe-b) + 156px);
   z-index: 70;
   display: flex;
   flex-direction: column;
