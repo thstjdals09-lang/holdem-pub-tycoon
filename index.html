@@ -49,22 +49,27 @@
     </div>
   </div>
 
-  <!-- 우측 상단: 재화 -->
+  <!-- 우측 상단: 재화 지갑 (BB / 다이아 / 트로피를 한 장에 묶음 · 폭 고정이라 숫자가 바뀌어도 흔들리지 않는다) -->
   <div class="hud-right">
-    <div class="currency" id="currency-chips">
-      <span class="cur-icon cur-icon-chip" aria-hidden="true"></span>
-      <span class="cur-body">
-        <b class="cur-value" id="chips-value">0</b>
-        <small class="cur-rate" id="income-value">0/초</small>
-      </span>
-    </div>
-    <div class="currency currency-dia" id="currency-diamonds">
-      <span class="cur-icon cur-icon-dia" aria-hidden="true"></span>
-      <span class="cur-body">
-        <b class="cur-value" id="diamonds-value">0</b>
-        <small class="cur-rate" id="diamond-rate">0/분</small>
-      </span>
-      <button class="add-currency-btn tab-btn" id="shop-plus-btn" data-tab="shop" data-title="상점" title="다이아 충전" aria-label="상점">＋</button>
+    <div class="wallet" id="wallet">
+      <div class="wallet-main">
+        <span class="cur-icon cur-icon-chip" aria-hidden="true"></span>
+        <span class="wallet-main-body">
+          <b class="wallet-bb" id="chips-value">0 BB</b>
+          <small class="wallet-rate" id="income-value">0 BB/초</small>
+        </span>
+      </div>
+      <div class="wallet-sub">
+        <span class="wallet-cell" title="다이아">
+          <span class="cur-icon cur-icon-dia sm" aria-hidden="true"></span>
+          <b id="diamonds-value">0</b>
+          <button class="add-currency-btn tab-btn" id="shop-plus-btn" data-group="shop" title="다이아 충전" aria-label="상점">＋</button>
+        </span>
+        <button class="wallet-cell tab-btn" data-group="tournament" title="트로피 (대회 보상)" aria-label="트로피">
+          <span class="cur-icon cur-icon-trophy sm" aria-hidden="true"></span>
+          <b id="trophies-value">0</b>
+        </button>
+      </div>
     </div>
     <div class="boost-strip" id="boost-strip"></div>
 
@@ -98,25 +103,18 @@
 
   <!-- 하단 네비게이션 -->
   <nav class="bottom-nav" id="bottom-nav">
-    <button class="tab-btn active" data-tab="store" data-title="매장">
-      <span class="nav-icon">🏗</span><span class="nav-label">매장</span>
+    <!-- 네비는 "무엇을 하는 곳인지"로 4묶음. 묶음 안의 세부 탭은 시트 상단 칩으로 고른다(game.js NAV_GROUPS).
+         리뉴얼은 네비에서 빼고 좌상단 ✨ 배지로만 연다. -->
+    <button class="tab-btn" data-group="upgrade">
+      <span class="nav-icon">🏗</span><span class="nav-label">업그레이드</span>
     </button>
-    <button class="tab-btn" data-tab="tables" data-title="테이블">
-      <span class="nav-icon">🎲</span><span class="nav-label">테이블</span>
+    <button class="tab-btn" data-group="crew">
+      <span class="nav-icon">👥</span><span class="nav-label">운영진</span><span class="dot" id="codex-dot"></span>
     </button>
-    <button class="tab-btn" data-tab="staff" data-title="운영진 &amp; 가챠">
-      <span class="nav-icon">👥</span><span class="nav-label">운영진</span>
+    <button class="tab-btn" data-group="tournament">
+      <span class="nav-icon">🏆</span><span class="nav-label">대회</span><span class="dot" id="tournament-dot"></span>
     </button>
-    <button class="tab-btn" data-tab="codex" data-title="운영진 도감">
-      <span class="nav-icon">📖</span><span class="nav-label">도감</span><span class="dot" id="codex-dot"></span>
-    </button>
-    <button class="tab-btn" data-tab="decor" data-title="인테리어">
-      <span class="nav-icon">🎨</span><span class="nav-label">인테리어</span>
-    </button>
-    <button class="tab-btn" data-tab="prestige" data-title="브랜드 리뉴얼">
-      <span class="nav-icon">✨</span><span class="nav-label">리뉴얼</span>
-    </button>
-    <button class="tab-btn" data-tab="shop" data-title="상점">
+    <button class="tab-btn" data-group="shop">
       <span class="nav-icon">💎</span><span class="nav-label">상점</span>
     </button>
   </nav>
@@ -127,7 +125,9 @@
 <section class="sheet" id="sheet-panel" aria-hidden="true">
   <div class="sheet-handle-row">
     <span class="sheet-grip"></span>
-    <span class="sheet-title" id="sheet-title">매장</span>
+    <span class="sheet-title" id="sheet-title">업그레이드</span>
+    <!-- 세부 탭이 여러 개인 묶음이면 제목 대신 세부 탭 칩이 들어간다 -->
+    <div class="sheet-subtabs" id="sheet-subtabs" role="tablist" hidden></div>
     <button class="sheet-close" id="sheet-close-btn" aria-label="닫기">✕</button>
   </div>
   <!-- 일괄 구매 배수(x1/x10/x100/MAX) — 구매·강화가 있는 탭에서만 보인다 -->
@@ -137,23 +137,8 @@
   </div>
   <div class="sheet-body" id="sheet-body">
 
-    <div class="tab-panel active" id="tab-store">
-      <div class="card-row">
-        <div class="item-card">
-          <div class="item-icon">🏗</div>
-          <div class="item-info">
-            <div class="item-title">매장 확장</div>
-            <div class="item-desc">테이블 슬롯 <b id="store-capacity">6</b>칸 · 확장 시 +4칸</div>
-          </div>
-          <button class="btn btn-buy" id="expand-store-btn">확장<small id="expand-store-cost">300</small></button>
-        </div>
-      </div>
-      <p class="store-visitors" id="store-visitors">👣 시간당 방문객 약 0명</p>
-      <h4 class="sheet-sub">매장 시설 <span class="muted">· 무한 업그레이드</span></h4>
-      <div class="card-row" id="fixture-list"></div>
-    </div>
-
-    <div class="tab-panel" id="tab-tables">
+    <!-- ===== 업그레이드: 테이블 · 시설 · 직원 · 인테리어 (BB, 리뉴얼하면 초기화) · 영구 강화 (💎, 유지) ===== -->
+    <div class="tab-panel active" id="tab-tables">
       <div class="card-row">
         <div class="item-card">
           <div class="item-icon">🃏</div>
@@ -161,7 +146,7 @@
             <div class="item-title">홀덤 테이블 추가</div>
             <div class="item-desc">보유 <b id="table-count">1</b> / <span id="table-capacity">6</span>개 · 개당 <b id="table-per-income">0.5</b>/초</div>
           </div>
-          <button class="btn btn-buy" id="buy-table-btn">구매<small id="buy-table-cost">15</small></button>
+          <button class="btn btn-buy" id="buy-table-btn">구매</button>
         </div>
         <div class="item-card">
           <div class="item-icon">📈</div>
@@ -169,12 +154,37 @@
             <div class="item-title">테이블 리모델링 <span class="lvl-chip" id="table-level-chip">Lv.0</span></div>
             <div class="item-desc">모든 테이블 수익 +10%/레벨 · 상한 없음</div>
           </div>
-          <button class="btn btn-buy" id="upgrade-table-btn">강화<small id="upgrade-table-cost">50</small></button>
+          <button class="btn btn-buy" id="upgrade-table-btn">강화</button>
+        </div>
+        <div class="item-card">
+          <div class="item-icon">🏗</div>
+          <div class="item-info">
+            <div class="item-title">매장 확장</div>
+            <div class="item-desc">테이블 자리 <b id="store-capacity">6</b>칸 · 확장 시 +4칸 (최대 24칸)</div>
+          </div>
+          <button class="btn btn-buy" id="expand-store-btn">확장</button>
         </div>
       </div>
+      <p class="store-visitors" id="store-visitors">👣 시간당 방문객 약 0명</p>
+    </div>
+
+    <div class="tab-panel" id="tab-fixtures">
+      <p class="tab-lead muted">바·냉장고가 초당 수익을 올려줘요 · 무한 업그레이드</p>
+      <div class="card-row" id="fixture-list"></div>
     </div>
 
     <div class="tab-panel" id="tab-staff">
+      <p class="tab-lead muted">직원은 칩으로 고용해요 · 무한 고용</p>
+      <div class="card-row" id="staff-list"></div>
+    </div>
+
+    <div class="tab-panel" id="tab-permanent">
+      <p class="tab-lead muted">💎 다이아로 강화하는 계정 성장 · 리뉴얼해도 사라지지 않아요</p>
+      <div class="card-row" id="permanent-list"></div>
+    </div>
+
+    <!-- ===== 운영진: 스카우트(가챠) · 도감(배치/승급) ===== -->
+    <div class="tab-panel" id="tab-scout">
       <div class="gacha-box">
         <div class="gacha-box-head">
           <div class="item-icon">🎰</div>
@@ -193,14 +203,33 @@
         <div class="rarity-chip-row" id="dealer-breakdown"></div>
         <!-- 1회/10회/30회 — 뽑기권이 충분하면 그 버튼이 무료 뽑기로 바뀐다(game.js renderPullButtons) -->
         <div class="gacha-btn-row gacha-btn-row-3" id="gacha-pull-row"></div>
+        <!-- 연속 뽑기: 고른 묶음을 멈춤 조건에 걸리거나 재화가 떨어질 때까지 반복 -->
+        <div class="auto-pull">
+          <div class="auto-pull-row">
+            <span class="auto-pull-label">🔁 연속 뽑기</span>
+            <select id="auto-pull-size" aria-label="연속 뽑기 묶음">
+              <option value="0">1회씩</option>
+              <option value="1">10회씩</option>
+              <option value="2">30회씩</option>
+            </select>
+            <select id="auto-pull-stop" aria-label="멈춤 조건">
+              <option value="legendary">SSR 나오면 멈춤</option>
+              <option value="epic">SR 이상 나오면 멈춤</option>
+              <option value="new">새 운영진 나오면 멈춤</option>
+              <option value="none">재화 다 쓸 때까지</option>
+            </select>
+          </div>
+          <div class="auto-pull-row">
+            <label class="auto-pull-ticket"><input type="checkbox" id="auto-pull-ticket-only" /> 🎫 뽑기권만 쓰기</label>
+            <button class="btn btn-primary" id="auto-pull-start">🔁 연속 뽑기 시작</button>
+          </div>
+        </div>
         <p class="deploy-summary" id="deploy-summary"></p>
         <div class="gacha-btn-row">
           <button class="btn" id="ad-free-pull-btn">🎬 광고보고 무료뽑기</button>
           <button class="btn" id="ad-upgrade-boost-btn">🎬 광고보고 가속</button>
         </div>
       </div>
-      <h4 class="sheet-sub">직원 고용 <span class="muted">· 무한 고용</span></h4>
-      <div class="card-row" id="staff-list"></div>
     </div>
 
     <div class="tab-panel" id="tab-codex">
@@ -217,6 +246,25 @@
         <span class="codex-deploy-summary" id="codex-deploy-summary"></span>
       </div>
       <div class="codex-grid" id="codex-grid"></div>
+    </div>
+
+    <!-- ===== 대회: 대회 참가 · 트로피 상점 ===== -->
+    <div class="tab-panel" id="tab-tournament">
+      <div class="tourney-hero">
+        <div class="tourney-hero-row">
+          <span class="tourney-stat"><span class="cur-icon cur-icon-trophy sm" aria-hidden="true"></span>트로피 <b id="tourney-trophies">0</b></span>
+          <span class="tourney-stat">⚔️ 대회 전투력 <b id="tourney-power">0</b></span>
+        </div>
+        <div class="tourney-power-detail" id="tourney-power-detail"></div>
+        <div class="tourney-active" id="tourney-active"></div>
+      </div>
+      <h4 class="sheet-sub">대회 목록 <span class="muted">· 상금권에 들면 다음 대회가 열려요</span></h4>
+      <div class="card-row" id="tourney-list"></div>
+    </div>
+
+    <div class="tab-panel" id="tab-trophyShop">
+      <p class="tab-lead muted">🏆 트로피는 대회에서 모으고, 리뉴얼해도 사라지지 않아요 · 보유 <b id="trophy-shop-balance">0</b></p>
+      <div class="card-row" id="trophy-shop-list"></div>
     </div>
 
     <div class="tab-panel" id="tab-decor">
@@ -237,12 +285,13 @@
           <div><span class="muted">배율</span><b><span id="prestige-current-mult">x1.00</span> → <span id="prestige-next-mult">x1.00</span></b></div>
           <div><span class="muted">다이아</span><b>💎<span id="prestige-diamond-reward">0</span></b></div>
         </div>
-        <p class="muted">💎 다이아 · 운영진 도감 · 인테리어 테마는 유지됩니다.</p>
+        <p class="muted">💎 다이아 · 🏆 트로피 · 운영진 도감 · 인테리어 테마 · 영구 강화는 유지됩니다.</p>
         <button class="btn btn-primary btn-wide" id="prestige-btn" disabled>브랜드 리뉴얼 하기</button>
       </div>
     </div>
 
     <div class="tab-panel" id="tab-shop">
+      <p class="tab-lead muted">결제 상품 · 영구 강화는 업그레이드 → 💎 영구 강화에 있어요</p>
       <div class="card-row" id="shop-list"></div>
       <p class="muted shop-disclaimer">결제는 PortOne(아임포트)으로 처리돼요. 문의는 설정 &gt; 계정에서 남겨주세요.</p>
     </div>
@@ -290,8 +339,13 @@
 <div id="gacha-modal" class="modal hidden">
   <div class="modal-box gacha-result-box" id="gacha-result-box">
     <h2 class="gacha-head" id="gacha-head">운영진 영입!</h2>
+    <div class="gacha-auto-summary" id="gacha-auto-summary" hidden></div>
     <div class="gacha-results" id="gacha-results"></div>
-    <button id="gacha-close" class="btn btn-primary btn-wide">확인</button>
+    <div class="gacha-modal-actions">
+      <!-- 한 번 뽑기 결과: "한 번 더" / 연속 뽑기 중: "멈추기" -->
+      <button id="gacha-again" class="btn btn-buy">한 번 더</button>
+      <button id="gacha-close" class="btn btn-primary">확인</button>
+    </div>
   </div>
 </div>
 

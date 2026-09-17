@@ -35,15 +35,6 @@ const GAME_DATA = {
       costGrowth: 1.3,
       incomePerLevel: 0.7,
     },
-    {
-      id: "vault",
-      name: "다이아 금고",
-      emoji: "🗄️",
-      desc: "다이아 적립 속도 증가",
-      baseCost: 400,
-      costGrowth: 1.32,
-      diamondChancePerLevel: 0.006,
-    },
   ],
 
   table: {
@@ -95,6 +86,11 @@ const GAME_DATA = {
     visitorsPerTable: 8,
     incomePerVisitorLog: 0.5, // 방문객이 늘수록 매출도 늘지만 로그형으로 완만하게 체감
     visitorDivisor: 40,
+    // 3D 매장에서 홀덤 테이블 좌석이 차는 비율 = 테이블당 시간당 방문객 / visitorsPerFullTable (min~max로 제한)
+    // → 마케터·운영진 방문객 효과로 방문객이 늘수록 테이블이 꽉 찬다
+    visitorsPerFullTable: 16,
+    minOccupancy: 0.35,
+    maxOccupancy: 0.95,
   },
 
   // ---------- 운영진 가챠 ----------
@@ -113,6 +109,8 @@ const GAME_DATA = {
       { count: 30, costDiamonds: 2040, label: "30회 뽑기" }, // 약 15% 할인
     ],
     multiGuarantee: "rare", // 10장마다 희귀 이상 1장 확정(10회=1장, 30회=3장)
+    // 연속 뽑기: 고른 묶음(1/10/30회)을 멈춤 조건에 걸리거나 재화가 떨어질 때까지 반복
+    autoPull: { intervalMs: 700, singleIntervalMs: 380 },
     pullsPerLevel: 20, // 누적 20회 뽑을 때마다 가챠 레벨 +1
     maxLevel: 10,
     rarities: [
@@ -226,6 +224,7 @@ const GAME_DATA = {
   // 장착효과 종류는 역할(role)로 정해지고, 보유효과 종류는 운영진 id로 6종 중 하나가 고정으로 정해진다.
   // 종류별 배율은 "수익으로 환산했을 때 대략 비슷한 가치"가 되도록 맞췄다(방문객은 로그형이라 약하게 먹히므로 크게 등).
   dealerEffects: {
+    // diamond = 테이블 손님이 💎 말풍선을 띄우는 빈도 (다이아 금고 삭제 후 다이아는 말풍선 터치로 모은다)
     equipByRole: { 영업: "income", 서비스: "fixture", 이벤트: "diamond", 인맥: "visitor" },
     ownedTypes: ["income", "fixture", "diamond", "visitor", "offline", "gift"],
     ownedScale: 0.15, // 보유효과는 장착효과의 15% 크기
@@ -233,7 +232,7 @@ const GAME_DATA = {
     labels: {
       income: "전체 수익",
       fixture: "바·시설 수익",
-      diamond: "다이아 적립",
+      diamond: "다이아 말풍선",
       visitor: "방문객",
       offline: "오프라인 효율",
       gift: "선물 보상",
@@ -279,9 +278,20 @@ const GAME_DATA = {
   },
 
   diamond: {
-    baseRatePerTableSecond: 0.0018, // 테이블 1개당 초당 다이아
-    vaultBonusPerLevel: 0.35, // 금고 레벨당 다이아 적립 배율 +35%
     prestigeReward: 5, // 프레스티지 포인트 1당 지급 다이아
+  },
+
+  // ---------- 💎 다이아 말풍선 ----------
+  // 시간이 지나면 저절로 쌓이던 다이아(테이블 수 × 다이아 금고)는 수급이 너무 쉬워서 없앴다.
+  // 대신 테이블에 앉은 손님이 가끔 💎 말풍선을 띄우고, 터치해야 받는다(오프라인 중에는 안 쌓임).
+  // 간격은 운영진 "다이아 말풍선" 효과만큼 짧아진다.
+  diamondBubble: {
+    minIntervalMs: 25 * 1000,
+    maxIntervalMs: 55 * 1000,
+    tutorialIntervalMs: 6 * 1000, // 지금 할 미션이 "말풍선 터치"면 금방 띄워준다
+    lifeSec: 12,
+    diamondsMin: 1,
+    diamondsMax: 2,
   },
 
   // 장식품 — 사고 끝이 아니라 무한 레벨업 (레벨당 수익 보너스가 누적된다)
@@ -339,6 +349,8 @@ const GAME_DATA = {
       { id: "gacha", name: "운영진 스카우트", desc: "운영진 가챠 {n}회", targets: [1, 2, 3], reward: { chipSeconds: 360, diamonds: 10 } },
       { id: "boost", name: "영업 스퍼트", desc: "부스트 {n}회 사용", targets: [1, 2, 3], reward: { chipSeconds: 320, diamonds: 6 } },
       { id: "expand", name: "매장 확장", desc: "매장 {n}회 확장", targets: [1, 1, 2], reward: { chipSeconds: 400, diamonds: 12 } },
+      { id: "tournament", name: "대회 출전", desc: "홀덤 대회 {n}회 참가", targets: [1, 2, 3], reward: { chipSeconds: 300, diamonds: 8 } },
+      { id: "diamondBubble", name: "단골 챙기기", desc: "💎 말풍선 {n}개 터치", targets: [2, 3, 5], reward: { chipSeconds: 240, diamonds: 5 } },
     ],
     allClearReward: { chipSeconds: 900, diamonds: 25 },
   },
@@ -349,6 +361,9 @@ const GAME_DATA = {
   // goal.kind:
   //   "state" - 현재 상태값이 target 이상이면 달성 (진행도가 사라지지 않는다)
   //   "count" - 해당 행동을 target번 하면 달성 (일회성 행동용)
+  // 튜토리얼 중간에 단계를 끼워 넣으면 이 값을 올리고 game.js mergeWithDefaults()에서 진행 단계를 밀어준다
+  //  2: t14 뒤에 t14b(첫 대회 출전) 추가
+  tutorialVersion: 2,
   tutorial: [
     { id: "t1", title: "두 번째 테이블", desc: "홀덤 테이블을 하나 더 놓아보세요", hint: "3D 화면의 빈 자리를 직접 탭해도 돼요", goal: { kind: "state", stat: "tables", target: 2 }, reward: { chipSeconds: 120, diamonds: 5 } },
     { id: "t2", title: "테이블 리모델링", desc: "테이블을 1회 강화하세요", hint: "테이블 탭에서 강화할 수 있어요", goal: { kind: "state", stat: "tableLevel", target: 1 }, reward: { chipSeconds: 150, diamonds: 5 } },
@@ -359,11 +374,12 @@ const GAME_DATA = {
     { id: "t7", title: "매장 확장", desc: "매장을 1회 확장하세요", hint: "테이블 슬롯이 4칸 늘어나요", goal: { kind: "state", stat: "store.expansions", target: 1 }, reward: { chipSeconds: 300, diamonds: 12 } },
     { id: "t8", title: "재고 확보", desc: "냉장고를 설치하세요", goal: { kind: "state", stat: "fixtures.fridge", target: 1 }, reward: { chipSeconds: 320, diamonds: 12 } },
     { id: "t9", title: "영업 스퍼트", desc: "⚡ 부스트를 1회 사용하세요", hint: "응원 부스트는 무료예요", goal: { kind: "count", action: "boost", target: 1 }, reward: { chipSeconds: 340, diamonds: 15 } },
-    { id: "t10", title: "다이아 금고", desc: "다이아 금고를 설치하세요", hint: "다이아 적립 속도가 빨라져요", goal: { kind: "state", stat: "fixtures.vault", target: 1 }, reward: { chipSeconds: 360, diamonds: 20 } },
+    { id: "t10", title: "다이아 말풍선", desc: "테이블 손님의 💎 말풍선을 터치하세요", hint: "손님이 가끔 말풍선을 띄워요", goal: { kind: "count", action: "diamondBubble", target: 1 }, reward: { chipSeconds: 360, diamonds: 20 } },
     { id: "t11", title: "첫 운영진 스카우트", desc: "운영진 가챠를 1회 뽑으세요", hint: "운영진 탭 → 운영진 스카우트", goal: { kind: "count", action: "gacha", target: 1 }, reward: { chipSeconds: 400, diamonds: 15 } },
     { id: "t12", title: "출석 체크", desc: "📅 출석 보상을 받으세요", goal: { kind: "count", action: "attendance", target: 1 }, reward: { chipSeconds: 420, diamonds: 15 } },
     { id: "t13", title: "분위기 잡기", desc: "장식품을 1개 설치하세요", hint: "인테리어 탭 → 장식품", goal: { kind: "state", stat: "decorTotal", target: 1 }, reward: { chipSeconds: 450, diamonds: 15 } },
-    { id: "t14", title: "운영진 배치", desc: "운영진을 1명 이상 배치하세요", hint: "도감 탭 → 배치 또는 빠른 배치", goal: { kind: "state", stat: "deployedCount", target: 1 }, reward: { chipSeconds: 500, diamonds: 18 } },
+    { id: "t14", title: "운영진 배치", desc: "운영진을 1명 이상 배치하세요", hint: "운영진 → 도감에서 배치 또는 빠른 배치", goal: { kind: "state", stat: "deployedCount", target: 1 }, reward: { chipSeconds: 500, diamonds: 18 } },
+    { id: "t14b", title: "첫 대회 출전", desc: "🏆 홀덤 대회에 1회 참가하세요", hint: "배치한 운영진이 강할수록 순위가 올라요", goal: { kind: "count", action: "tournament", target: 1 }, reward: { chipSeconds: 520, diamonds: 20 } },
     { id: "t15", title: "운영진 도감", desc: "운영진을 3명 모으세요", hint: "📖 도감 탭에서 확인해요", goal: { kind: "state", stat: "dealerCount", target: 3 }, reward: { chipSeconds: 560, diamonds: 25 } },
     { id: "t16", title: "본격 리모델링", desc: "테이블 리모델링 Lv.10 달성", hint: "x10 일괄 강화를 써보세요", goal: { kind: "state", stat: "tableLevel", target: 10 }, reward: { chipSeconds: 640, diamonds: 25 } },
     { id: "t17", title: "에이스 운영진", desc: "운영진 1명을 ★2로 승급하세요", hint: "중복으로 뽑은 조각으로 승급해요", goal: { kind: "state", stat: "maxStar", target: 2 }, reward: { chipSeconds: 720, diamonds: 30 } },
@@ -379,16 +395,20 @@ const GAME_DATA = {
   // 목표치는 회차마다 커지지만 항목별 상한(max)이 있다. 매장 확장은 비용이 1.6배씩, 선물·부스트는
   // 쿨타임이 있어서 상한 없이 키우면 후반에 사실상 깰 수 없는 퀘스트가 된다.
   repeatQuests: {
+    // 2026-09-18 난이도 하향: 시작값·증가율·상한을 전부 낮춤 (예전엔 리모델링 25회·매출 600초치까지 커졌음).
+    // 상한이 낮아지기 전에 받아둔 퀘스트도 game.js repeatState()에서 새 상한으로 줄여준다.
     pool: [
-      { id: "buyTable", title: "테이블 증설", desc: "홀덤 테이블 {n}개 구매", base: 2, growth: 1.2, max: 4 },
-      { id: "upgradeTable", title: "리모델링", desc: "테이블 {n}회 강화", base: 6, growth: 1.26, max: 25 },
-      { id: "upgradeFixture", title: "시설 정비", desc: "매장 시설 {n}회 업그레이드", base: 5, growth: 1.24, max: 20 },
-      { id: "hireStaff", title: "직원 충원", desc: "직원 {n}명 고용", base: 4, growth: 1.22, max: 15 },
-      { id: "upgradeDecor", title: "인테리어 손질", desc: "장식품 {n}회 강화", base: 4, growth: 1.23, max: 15 },
-      { id: "gacha", title: "운영진 스카우트", desc: "운영진 가챠 {n}회", base: 1, growth: 1.12, max: 5 },
-      { id: "boost", title: "영업 스퍼트", desc: "부스트 {n}회 사용", base: 1, growth: 1.1, max: 2 },
+      { id: "buyTable", title: "테이블 증설", desc: "홀덤 테이블 {n}개 구매", base: 1, growth: 1.1, max: 2 },
+      { id: "upgradeTable", title: "리모델링", desc: "테이블 {n}회 강화", base: 3, growth: 1.12, max: 10 },
+      { id: "upgradeFixture", title: "시설 정비", desc: "매장 시설 {n}회 업그레이드", base: 2, growth: 1.12, max: 8 },
+      { id: "hireStaff", title: "직원 충원", desc: "직원 {n}명 고용", base: 2, growth: 1.12, max: 6 },
+      { id: "upgradeDecor", title: "인테리어 손질", desc: "장식품 {n}회 강화", base: 2, growth: 1.12, max: 6 },
+      { id: "gacha", title: "운영진 스카우트", desc: "운영진 가챠 {n}회", base: 1, growth: 1.05, max: 3 },
+      { id: "boost", title: "영업 스퍼트", desc: "부스트 {n}회 사용", base: 1, growth: 1, max: 1 },
+      { id: "tournament", title: "대회 출전", desc: "홀덤 대회 {n}회 참가", base: 1, growth: 1.05, max: 2 },
+      { id: "diamondBubble", title: "단골 챙기기", desc: "💎 말풍선 {n}개 터치", base: 1, growth: 1.05, max: 2 },
       // 그냥 가만히 둬도 달성되는 퀘스트 — 방치형답게 하나는 섞어둔다
-      { id: "earn", title: "매출 올리기", desc: "{n} BB 벌기", incomeSeconds: 150, growth: 1.07, maxSeconds: 600 },
+      { id: "earn", title: "매출 올리기", desc: "{n} BB 벌기", incomeSeconds: 60, growth: 1.04, maxSeconds: 240 },
     ],
     reward: {
       chipSecondsBase: 200,
@@ -445,6 +465,50 @@ const GAME_DATA = {
     },
   },
 
+  // ---------- 🏆 홀덤펍 대회 (새 재화: 트로피) ----------
+  // 우리 펍 대표로 대회에 나간다. 참가비는 BB, 순위는 "대회 전투력"(배치한 운영진 + 매장)과 운으로 정해진다.
+  // 한 번에 하나만 참가할 수 있고 실제 시간이 흘러야 끝난다(앱을 꺼도 진행). 탈락하면 그 시점에 바로 끝난다.
+  // 이전 등급 대회에서 상금권에 들면 다음 등급 대회가 열린다.
+  tournament: {
+    rarityPower: { common: 10, uncommon: 14, rare: 20, epic: 40, legendary: 80, mythic: 140 }, // ★1 기준, 별마다 dealerStar.bonusPerStar만큼 커짐
+    tablePower: 2, // 테이블 1개당 전투력
+    tableLevelPower: 1, // 리모델링 1레벨당 전투력
+    buyInSecondsPerMin: 30, // 참가비 = 부스트 뺀 초당 수익 × 대회 시간(분) × 30초 → 2분 대회면 1분치 수익
+    minBuyIn: 50,
+    itmFraction: 0.15, // 상위 15%(최소 9명)까지 상금권
+    fieldCurve: 1.6, // 남은 인원이 줄어드는 곡선 (클수록 초반에 많이 탈락)
+    // 추천 전투력의 3배를 넘으면 보상이 줄어든다 — 쉬운 대회만 반복해서 트로피를 쓸어 담지 못하게
+    overpowerRatio: 3,
+    minRewardMult: 0.1,
+    tiers: [
+      { id: "local", name: "동네 홀덤 대회", emoji: "🏘️", field: 30, durationMin: 2, recommended: 40, trophies: 2, diamonds: 2 },
+      { id: "city", name: "시티 오픈", emoji: "🏙️", field: 80, durationMin: 5, recommended: 150, trophies: 5, diamonds: 5 },
+      { id: "national", name: "코리아 챔피언십", emoji: "🎖️", field: 200, durationMin: 10, recommended: 500, trophies: 12, diamonds: 10 },
+      { id: "asia", name: "아시아 포커 투어", emoji: "🌏", field: 500, durationMin: 20, recommended: 1500, trophies: 30, diamonds: 20 },
+      { id: "world", name: "월드 그랜드 파이널", emoji: "🌍", field: 1000, durationMin: 40, recommended: 4000, trophies: 75, diamonds: 40 },
+    ],
+    // 순위 구간별 보상 배율 — 위에서부터 처음 맞는 구간을 쓴다. maxPlace "itm" = 상금권 인원
+    payouts: [
+      { id: "win", label: "🥇 우승", maxPlace: 1, trophyMult: 5, bbMult: 3, diamondMult: 1 },
+      { id: "podium", label: "🏅 톱3", maxPlace: 3, trophyMult: 3, bbMult: 2, diamondMult: 0.5 },
+      { id: "final", label: "🎖️ 파이널 테이블", maxPlace: 9, trophyMult: 2, bbMult: 1.5, diamondMult: 0 },
+      { id: "itm", label: "💵 상금권", maxPlace: "itm", trophyMult: 1.5, bbMult: 1.1, diamondMult: 0 },
+      { id: "bust", label: "💥 탈락", maxPlace: Infinity, trophyMult: 0.5, bbMult: 0, diamondMult: 0 },
+    ],
+  },
+
+  // ---------- 🏆 트로피 사용처 (계정 단위라 리뉴얼해도 유지) ----------
+  trophyShop: {
+    upgrades: [
+      { id: "offlineHours", name: "영업시간 연장", emoji: "🌙", desc: "오프라인 수익을 받는 최대 시간 +30분", baseCost: 10, costGrowth: 1.25, secondsPerLevel: 30 * 60, maxLevel: 20 },
+      { id: "training", name: "대회 훈련", emoji: "🎯", desc: "대회 전투력 +8%", baseCost: 15, costGrowth: 1.3, bonusPerLevel: 0.08 },
+      { id: "hallOfFame", name: "명예의 전당", emoji: "🏛️", desc: "전체 수익 +4% (리뉴얼해도 유지)", baseCost: 25, costGrowth: 1.3, bonusPerLevel: 0.04 },
+    ],
+    ticket: { cost: 25, dailyLimit: 5 }, // 무료 뽑기권 교환 (하루 5장)
+    // 운영진 상세 창에서 원하는 운영진의 승급 조각을 트로피로 산다
+    shardCost: { common: 3, uncommon: 4, rare: 6, epic: 10, legendary: 20, mythic: 35 },
+  },
+
   // ---------- 조작 편의 ----------
   buyQuantities: [1, 10, 100, "MAX"],
 
@@ -471,7 +535,7 @@ const GAME_DATA = {
   offline: {
     baseEfficiency: 0.5, // 기본 오프라인 수익 효율 50%
     maxEfficiency: 1.0,
-    maxSeconds: 8 * 60 * 60, // 최대 8시간까지 오프라인 수익 인정
+    baseMaxSeconds: 2 * 60 * 60, // 처음엔 최대 2시간까지만 인정 — 🏆 트로피 상점 "영업시간 연장"으로 늘린다
   },
   tick: {
     intervalMs: 200,

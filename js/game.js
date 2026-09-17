@@ -49,6 +49,13 @@
     gachaPulls: keep.gachaPulls ?? 0,
     gachaTickets: keep.gachaTickets ?? 0,
 
+    // 🏆 대회 — 트로피와 트로피 강화, 대회 기록은 계정 단위로 유지
+    trophies: keep.trophies ?? 0,
+    trophyUpgrades: keep.trophyUpgrades ?? Object.fromEntries(D.trophyShop.upgrades.map((u) => [u.id, 0])),
+    trophyDaily: keep.trophyDaily ?? { date: null, tickets: 0 },
+    // active: 참가 중인 대회 1개 (순위는 참가 순간 정해지고, 시간이 흐르면서 공개된다) / best: 대회별 최고 순위
+    tournament: keep.tournament ?? { active: null, best: {}, entries: 0, wins: 0 },
+
     // 닉네임 — 기본값은 로그인 아이디, 프로필에서 자유롭게 변경 가능
     nickname: keep.nickname ?? null,
     // 프로필 레벨업 보상을 이미 지급한 최고 레벨(중복 지급 방지). 프레스티지해도 유지.
@@ -62,7 +69,8 @@
     prestige: keep.prestige ?? { points: 0 },
 
     settings: { showTableIncome: true, autoAssign: true },
-    ui: { buyQty: 1, codexFilter: "all" },
+    // lastSub: 네비 묶음별로 마지막에 본 세부 탭 / autoPull: 연속 뽑기 설정(묶음 크기 index, 멈춤 조건, 뽑기권만)
+    ui: { buyQty: 1, codexFilter: "all", lastSub: {}, autoPull: { sizeIdx: 1, stop: "legendary", ticketOnly: false } },
 
     // 영구 업그레이드 레벨 — 리뉴얼해도 절대 초기화되지 않는다(다이아 전용)
     permanentUpgrades: keep.permanentUpgrades ?? Object.fromEntries(D.permanentUpgrades.map((p) => [p.id, 0])),
@@ -87,7 +95,7 @@
     attendance: keep.attendance ?? { lastDate: null, cycleDay: 0 },
     missions: { date: null, list: [], allClaimed: false },
     // 성장 미션(튜토리얼)과 반복 퀘스트는 프레스티지를 해도 이어진다
-    tutorial: keep.tutorial ?? { step: 0, counts: {} },
+    tutorial: keep.tutorial ?? { step: 0, counts: {}, v: D.tutorialVersion },
     repeat: keep.repeat ?? { round: 0, quest: null },
     boosts: keep.boosts ?? { freeReadyAt: 0, active: {}, goldenNextAt: Date.now() + 8 * 60 * 1000 },
   });
@@ -95,16 +103,31 @@
   let state = defaultState();
   let lastTickAt = Date.now();
   let sceneDirty = true;
-  let activeTab = "store";
+  let activeTab = "tables";
   let sheetOpen = false;
   let lastLiveRenderAt = 0;
   // 도감을 연 순간의 NEW 목록. 탭을 여는 즉시 알림 점은 끄되, 배지는 보는 동안 유지한다.
   let codexNewSnapshot = [];
+  // 💎 말풍선 타이머(세이브 안 함 — 접속 중에만 뜬다)
+  let nextBubbleAt = Date.now() + 15000;
+  let lastBubbleAt = Date.now();
+  let bubbleRetryAt = 0;
 
-  // 칩 보유량에 따라 버튼 활성/비활성이 바뀌는 탭만 주기적으로 다시 그린다.
-  const LIVE_TABS = new Set(["store", "tables", "staff", "decor", "prestige"]);
+  // 하단 네비 4묶음 — 업그레이드가 여러 탭에 흩어져 있던 걸 "무엇을 하는 곳인지" 기준으로 묶었다.
+  // 묶음 안의 세부 탭은 시트 상단 칩으로 고른다. [탭 id, 이름] — 휴대폰 폭에 5개가 한 줄로 들어가게 글자만 쓴다
+  const NAV_GROUPS = {
+    upgrade: { title: "업그레이드", tabs: [["tables", "테이블"], ["fixtures", "시설"], ["staff", "직원"], ["decor", "인테리어"], ["permanent", "💎영구"]] },
+    crew: { title: "운영진", tabs: [["scout", "스카우트"], ["codex", "도감"]] },
+    tournament: { title: "홀덤 대회", tabs: [["tournament", "🏆 대회"], ["trophyShop", "트로피 상점"]] },
+    shop: { title: "상점", tabs: [["shop", "상점"]] },
+  };
+  // 네비에 없는 탭(좌상단 버튼으로 연다)
+  const STANDALONE_TITLES = { prestige: "브랜드 리뉴얼", settings: "설정" };
+
+  // 재화·시간에 따라 버튼 활성/비활성이나 진행 표시가 바뀌는 탭만 주기적으로 다시 그린다.
+  const LIVE_TABS = new Set(["tables", "fixtures", "staff", "decor", "permanent", "scout", "tournament", "trophyShop", "prestige"]);
   // x1/x10/x100/MAX 배수 선택이 의미 있는(칩으로 구매·강화하는) 탭 — 시트 안 배수 줄은 이 탭들에서만 보인다
-  const QTY_TABS = new Set(["store", "tables", "staff", "decor"]);
+  const QTY_TABS = new Set(["tables", "fixtures", "staff", "decor"]);
   const LIVE_RENDER_MS = 500;
 
   // 저장된 데이터에 새 필드가 없어도 기본값으로 채우고, 옛 세이브 형식을 마이그레이션한다.
@@ -117,6 +140,15 @@
     s.staff = { ...base.staff, ...saved.staff };
     s.settings = { ...base.settings, ...saved.settings };
     s.ui = { ...base.ui, ...saved.ui };
+    s.ui.lastSub = { ...(saved.ui?.lastSub || {}) };
+    s.ui.autoPull = { ...base.ui.autoPull, ...(saved.ui?.autoPull || {}) };
+    s.trophies = saved.trophies ?? 0;
+    s.trophyUpgrades = { ...base.trophyUpgrades, ...saved.trophyUpgrades };
+    s.trophyDaily = { ...base.trophyDaily, ...saved.trophyDaily };
+    s.tournament = { ...base.tournament, ...saved.tournament };
+    s.tournament.best = { ...(saved.tournament?.best || {}) };
+    // 다이아 금고 삭제(2026-09-18) — 예전 세이브의 금고 레벨은 버린다
+    delete s.fixtures.vault;
     s.prestige = { ...base.prestige, ...saved.prestige };
     s.attendance = { ...base.attendance, ...saved.attendance };
     s.boosts = { ...base.boosts, ...saved.boosts };
@@ -135,6 +167,10 @@
     s.missions = { ...base.missions, ...saved.missions };
     s.tutorial = { ...base.tutorial, ...saved.tutorial };
     s.tutorial.counts = s.tutorial.counts || {};
+    // 튜토리얼 v2에서 t14 뒤(index 14)에 "첫 대회 출전"이 끼어들었다 — 이미 그 뒤로 넘어간 세이브는 한 칸 밀어서
+    // 같은 미션을 다시 받거나 보상을 두 번 받지 않게 한다
+    if ((saved.tutorial?.v ?? 1) < 2 && s.tutorial.step >= 14) s.tutorial.step += 1;
+    s.tutorial.v = D.tutorialVersion;
     s.repeat = { ...base.repeat, ...saved.repeat };
     s.themeLevels = { ...base.themeLevels, ...saved.themeLevels };
     s.ownedThemes = Array.isArray(saved.ownedThemes) ? saved.ownedThemes : base.ownedThemes;
@@ -343,6 +379,7 @@
     });
     mult += D.themeUpgrade.bonusPerLevel * themeLevel();
     mult += permanentBonus("incomeCore");
+    mult += trophyBonus("hallOfFame");
     if (vipActive()) mult *= 1 + D.shop.vip.incomeBonusPct / 100;
     mult *= customerFlowMultiplier();
     mult *= prestigeMultiplier();
@@ -351,6 +388,13 @@
   }
 
   const vipActive = () => state.purchases.vipUntil > Date.now();
+
+  // 3D 매장에서 홀덤 테이블 좌석이 차는 비율 — 테이블당 방문객이 많을수록(마케터·운영진 방문객 효과) 꽉 찬다
+  function tableOccupancy() {
+    const c = D.customerFlow;
+    const perTable = visitorsPerHour() / Math.max(1, state.tables);
+    return Math.max(c.minOccupancy, Math.min(c.maxOccupancy, perTable / c.visitorsPerFullTable));
+  }
 
   // ---------- 방문객(마케터가 늘리는 값) ----------
   // 마케터는 더 이상 매출에 고정 %를 더하지 않고, "시간당 방문객 수"를 늘린다.
@@ -390,7 +434,6 @@
     state.diamonds -= cost;
     state.permanentUpgrades[id] = permanentLevel(id) + 1;
     burst(0xffd24a);
-    renderShopTab();
     refresh();
   }
 
@@ -406,16 +449,22 @@
     D.table.baseIncome * (1 + state.tableLevel * D.tableUpgrade.bonusPerLevel) * incomeMultiplier();
   const incomePerSecond = () => state.tables * perTableIncome() + fixtureIncome() * incomeMultiplier();
 
-  const diamondPerSecond = () => {
-    const vaultLevel = state.fixtures.vault || 0;
-    return (
-      D.diamond.baseRatePerTableSecond *
-      state.tables *
-      (1 + vaultLevel * D.diamond.vaultBonusPerLevel) *
-      (1 + dealerEffectTotal("diamond")) *
-      prestigeMultiplier()
-    );
+  // ---------- 🏆 트로피 강화 ----------
+  const trophyUpgradeDef = (id) => D.trophyShop.upgrades.find((u) => u.id === id);
+  const trophyLevel = (id) => state.trophyUpgrades[id] || 0;
+  const trophyMaxed = (id) => {
+    const def = trophyUpgradeDef(id);
+    return def.maxLevel != null && trophyLevel(id) >= def.maxLevel;
   };
+  const trophyUpgradeCost = (id) => {
+    const def = trophyUpgradeDef(id);
+    return Math.ceil(def.baseCost * Math.pow(def.costGrowth, trophyLevel(id)));
+  };
+  const trophyBonus = (id, level = trophyLevel(id)) => (trophyUpgradeDef(id).bonusPerLevel || 0) * level;
+
+  // 오프라인 수익을 인정하는 최대 시간 — 처음엔 2시간, "영업시간 연장"으로 늘린다
+  const offlineMaxSeconds = (level = trophyLevel("offlineHours")) =>
+    D.offline.baseMaxSeconds + level * trophyUpgradeDef("offlineHours").secondsPerLevel;
 
   function offlineEfficiency() {
     let eff = D.offline.baseEfficiency;
@@ -501,6 +550,20 @@
     const m = Math.floor(s / 60);
     if (m < 60) return `${m}분 ${s % 60}초`;
     return `${Math.floor(m / 60)}시간 ${m % 60}분`;
+  }
+  // 남은 시간 "4:59" / "1:02:03" — 글자 수가 거의 안 바뀌어서 HUD 알약·타이머 폭이 흔들리지 않는다
+  function formatClock(ms) {
+    const s = Math.max(0, Math.ceil(ms / 1000));
+    const h = Math.floor(s / 3600);
+    const mm = String(Math.floor((s % 3600) / 60)).padStart(h ? 2 : 1, "0");
+    const ss = String(s % 60).padStart(2, "0");
+    return h ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
+  }
+  // 오프라인 한도 표시용 "2시간" / "2시간 30분"
+  function formatHours(sec) {
+    const h = Math.floor(sec / 3600);
+    const m = Math.round((sec % 3600) / 60);
+    return m ? `${h}시간 ${m}분` : `${h}시간`;
   }
 
   // ============================================================
@@ -637,7 +700,6 @@
       case "store.expansions": return state.store.expansions;
       case "fixtures.bar": return state.fixtures.bar || 0;
       case "fixtures.fridge": return state.fixtures.fridge || 0;
-      case "fixtures.vault": return state.fixtures.vault || 0;
       case "staff.bartender": return state.staff.bartender || 0;
       case "staff.server": return state.staff.server || 0;
       case "staff.marketer": return state.staff.marketer || 0;
@@ -734,6 +796,12 @@
     if (!q0 || !repeatDef(q0.id) || stuck) rollRepeatQuest();
     const q = state.repeat.quest;
     const def = repeatDef(q.id);
+    // 난이도 하향 전에 받아둔 퀘스트도 지금 상한까지만 요구한다
+    if (def.max && q.target > def.max) q.target = def.max;
+    if (q.id === "earn" && def.maxSeconds) {
+      const cap = Math.max(200, Math.ceil((incomePerSecond() / boostMultiplier()) * def.maxSeconds));
+      if (q.target > cap) q.target = cap;
+    }
     // "매출 올리기"는 별도 카운터 없이 누적 수익 차이로 판정한다
     const raw = q.id === "earn" ? earnProgress(q) : q.progress;
     return {
@@ -857,6 +925,198 @@
     toast(`🌟 특별 방문 보상! 💰${formatChips(got.chips)} 💎${got.dia}`);
     $("celebrity-modal").classList.add("hidden");
     burst(0xffd24a);
+    refresh();
+  }
+
+  // ============================================================
+  // 💎 다이아 말풍선 — 테이블 손님이 가끔 띄우고, 터치하면 다이아 (다이아 금고 대체)
+  // ============================================================
+  const bubbleTutorialActive = () => {
+    const t = tutorialState();
+    return Boolean(t && !t.done && t.def.goal.action === "diamondBubble");
+  };
+  function scheduleNextBubble(now) {
+    const b = D.diamondBubble;
+    const base = b.minIntervalMs + Math.random() * (b.maxIntervalMs - b.minIntervalMs);
+    nextBubbleAt = now + base / (1 + dealerEffectTotal("diamond"));
+  }
+  function tickDiamondBubble() {
+    if (!window.PubScene3D || !window.PubScene3D.spawnDiamondBubble || document.hidden) return;
+    const now = Date.now();
+    if (now < bubbleRetryAt) return;
+    const due = now >= nextBubbleAt || (bubbleTutorialActive() && now >= lastBubbleAt + D.diamondBubble.tutorialIntervalMs);
+    if (!due) return;
+    if (window.PubScene3D.spawnDiamondBubble(D.diamondBubble.lifeSec)) {
+      lastBubbleAt = now;
+      scheduleNextBubble(now);
+    } else {
+      bubbleRetryAt = now + 3000; // 앉은 손님이 없거나 말풍선이 이미 많으면 잠시 뒤 다시 시도
+    }
+  }
+  // 3D 씬이 말풍선 터치를 감지하면 부른다 → 지급한 다이아 수를 돌려주면 씬이 "+💎n"을 띄운다
+  function collectDiamondBubble() {
+    const b = D.diamondBubble;
+    const amount = b.diamondsMin + Math.floor(Math.random() * (b.diamondsMax - b.diamondsMin + 1));
+    addDiamonds(amount);
+    trackMission("diamondBubble");
+    refresh();
+    return amount;
+  }
+
+  // ============================================================
+  // 🏆 홀덤펍 대회 — 새 재화 트로피
+  // ============================================================
+  const T = D.tournament;
+  const tierDef = (id) => T.tiers.find((t) => t.id === id);
+  const itmPlaces = (tier) => Math.max(9, Math.ceil(tier.field * T.itmFraction));
+  // 이전 등급 대회에서 상금권에 든 적이 있으면 열린다
+  const tierUnlocked = (i) => i === 0 || (state.tournament.best[T.tiers[i - 1].id] ?? Infinity) <= itmPlaces(T.tiers[i - 1]);
+
+  // 대회 전투력 = (배치한 운영진 등급·별 × 배치 시너지 + 테이블·리모델링) × 대회 훈련
+  function tournamentPowerParts() {
+    let crew = 0;
+    deployedIds().forEach((id) => {
+      const def = rosterDef(id);
+      crew += (T.rarityPower[def.rarity] || T.rarityPower.common) * (1 + (state.dealers[id].star - 1) * D.dealerStar.bonusPerStar);
+    });
+    crew *= deploymentSynergyMultiplier();
+    const pub = state.tables * T.tablePower + state.tableLevel * T.tableLevelPower;
+    const training = 1 + trophyBonus("training");
+    return { crew: Math.round(crew), pub, training, total: Math.round((crew + pub) * training) };
+  }
+  const tournamentPower = () => tournamentPowerParts().total;
+  const tournamentBuyIn = (tier) =>
+    Math.max(T.minBuyIn, Math.ceil((incomePerSecond() / boostMultiplier()) * tier.durationMin * T.buyInSecondsPerMin));
+  // 추천 전투력보다 한참 세면 보상을 줄인다(쉬운 대회 반복 파밍 방지)
+  const overpowerMult = (ratio) => (ratio > T.overpowerRatio ? Math.max(T.minRewardMult, T.overpowerRatio / ratio) : 1);
+  const payoutFor = (tier, place) => T.payouts.find((p) => place <= (p.maxPlace === "itm" ? itmPlaces(tier) : p.maxPlace));
+  function matchupLabel(ratio) {
+    if (ratio > T.overpowerRatio) return { text: "너무 쉬움 · 보상↓", cls: "over" };
+    if (ratio >= 1.5) return { text: "유리", cls: "good" };
+    if (ratio >= 0.8) return { text: "해볼 만함", cls: "even" };
+    if (ratio >= 0.4) return { text: "불리", cls: "hard" };
+    return { text: "매우 불리", cls: "hard" };
+  }
+  // 대회 시간 중 t(0~1) 시점에 남아 있는 인원
+  const playersLeft = (tier, t) => Math.max(1, Math.round(1 + (tier.field - 1) * Math.pow(1 - Math.min(1, t), T.fieldCurve)));
+
+  function enterTournament(tierId) {
+    const idx = T.tiers.findIndex((t) => t.id === tierId);
+    const tier = T.tiers[idx];
+    if (!tier || !tierUnlocked(idx)) return;
+    if (state.tournament.active) {
+      toast("🏆 이미 참가 중인 대회가 있어요");
+      return;
+    }
+    const buyIn = tournamentBuyIn(tier);
+    if (state.chips < buyIn) {
+      toast("💰 참가비가 부족해요");
+      return;
+    }
+    state.chips -= buyIn;
+    const power = tournamentPower();
+    const ratio = power / tier.recommended;
+    // 순위는 참가 순간 정한다. 상위 비율 = 난수^지수 — 전투력이 높을수록 지수가 커져 상위권이 잘 나오지만 운은 항상 남는다
+    const topFrac = Math.pow(Math.random(), 0.5 + 1.5 * ratio);
+    const place = Math.min(tier.field, Math.max(1, Math.ceil(topFrac * tier.field)));
+    // 남은 인원이 내 순위 밑으로 내려가는 순간 탈락 → 그때 대회가 끝난다(우승이면 끝까지)
+    const endFrac = place === 1 ? 1 : Math.max(0.08, 1 - Math.pow((place - 1) / (tier.field - 1), 1 / T.fieldCurve));
+    const now = Date.now();
+    const durationMs = tier.durationMin * 60 * 1000;
+    state.tournament.active = { tierId, startAt: now, endAt: now + durationMs * endFrac, durationMs, place, buyIn, power, ratio, notified: false };
+    state.tournament.entries = (state.tournament.entries || 0) + 1;
+    trackMission("tournament");
+    toast(`${tier.emoji} ${tier.name} 참가! 결과는 대회 탭에서 확인해요`);
+    burst(0xffd24a);
+    refresh();
+  }
+
+  function tournamentReward(a) {
+    const tier = tierDef(a.tierId);
+    const pay = payoutFor(tier, a.place);
+    const mult = overpowerMult(a.ratio);
+    return {
+      tier,
+      pay,
+      trophies: Math.max(1, Math.round(tier.trophies * pay.trophyMult * mult)),
+      bb: Math.floor(a.buyIn * pay.bbMult * mult),
+      diamonds: mult < 1 ? 0 : Math.round(tier.diamonds * pay.diamondMult),
+    };
+  }
+
+  function claimTournament() {
+    const a = state.tournament.active;
+    if (!a || Date.now() < a.endAt) return;
+    state.tournament.active = null;
+    if (!tierDef(a.tierId)) return refresh(); // 없어진 대회(데이터 변경)는 조용히 정리
+    const unlockedBefore = T.tiers.map((_, i) => tierUnlocked(i));
+    const r = tournamentReward(a);
+    state.trophies += r.trophies;
+    if (r.bb) addChips(r.bb);
+    if (r.diamonds) addDiamonds(r.diamonds);
+    const best = state.tournament.best[a.tierId];
+    state.tournament.best[a.tierId] = best ? Math.min(best, a.place) : a.place;
+    if (a.place === 1) {
+      state.tournament.wins = (state.tournament.wins || 0) + 1;
+      sceneDirty = true; // 대회 접수대에 우승 트로피가 늘어난다
+    }
+    const parts = [`🏆${r.trophies}`];
+    if (r.bb) parts.push(`💰${formatChips(r.bb)}`);
+    if (r.diamonds) parts.push(`💎${r.diamonds}`);
+    toast(`${r.pay.label} (${a.place}위) · ${parts.join(" ")}`);
+    const opened = T.tiers.find((t, i) => tierUnlocked(i) && !unlockedBefore[i]);
+    if (opened) setTimeout(() => toast(`🔓 ${opened.emoji} ${opened.name} 참가 가능!`), 1100);
+    burst(a.place <= 3 ? 0xffd24a : 0x7bc67e);
+    refresh();
+  }
+
+  function tickTournament() {
+    const a = state.tournament.active;
+    if (!a || a.notified || Date.now() < a.endAt) return;
+    a.notified = true;
+    const tier = tierDef(a.tierId);
+    if (tier) toast(`${tier.emoji} ${tier.name} 결과 발표! ${a.place}위 — 대회 탭에서 보상을 받아요`);
+    refreshDots();
+  }
+
+  // ---------- 🏆 트로피 상점 ----------
+  function buyTrophyUpgrade(id) {
+    if (trophyMaxed(id)) return;
+    const cost = trophyUpgradeCost(id);
+    if (state.trophies < cost) {
+      toast("🏆 트로피가 부족해요");
+      return;
+    }
+    state.trophies -= cost;
+    state.trophyUpgrades[id] = trophyLevel(id) + 1;
+    burst(0xffd24a);
+    refresh();
+  }
+  function trophyTicketsLeft() {
+    if (state.trophyDaily.date !== todayKey()) state.trophyDaily = { date: todayKey(), tickets: 0 };
+    return Math.max(0, D.trophyShop.ticket.dailyLimit - state.trophyDaily.tickets);
+  }
+  function buyTicketWithTrophies() {
+    const cost = D.trophyShop.ticket.cost;
+    if (trophyTicketsLeft() <= 0 || state.trophies < cost) return;
+    state.trophies -= cost;
+    state.trophyDaily.tickets += 1;
+    state.gachaTickets = (state.gachaTickets || 0) + 1;
+    toast("🎫 무료 뽑기권 1장 교환!");
+    refresh();
+  }
+  const shardTrophyCost = (dealerId) => D.trophyShop.shardCost[rosterDef(dealerId).rarity] || D.trophyShop.shardCost.common;
+  function buyShardWithTrophies(dealerId) {
+    const own = state.dealers[dealerId];
+    if (!own || starUpCost(dealerId) === null) return;
+    const cost = shardTrophyCost(dealerId);
+    if (state.trophies < cost) {
+      toast("🏆 트로피가 부족해요");
+      return;
+    }
+    state.trophies -= cost;
+    own.shards += 1;
+    renderDealerModal(dealerId);
     refresh();
   }
 
@@ -1076,11 +1336,11 @@
 
   function showGachaResults(results) {
     const box = $("gacha-results");
-    $("gacha-head").textContent = results.length > 1 ? `운영진 ${results.length}명 영입!` : "운영진 영입!";
+    if (!autoPull) $("gacha-head").textContent = results.length > 1 ? `운영진 ${results.length}명 영입!` : "운영진 영입!";
     box.innerHTML = results
       .map(
         (r, i) => `
-        <div class="gacha-result-item" style="--rc:${r.rarity.color};animation-delay:${i * 45}ms">
+        <div class="gacha-result-item" style="--rc:${r.rarity.color};animation-delay:${autoPull ? 0 : i * 45}ms">
           <img src="${DealerPortraits.url(r.def.id, r.def.rarity)}" alt="${r.def.name}" />
           <div class="gr-name">${r.def.name}</div>
           <div class="gr-tag">${r.rarity.short}${r.isNew ? " · NEW" : " · 조각+1"}</div>
@@ -1088,25 +1348,26 @@
       )
       .join("");
     box.classList.toggle("many", results.length >= 10);
+    box.classList.toggle("auto", Boolean(autoPull));
     box.scrollTop = 0;
     $("gacha-modal").classList.remove("hidden");
+    renderGachaModalControls();
   }
 
   const rarityRank = (id) => (id === "mythic" ? D.gacha.rarities.length : D.gacha.rarities.findIndex((r) => r.id === id));
 
   // 무료 뽑기권이 count장 이상이면 그 버튼은 뽑기권으로(무료), 아니면 다이아로 뽑는다
   const canPullFree = (opt) => (state.gachaTickets || 0) >= opt.count;
+  const canAffordPull = (opt, ticketOnly = false) => canPullFree(opt) || (!ticketOnly && state.diamonds >= opt.costDiamonds);
 
-  function pullGacha(opt) {
+  // 뽑기 한 묶음(1/10/30회) 실행. 재화가 모자라면 { error }를 돌려주고 아무것도 쓰지 않는다.
+  function executePull(opt, { ticketOnly = false } = {}) {
     const free = canPullFree(opt);
-    if (free) {
-      state.gachaTickets -= opt.count;
-    } else if (state.diamonds < opt.costDiamonds) {
-      toast("💎 다이아가 부족해요");
-      return;
-    } else {
-      state.diamonds -= opt.costDiamonds;
-    }
+    if (free) state.gachaTickets -= opt.count;
+    else if (ticketOnly) return { error: "🎫 뽑기권이 부족해요" };
+    else if (state.diamonds < opt.costDiamonds) return { error: "💎 다이아가 부족해요" };
+    else state.diamonds -= opt.costDiamonds;
+
     const guaranteeRank = rarityRank(D.gacha.multiGuarantee);
     const results = [];
     for (let i = 0; i < opt.count; i++) {
@@ -1118,11 +1379,109 @@
       results.push(pullOne(guarantee ? D.gacha.multiGuarantee : null));
     }
     trackMission("gacha", opt.count);
-    sceneDirty = true;
-    showGachaResults(results);
+    // 새 얼굴이 들어왔을 때만 테이블 딜러가 바뀐다 — 연속 뽑기 중 매번 매장 전체를 다시 그리지 않게
+    if (results.some((r) => r.isNew)) sceneDirty = true;
     const best = results.reduce((a, b) => (rarityRank(b.rarity.id) > rarityRank(a.rarity.id) ? b : a));
-    burst(best.rarity.color);
+    return { results, free, best };
+  }
+
+  let lastPullOpt = D.gacha.pullOptions[0];
+  function pullGacha(opt) {
+    if (autoPull) return;
+    const res = executePull(opt);
+    if (res.error) return toast(res.error);
+    lastPullOpt = opt;
+    showGachaResults(res.results);
+    burst(res.best.rarity.color);
     refresh();
+  }
+
+  // ---------- 🔁 연속 뽑기 ----------
+  // 고른 묶음을 멈춤 조건(SSR/SR 이상/새 운영진)에 걸리거나 재화가 떨어지거나 "멈추기"를 누를 때까지 반복한다.
+  let autoPull = null;
+  const AUTO_STOP_LABEL = { legendary: "SSR", epic: "SR 이상", new: "새 운영진", none: "" };
+  function autoStopHit(stop, r) {
+    if (stop === "new") return r.isNew;
+    if (stop === "epic" || stop === "legendary") return rarityRank(r.rarity.id) >= rarityRank(stop);
+    return false;
+  }
+  function startAutoPull() {
+    if (autoPull) return;
+    const cfg = state.ui.autoPull;
+    const opt = D.gacha.pullOptions[cfg.sizeIdx] || D.gacha.pullOptions[1];
+    if (!canAffordPull(opt, cfg.ticketOnly)) {
+      toast(cfg.ticketOnly ? "🎫 뽑기권이 부족해요" : "💎 다이아가 부족해요");
+      return;
+    }
+    autoPull = { opt, stop: cfg.stop, ticketOnly: cfg.ticketOnly, running: true, rounds: 0, pulls: 0, counts: {}, newCount: 0, spentDia: 0, spentTickets: 0, reason: "", timer: null };
+    $("gacha-head").textContent = "🔁 연속 뽑기";
+    autoPullStep();
+  }
+  function autoPullStep() {
+    const ap = autoPull;
+    if (!ap || !ap.running) return;
+    const res = executePull(ap.opt, { ticketOnly: ap.ticketOnly });
+    if (res.error) return stopAutoPull(`${res.error} · 연속 뽑기 끝`);
+    ap.rounds += 1;
+    ap.pulls += ap.opt.count;
+    if (res.free) ap.spentTickets += ap.opt.count;
+    else ap.spentDia += ap.opt.costDiamonds;
+    res.results.forEach((r) => {
+      ap.counts[r.rarity.id] = (ap.counts[r.rarity.id] || 0) + 1;
+      if (r.isNew) ap.newCount += 1;
+    });
+    showGachaResults(res.results);
+    burst(res.best.rarity.color);
+    refresh();
+    const hit = res.results.find((r) => autoStopHit(ap.stop, r));
+    if (hit) return stopAutoPull(`✨ ${hit.rarity.short} ${hit.def.name}${hit.isNew ? " (NEW)" : ""} 등장! 멈췄어요`);
+    ap.timer = setTimeout(autoPullStep, ap.opt.count === 1 ? D.gacha.autoPull.singleIntervalMs : D.gacha.autoPull.intervalMs);
+  }
+  function stopAutoPull(reason = "⏹ 멈췄어요") {
+    if (!autoPull) return;
+    clearTimeout(autoPull.timer);
+    autoPull.running = false;
+    autoPull.reason = reason;
+    renderGachaModalControls();
+  }
+  function closeGachaModal() {
+    if (autoPull) clearTimeout(autoPull.timer);
+    autoPull = null;
+    $("gacha-modal").classList.add("hidden");
+    refresh();
+  }
+  function renderGachaModalControls() {
+    const summary = $("gacha-auto-summary");
+    const again = $("gacha-again");
+    if (autoPull) {
+      const ap = autoPull;
+      const chips = [...D.gacha.rarities, D.gacha.mythicRarity]
+        .filter((r) => ap.counts[r.id])
+        .sort((a, b) => rarityRank(b.id) - rarityRank(a.id))
+        .map((r) => `<span class="rarity-chip" style="--rc:${r.color}">${r.short} ${ap.counts[r.id]}</span>`)
+        .join("");
+      const spent = [ap.spentDia ? `💎-${formatNumber(ap.spentDia)}` : "", ap.spentTickets ? `🎫-${ap.spentTickets}` : ""].filter(Boolean).join(" · ");
+      summary.innerHTML = `
+        <div class="gas-line"><b>${ap.rounds}회차</b> · 총 ${ap.pulls}회 · NEW ${ap.newCount}${spent ? ` · ${spent}` : ""}</div>
+        <div class="rarity-chip-row">${chips}</div>
+        <div class="gas-reason">${ap.running ? `${ap.opt.count}회씩 뽑는 중…${AUTO_STOP_LABEL[ap.stop] ? ` (${AUTO_STOP_LABEL[ap.stop]} 나오면 멈춤)` : ""}` : ap.reason}</div>`;
+      summary.hidden = false;
+      again.textContent = ap.running ? "⏹ 멈추기" : "🔁 다시 연속 뽑기";
+      again.disabled = !ap.running && !canAffordPull(ap.opt, ap.ticketOnly);
+    } else {
+      summary.hidden = true;
+      const free = canPullFree(lastPullOpt);
+      again.textContent = free ? `🎫 ${lastPullOpt.count}회 더` : `${lastPullOpt.count}회 더 · 💎${formatNumber(lastPullOpt.costDiamonds)}`;
+      again.disabled = !canAffordPull(lastPullOpt);
+    }
+  }
+  function onGachaAgain() {
+    if (autoPull && autoPull.running) return stopAutoPull();
+    if (autoPull) {
+      autoPull = null;
+      return startAutoPull();
+    }
+    pullGacha(lastPullOpt);
   }
 
   // 뽑기 버튼은 운영진 탭이 0.5초마다 다시 그려질 때도 누른 탭이 씹히지 않게 한 번만 만들고 내용만 갱신한다
@@ -1249,6 +1608,10 @@
     state = defaultState({
       prestige: { points: gain },
       diamonds: state.diamonds + diamondReward,
+      trophies: state.trophies,
+      trophyUpgrades: state.trophyUpgrades,
+      trophyDaily: state.trophyDaily,
+      tournament: state.tournament,
       dealers: state.dealers,
       codexNew: state.codexNew,
       deployedIds: state.deployedIds,
@@ -1292,11 +1655,11 @@
   // 렌더링
   // ============================================================
   function renderHUD() {
-    $("chips-value").textContent = `${formatNumber(state.chips)} BB`;
-    $("income-value").textContent = `${formatRate(incomePerSecond())}BB/초`;
-    $("diamonds-value").textContent = formatNumber(state.diamonds);
-    $("diamond-rate").textContent = `${(diamondPerSecond() * 60).toFixed(1)}/분`;
-    $("prestige-mult").textContent = `x${prestigeMultiplier().toFixed(2)}`;
+    setText($("chips-value"), `${formatNumber(state.chips)} BB`);
+    setText($("income-value"), `+${formatRate(incomePerSecond())} BB/초`);
+    setText($("diamonds-value"), formatNumber(state.diamonds));
+    setText($("trophies-value"), formatNumber(state.trophies));
+    setText($("prestige-mult"), `x${prestigeMultiplier().toFixed(2)}`);
     renderQuestBanner();
 
     const li = levelInfo();
@@ -1308,13 +1671,25 @@
     // 활성 부스트 표시
     const strip = $("boost-strip");
     const now = Date.now();
-    const active = Object.entries(state.boosts.active).filter(([, until]) => until > now);
-    strip.innerHTML = active
-      .map(([id, until]) => {
-        const def = D.boosts[id];
-        return `<span class="boost-pill">${def.emoji} x${def.mult} ${formatDuration(until - now)}</span>`;
-      })
-      .join("");
+    const active = Object.entries(state.boosts.active).filter(([id, until]) => until > now && D.boosts[id]);
+    const pills = active.map(([id, until]) => {
+      const def = D.boosts[id];
+      return `<span class="boost-pill">${def.emoji} x${def.mult} <i>${formatClock(until - now)}</i></span>`;
+    });
+    // 참가 중인 대회도 같은 줄에 남은 시간/결과 대기를 보여준다
+    const a = state.tournament.active;
+    if (a && tierDef(a.tierId)) {
+      pills.push(
+        now < a.endAt
+          ? `<span class="boost-pill tourney-pill">🏆 <i>${formatClock(a.endAt - now)}</i></span>`
+          : `<span class="boost-pill tourney-pill ready">🏆 결과!</span>`
+      );
+    }
+    setHtml(strip, pills.join(""));
+  }
+  // 같은 글자면 DOM을 건드리지 않는다(0.2초마다 갱신되는 HUD가 레이아웃을 흔들지 않게)
+  function setText(el, text) {
+    if (el.textContent !== text) el.textContent = text;
   }
 
   // 하단 퀘스트 배너 — 성장 미션이 남아 있으면 그걸, 끝났으면 반복 퀘스트를 보여준다.
@@ -1369,16 +1744,16 @@
   const QUEST_TAB_MAP = {
     tables: "tables", buyTable: "tables",
     tableLevel: "tables", upgradeTable: "tables",
-    "store.expansions": "store", expand: "store",
-    "fixtures.bar": "store", "fixtures.fridge": "store", "fixtures.vault": "store", upgradeFixture: "store",
+    "store.expansions": "tables", expand: "tables",
+    "fixtures.bar": "fixtures", "fixtures.fridge": "fixtures", upgradeFixture: "fixtures",
     "staff.bartender": "staff", "staff.server": "staff", "staff.marketer": "staff", hireStaff: "staff",
-    dealerCount: "staff", gacha: "staff",
+    dealerCount: "scout", gacha: "scout",
     decorTotal: "decor", upgradeDecor: "decor", themeCount: "decor",
     prestigePoints: "prestige",
-    maxStar: "codex",
-    earn: "store",
+    maxStar: "codex", deployedCount: "codex",
+    tournament: "tournament",
+    earn: "tables",
   };
-  const TAB_TITLES = { store: "매장", tables: "테이블", staff: "운영진 & 가챠", codex: "운영진 도감", decor: "인테리어", prestige: "브랜드 리뉴얼" };
   function goToQuest() {
     const q = currentQuest();
     if (q.done) return; // 받을 수 있으면 배지 탭보다 '받기' 버튼을 누르게 유도(배너 자체 탭은 이동만 함)
@@ -1391,9 +1766,12 @@
       renderAttendanceModal();
       return $("attendance-modal").classList.remove("hidden");
     }
-    if (q.key === "deployedCount") return openSheet("codex", "운영진 도감");
+    if (q.key === "diamondBubble") {
+      closeSheet();
+      return toast("💎 테이블에 앉은 손님 머리 위 말풍선을 터치해보세요!");
+    }
     const tab = QUEST_TAB_MAP[q.key];
-    if (tab) openSheet(tab, TAB_TITLES[tab] || tab);
+    if (tab) openSheet(tab);
   }
 
   function claimQuest() {
@@ -1408,7 +1786,13 @@
     $("mission-dot").classList.toggle("show", missionReady);
     $("boost-dot").classList.toggle("show", freeBoostReady());
     $("codex-dot").classList.toggle("show", state.codexNew.length > 0);
+    $("tournament-dot").classList.toggle("show", tournamentResultReady());
+    const codexSub = document.querySelector('.subtab[data-sub="codex"] .dot');
+    if (codexSub) codexSub.classList.toggle("show", state.codexNew.length > 0);
+    const tourneySub = document.querySelector('.subtab[data-sub="tournament"] .dot');
+    if (tourneySub) tourneySub.classList.toggle("show", tournamentResultReady());
   }
+  const tournamentResultReady = () => Boolean(state.tournament.active && Date.now() >= state.tournament.active.endAt);
 
   // 버튼에 "현재 배수 기준 개수/비용"을 채운다
   function setBuyButton(btn, { base, growth, owned, cap = Infinity, label }) {
@@ -1440,23 +1824,7 @@
     return Array.from(wrap.children);
   }
 
-  function renderStoreTab() {
-    $("store-capacity").textContent = tableCapacity();
-    const expandBtn = $("expand-store-btn");
-    if (isStoreMaxed()) {
-      setHtml(expandBtn, "최대 확장 완료");
-      expandBtn.disabled = true;
-    } else {
-      setBuyButton(expandBtn, {
-        base: D.store.expansionBaseCost,
-        growth: D.store.expansionCostGrowth,
-        owned: state.store.expansions,
-        label: "확장",
-      });
-    }
-    const visitorsEl = $("store-visitors");
-    if (visitorsEl) visitorsEl.textContent = `👣 시간당 방문객 약 ${formatNumber(visitorsPerHour())}명`;
-
+  function renderFixturesTab() {
     const cards = keyedCards($("fixture-list"), D.fixtures, (f) => f.id, (f) => {
       const card = document.createElement("div");
       card.className = "item-card";
@@ -1503,6 +1871,21 @@
       owned: state.tableLevel,
       label: "강화",
     });
+
+    setText($("store-capacity"), String(tableCapacity()));
+    const expandBtn = $("expand-store-btn");
+    if (isStoreMaxed()) {
+      setHtml(expandBtn, "최대 확장");
+      expandBtn.disabled = true;
+    } else {
+      setBuyButton(expandBtn, {
+        base: D.store.expansionBaseCost,
+        growth: D.store.expansionCostGrowth,
+        owned: state.store.expansions,
+        label: "확장",
+      });
+    }
+    setText($("store-visitors"), `👣 시간당 방문객 약 ${formatNumber(visitorsPerHour())}명 · 테이블 좌석 약 ${Math.round(tableOccupancy() * 100)}% 채움 (마케터를 고용하면 늘어요)`);
   }
 
   function renderStaffTab() {
@@ -1524,8 +1907,16 @@
       setHtml(cards[i].querySelector(".lvl-chip"), `${owned}명`);
       setBuyButton(cards[i].querySelector("button"), { base: s.baseCost, growth: s.costGrowth, owned, label: "고용" });
     });
+  }
 
+  function renderScoutTab() {
     renderPullButtons();
+    const cfg = state.ui.autoPull;
+    $("auto-pull-size").value = String(cfg.sizeIdx);
+    $("auto-pull-stop").value = cfg.stop;
+    $("auto-pull-ticket-only").checked = cfg.ticketOnly;
+    const autoOpt = D.gacha.pullOptions[cfg.sizeIdx] || D.gacha.pullOptions[1];
+    $("auto-pull-start").disabled = Boolean(autoPull) || !canAffordPull(autoOpt, cfg.ticketOnly);
     $("gacha-level-chip").textContent = `Lv.${state.gachaLevel}`;
     // 뽑기 레벨 경험치 바: 현재 레벨 안에서 몇 회 뽑았는지 / 레벨업에 필요한 횟수
     const gachaMaxed = state.gachaLevel >= D.gacha.maxLevel;
@@ -1533,25 +1924,190 @@
     $("gacha-level-fill").style.width = `${gachaMaxed ? 100 : Math.min(100, (pullsIntoLevel / D.gacha.pullsPerLevel) * 100)}%`;
     $("gacha-level-next").textContent = gachaMaxed ? "MAX" : `${pullsIntoLevel}/${D.gacha.pullsPerLevel}회`;
     const rates = gachaRarityPercents();
-    $("gacha-level-rates").textContent = `현재 확률 · SSR ${rates.legendary.toFixed(1)}% · SR ${rates.epic.toFixed(1)}% · R ${rates.rare.toFixed(1)}% · U ${rates.uncommon.toFixed(1)}%`;
-    $("gacha-ticket-count").textContent = formatNumber(state.gachaTickets || 0);
-    $("dealer-count").textContent = ownedDealerIds().length;
-    $("dealer-bonus-total").textContent = `+${Math.round(dealerEffectTotal("income") * 100)}%`;
+    setText($("gacha-level-rates"), `현재 확률 · SSR ${rates.legendary.toFixed(1)}% · SR ${rates.epic.toFixed(1)}% · R ${rates.rare.toFixed(1)}% · U ${rates.uncommon.toFixed(1)}%`);
+    setText($("gacha-ticket-count"), formatNumber(state.gachaTickets || 0));
+    setText($("dealer-count"), String(ownedDealerIds().length));
+    setText($("dealer-bonus-total"), `+${Math.round(dealerEffectTotal("income") * 100)}%`);
     const shownRarities = mythicUnlocked() ? [...D.gacha.rarities, D.gacha.mythicRarity] : D.gacha.rarities;
-    $("dealer-breakdown").innerHTML = shownRarities
-      .map((r) => {
-        const total = D.dealerRoster.filter((d) => d.rarity === r.id).length;
-        const have = D.dealerRoster.filter((d) => d.rarity === r.id && state.dealers[d.id]).length;
-        return `<span class="rarity-chip" style="--rc:${r.color}">${r.short} ${have}/${total}</span>`;
-      })
-      .join("");
-    const deployEl = $("deploy-summary");
-    if (deployEl) {
-      const n = deployedIds().length;
-      const synergyPct = Math.round((deploymentSynergyMultiplier() - 1) * 100);
-      deployEl.textContent = `🧑‍💼 배치 ${n}/${D.deployment.maxDeployed}명 · 시너지 +${synergyPct}% (도감 탭에서 배치 변경)`;
-    }
+    setHtml(
+      $("dealer-breakdown"),
+      shownRarities
+        .map((r) => {
+          const total = D.dealerRoster.filter((d) => d.rarity === r.id).length;
+          const have = D.dealerRoster.filter((d) => d.rarity === r.id && state.dealers[d.id]).length;
+          return `<span class="rarity-chip" style="--rc:${r.color}">${r.short} ${have}/${total}</span>`;
+        })
+        .join("")
+    );
+    const n = deployedIds().length;
+    const synergyPct = Math.round((deploymentSynergyMultiplier() - 1) * 100);
+    setText($("deploy-summary"), `🧑‍💼 배치 ${n}/${D.deployment.maxDeployed}명 · 시너지 +${synergyPct}% (도감에서 배치 변경)`);
     renderAdButtons();
+  }
+
+  function renderPermanentTab() {
+    const cards = keyedCards($("permanent-list"), D.permanentUpgrades, (p) => p.id, (p) => {
+      const card = document.createElement("div");
+      card.className = "item-card";
+      card.innerHTML = `
+        <div class="item-icon">${p.emoji}</div>
+        <div class="item-info">
+          <div class="item-title">${p.name} <span class="lvl-chip"></span></div>
+          <div class="item-desc">${p.desc}</div>
+        </div>
+        <button class="btn btn-buy"></button>`;
+      card.querySelector("button").addEventListener("click", () => buyPermanent(p.id));
+      return card;
+    });
+    D.permanentUpgrades.forEach((p, i) => {
+      const cost = permanentCost(p.id);
+      setHtml(cards[i].querySelector(".lvl-chip"), `Lv.${permanentLevel(p.id)}`);
+      const btn = cards[i].querySelector("button");
+      setHtml(btn, `강화<small>💎${formatNumber(cost)}</small>`);
+      btn.disabled = state.diamonds < cost;
+    });
+  }
+
+  // ---------- 🏆 대회 탭 ----------
+  function renderTournamentTab() {
+    const parts = tournamentPowerParts();
+    setText($("tourney-trophies"), formatNumber(state.trophies));
+    setText($("tourney-power"), formatNumber(parts.total));
+    setText(
+      $("tourney-power-detail"),
+      `배치 운영진 ${formatNumber(parts.crew)} + 매장(테이블·리모델링) ${formatNumber(parts.pub)}${parts.training > 1 ? ` · 훈련 +${Math.round((parts.training - 1) * 100)}%` : ""}`
+    );
+
+    // 참가 중인 대회 / 결과
+    // 데이터에서 없어진 대회에 참가 중인 세이브는 정리해서 새 대회에 나갈 수 있게 한다
+    if (state.tournament.active && !tierDef(state.tournament.active.tierId)) state.tournament.active = null;
+    const a = state.tournament.active;
+    const tierA = a && tierDef(a.tierId);
+    let activeHtml;
+    if (!tierA) {
+      activeHtml = `<div class="tourney-idle">🃏 참가 중인 대회가 없어요. 아래에서 대회를 골라 출전하세요!</div>`;
+    } else if (Date.now() < a.endAt) {
+      const t = (Date.now() - a.startAt) / a.durationMs;
+      const left = Math.max(a.place, playersLeft(tierA, t));
+      activeHtml = `
+        <div class="tourney-live">
+          <div class="tl-head"><b>${tierA.emoji} ${tierA.name}</b><span class="tl-time">⏱ ${formatClock(a.endAt - Date.now())}</span></div>
+          <div class="tl-bar"><i style="width:${Math.min(100, t * 100).toFixed(1)}%"></i></div>
+          <div class="tl-info">남은 인원 <b>${formatNumber(left)}</b> / ${formatNumber(tierA.field)}명 · 우리 펍 대표 생존 중 🔥</div>
+        </div>`;
+    } else {
+      const r = tournamentReward(a);
+      const rewardParts = [`🏆${r.trophies}`];
+      if (r.bb) rewardParts.push(`💰${formatChips(r.bb)}`);
+      if (r.diamonds) rewardParts.push(`💎${r.diamonds}`);
+      activeHtml = `
+        <div class="tourney-live done place-${r.pay.id}">
+          <div class="tl-head"><b>${tierA.emoji} ${tierA.name} 결과</b></div>
+          <div class="tl-place">${r.pay.label}<small>${formatNumber(tierA.field)}명 중 ${a.place}위</small></div>
+          <div class="tl-reward">${rewardParts.join(" · ")}${overpowerMult(a.ratio) < 1 ? '<small>너무 쉬운 대회라 보상이 줄었어요</small>' : ""}</div>
+          <button class="btn btn-primary btn-wide" data-tourney-claim>보상 받기</button>
+        </div>`;
+    }
+    setHtml($("tourney-active"), activeHtml);
+
+    // 대회 목록 — 열림/잠김이 바뀔 때만 카드를 새로 만든다
+    const power = parts.total;
+    const cards = keyedCards($("tourney-list"), T.tiers, (t) => `${t.id}:${tierUnlocked(T.tiers.indexOf(t))}`, (tier) => {
+      const card = document.createElement("div");
+      card.className = "item-card tourney-card";
+      card.innerHTML = `
+        <div class="item-icon">${tier.emoji}</div>
+        <div class="item-info">
+          <div class="item-title"></div>
+          <div class="item-desc"></div>
+        </div>
+        <button class="btn btn-buy"></button>`;
+      card.querySelector("button").addEventListener("click", () => enterTournament(tier.id));
+      return card;
+    });
+    T.tiers.forEach((tier, i) => {
+      const card = cards[i];
+      const unlocked = tierUnlocked(i);
+      const best = state.tournament.best[tier.id];
+      const btn = card.querySelector("button");
+      card.classList.toggle("locked", !unlocked);
+      if (!unlocked) {
+        const prev = T.tiers[i - 1];
+        setHtml(card.querySelector(".item-title"), `${tier.name}`);
+        setHtml(card.querySelector(".item-desc"), `🔒 ${prev.name}에서 ${itmPlaces(prev)}위 안에 들면 열려요<br/>👥 ${formatNumber(tier.field)}명 · ⏱ ${tier.durationMin}분 · 추천 ⚔️${formatNumber(tier.recommended)}`);
+        setHtml(btn, "잠김");
+        btn.disabled = true;
+        return;
+      }
+      const m = matchupLabel(power / tier.recommended);
+      const buyIn = tournamentBuyIn(tier);
+      setHtml(
+        card.querySelector(".item-title"),
+        `${tier.name} <span class="matchup ${m.cls}">${m.text}</span>${best ? `<span class="lvl-chip">최고 ${best}위</span>` : ""}`
+      );
+      setHtml(
+        card.querySelector(".item-desc"),
+        `👥 ${formatNumber(tier.field)}명 · ⏱ ${tier.durationMin}분 · 추천 ⚔️${formatNumber(tier.recommended)}<br/>🥇 우승 🏆${tier.trophies * T.payouts[0].trophyMult} · 💎${tier.diamonds} · 상금권 ${itmPlaces(tier)}위까지`
+      );
+      setHtml(btn, a ? "참가 중" : `참가<small>${formatChips(buyIn)}</small>`);
+      btn.disabled = Boolean(a) || state.chips < buyIn;
+    });
+  }
+
+  // ---------- 🏆 트로피 상점 ----------
+  const TROPHY_SHOP_ITEMS = [...D.trophyShop.upgrades.map((u) => u.id), "ticket", "shard"];
+  function renderTrophyShopTab() {
+    setText($("trophy-shop-balance"), formatNumber(state.trophies));
+    const cards = keyedCards($("trophy-shop-list"), TROPHY_SHOP_ITEMS, (id) => id, (id) => {
+      const card = document.createElement("div");
+      card.className = "item-card trophy-card";
+      const up = trophyUpgradeDef(id);
+      const icon = up ? up.emoji : id === "ticket" ? "🎫" : "🧩";
+      const name = up ? up.name : id === "ticket" ? "뽑기권 교환" : "운영진 조각 교환";
+      card.innerHTML = `
+        <div class="item-icon">${icon}</div>
+        <div class="item-info">
+          <div class="item-title">${name} <span class="lvl-chip"></span></div>
+          <div class="item-desc"></div>
+        </div>
+        <button class="btn btn-buy"></button>`;
+      const btn = card.querySelector("button");
+      if (up) btn.addEventListener("click", () => buyTrophyUpgrade(id));
+      else if (id === "ticket") btn.addEventListener("click", buyTicketWithTrophies);
+      else btn.addEventListener("click", () => openSheet("codex"));
+      return card;
+    });
+    TROPHY_SHOP_ITEMS.forEach((id, i) => {
+      const card = cards[i];
+      const chip = card.querySelector(".lvl-chip");
+      const desc = card.querySelector(".item-desc");
+      const btn = card.querySelector("button");
+      const up = trophyUpgradeDef(id);
+      if (up) {
+        const lv = trophyLevel(id);
+        const maxed = trophyMaxed(id);
+        setHtml(chip, maxed ? "MAX" : `Lv.${lv}`);
+        let effect;
+        if (id === "offlineHours") effect = `오프라인 최대 ${formatHours(offlineMaxSeconds())}${maxed ? "" : ` → ${formatHours(offlineMaxSeconds(lv + 1))}`}`;
+        else if (id === "training") effect = `대회 전투력 +${Math.round(trophyBonus(id) * 100)}%${maxed ? "" : ` → +${Math.round(trophyBonus(id, lv + 1) * 100)}%`}`;
+        else effect = `전체 수익 +${Math.round(trophyBonus(id) * 100)}% → +${Math.round(trophyBonus(id, lv + 1) * 100)}% · 리뉴얼해도 유지`;
+        setHtml(desc, effect);
+        const cost = trophyUpgradeCost(id);
+        setHtml(btn, maxed ? "최대" : `강화<small>🏆${formatNumber(cost)}</small>`);
+        btn.disabled = maxed || state.trophies < cost;
+      } else if (id === "ticket") {
+        const left = trophyTicketsLeft();
+        setHtml(chip, `오늘 ${left}/${D.trophyShop.ticket.dailyLimit}`);
+        setHtml(desc, `🏆으로 무료 뽑기권 1장 · 매일 ${D.trophyShop.ticket.dailyLimit}장까지 (보유 🎫${formatNumber(state.gachaTickets || 0)})`);
+        setHtml(btn, `교환<small>🏆${D.trophyShop.ticket.cost}</small>`);
+        btn.disabled = left <= 0 || state.trophies < D.trophyShop.ticket.cost;
+      } else {
+        const c = D.trophyShop.shardCost;
+        chip.hidden = true;
+        setHtml(desc, `도감에서 운영진을 눌러 원하는 사람의 승급 조각을 사요<br/>조각 1개 · N 🏆${c.common} · U ${c.uncommon} · R ${c.rare} · SR ${c.epic} · SSR ${c.legendary}`);
+        setHtml(btn, "도감 열기");
+      }
+    });
   }
 
   function renderCodexTab() {
@@ -1721,6 +2277,10 @@
         <div class="dealer-stat">배치<b>${deployedIds().length}/${D.deployment.maxDeployed}명</b></div>
         <div class="dealer-stat">가챠 레벨<b>Lv.${state.gachaLevel}</b></div>
         <div class="dealer-stat">프레스티지<b>x${prestigeMultiplier().toFixed(2)}</b></div>
+        <div class="dealer-stat">트로피<b>🏆${formatNumber(state.trophies)}</b></div>
+        <div class="dealer-stat">대회<b>${state.tournament.entries || 0}회 · 우승 ${state.tournament.wins || 0}</b></div>
+        <div class="dealer-stat">대회 전투력<b>⚔️${formatNumber(tournamentPower())}</b></div>
+        <div class="dealer-stat">오프라인 한도<b>${formatHours(offlineMaxSeconds())}</b></div>
       </div>
     `;
     $("profile-nickname-edit").addEventListener("click", () => {
@@ -1836,23 +2396,8 @@
     const ra = D.shop.removeAds;
     parts.push(shopItemCard({ id: ra.id, emoji: ra.emoji, name: ra.name, desc: ra.desc, priceLabel: ra.priceLabel, owned: state.purchases.adsRemoved }));
 
-    parts.push('<h4 class="sheet-sub">영구 업그레이드 <span class="muted">· 리뉴얼해도 유지</span></h4>');
-    D.permanentUpgrades.forEach((p) => {
-      const lv = permanentLevel(p.id);
-      parts.push(`
-        <div class="item-card">
-          <div class="item-icon">${p.emoji}</div>
-          <div class="item-info">
-            <div class="item-title">${p.name} <span class="lvl-chip">Lv.${lv}</span></div>
-            <div class="item-desc">${p.desc}</div>
-          </div>
-          <button class="btn btn-buy" data-permanent="${p.id}">강화<small>💎${permanentCost(p.id)}</small></button>
-        </div>`);
-    });
-
     list.innerHTML = parts.join("");
     list.querySelectorAll("[data-shop]").forEach((btn) => btn.addEventListener("click", () => buyShopItem(btn.dataset.shop, btn)));
-    list.querySelectorAll("[data-permanent]").forEach((btn) => btn.addEventListener("click", () => buyPermanent(btn.dataset.permanent)));
   }
 
   function findShopItem(id) {
@@ -1975,11 +2520,15 @@
   }
 
   const TAB_RENDERERS = {
-    store: renderStoreTab,
     tables: renderTablesTab,
+    fixtures: renderFixturesTab,
     staff: renderStaffTab,
-    codex: renderCodexTab,
     decor: renderDecorTab,
+    permanent: renderPermanentTab,
+    scout: renderScoutTab,
+    codex: renderCodexTab,
+    tournament: renderTournamentTab,
+    trophyShop: renderTrophyShopTab,
     prestige: renderPrestigeTab,
     shop: renderShopTab,
     settings: renderSettingsTab,
@@ -2000,6 +2549,8 @@
       seatsMin: D.table.seatsMin,
       seatsMax: D.table.seatsMax,
       theme: state.theme,
+      occupancy: tableOccupancy(),
+      tournamentWins: state.tournament.wins || 0,
     });
   }
 
@@ -2165,10 +2716,15 @@
         need === null
           ? '<div class="mission-allclear">⭐ 최고 등급까지 승급했어요!</div>'
           : `<div class="mission-allclear">조각 ${own.shards} / ${need}<div class="shard-bar" style="margin-top:6px"><i style="width:${Math.min(100, (own.shards / need) * 100)}%"></i></div></div>
-             <button class="btn btn-primary btn-wide" id="star-up-btn" ${canUp ? "" : "disabled"} style="margin-top:10px">★${own.star + 1} 승급하기</button>`
+             <div class="dealer-modal-actions">
+               <button class="btn btn-buy" id="shard-trophy-btn" ${state.trophies >= shardTrophyCost(dealerId) ? "" : "disabled"}>🧩 조각 +1<small>🏆${shardTrophyCost(dealerId)} · 보유 ${formatNumber(state.trophies)}</small></button>
+               <button class="btn btn-primary" id="star-up-btn" ${canUp ? "" : "disabled"}>★${own.star + 1} 승급하기</button>
+             </div>`
       }`;
     const upBtn = $("star-up-btn");
     if (upBtn) upBtn.addEventListener("click", () => starUp(dealerId));
+    const shardBtn = $("shard-trophy-btn");
+    if (shardBtn) shardBtn.addEventListener("click", () => buyShardWithTrophies(dealerId));
     $("dealer-modal-deploy-btn").addEventListener("click", () => {
       toggleDeploy(dealerId);
       renderDealerModal(dealerId);
@@ -2191,6 +2747,7 @@
     popupAction = null;
   }
   function handleSceneTap(info) {
+    if (info.type === "tournament") return openSheet("tournament");
     if (info.type === "buyTable") {
       const cap = tableCapacity() - state.tables;
       if (cap <= 0) {
@@ -2235,12 +2792,36 @@
   // ============================================================
   // 시트 / 탭 / 컨트롤 바
   // ============================================================
-  function openSheet(tabName, titleText) {
+  const groupOfTab = (tab) => Object.keys(NAV_GROUPS).find((g) => NAV_GROUPS[g].tabs.some(([id]) => id === tab)) || null;
+
+  // 세부 탭 칩은 시트를 열거나 세부 탭을 바꿀 때만 새로 만든다(주기 갱신에서 다시 만들지 않아 탭이 씹히지 않음)
+  function renderSubtabs(group, tabName) {
+    const wrap = $("sheet-subtabs");
+    const tabs = group ? NAV_GROUPS[group].tabs : [];
+    const multi = tabs.length > 1;
+    wrap.hidden = !multi;
+    $("sheet-title").hidden = multi;
+    $("sheet-title").textContent = group ? NAV_GROUPS[group].title : STANDALONE_TITLES[tabName] || "";
+    if (!multi) {
+      wrap.innerHTML = "";
+      return;
+    }
+    wrap.innerHTML = tabs
+      .map(([id, label]) => `<button class="subtab ${id === tabName ? "active" : ""}" data-sub="${id}" role="tab">${label}<span class="dot"></span></button>`)
+      .join("");
+    wrap.querySelectorAll("[data-sub]").forEach((b) => b.addEventListener("click", () => openSheet(b.dataset.sub)));
+    const active = wrap.querySelector(".subtab.active");
+    if (active) active.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }
+
+  function openSheet(tabName) {
+    const group = groupOfTab(tabName);
     activeTab = tabName;
     sheetOpen = true;
-    document.querySelectorAll(".tab-btn").forEach((b) => b.classList.toggle("active", b.dataset.tab === tabName));
+    if (group) state.ui.lastSub[group] = tabName;
+    document.querySelectorAll(".bottom-nav .tab-btn").forEach((b) => b.classList.toggle("active", b.dataset.group === group));
     document.querySelectorAll(".tab-panel").forEach((p) => p.classList.toggle("active", p.id === `tab-${tabName}`));
-    $("sheet-title").textContent = titleText;
+    renderSubtabs(group, tabName);
     $("sheet-qty-row").hidden = !QTY_TABS.has(tabName);
     $("sheet-panel").classList.add("open");
     $("sheet-panel").setAttribute("aria-hidden", "false");
@@ -2256,9 +2837,16 @@
       codexNewSnapshot = [];
     }
     if (TAB_RENDERERS[tabName]) TAB_RENDERERS[tabName]();
+    refreshDots();
+  }
+  function openGroup(group) {
+    const tabs = NAV_GROUPS[group].tabs.map(([id]) => id);
+    const last = state.ui.lastSub[group];
+    openSheet(tabs.includes(last) ? last : tabs[0]);
   }
   function closeSheet() {
     sheetOpen = false;
+    document.querySelectorAll(".bottom-nav .tab-btn").forEach((b) => b.classList.remove("active"));
     $("sheet-panel").classList.remove("open");
     $("sheet-panel").setAttribute("aria-hidden", "true");
     $("sheet-backdrop").classList.remove("open");
@@ -2266,11 +2854,18 @@
   }
 
   function setupTabs() {
+    // data-group: 네비 묶음(마지막으로 본 세부 탭을 연다) / data-tab: 특정 탭 — 이미 열려 있으면 닫는다
     document.querySelectorAll(".tab-btn").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        const isSame = sheetOpen && activeTab === btn.dataset.tab;
-        if (isSame) closeSheet();
-        else openSheet(btn.dataset.tab, btn.dataset.title || btn.dataset.tab);
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const { group, tab } = btn.dataset;
+        if (group) {
+          if (sheetOpen && groupOfTab(activeTab) === group) closeSheet();
+          else openGroup(group);
+        } else if (tab) {
+          if (sheetOpen && activeTab === tab) closeSheet();
+          else openSheet(tab);
+        }
       });
     });
     $("sheet-close-btn").addEventListener("click", closeSheet);
@@ -2312,27 +2907,30 @@
     }
     state = mergeWithDefaults(loaded);
     const savedAt = loaded.savedAt || Date.now();
-    const elapsedSec = Math.max(0, Math.min((Date.now() - savedAt) / 1000, D.offline.maxSeconds));
+    const awaySec = Math.max(0, (Date.now() - savedAt) / 1000);
+    // 오프라인 수익은 최대 시간(처음 2시간, 트로피 상점 "영업시간 연장"으로 증가)까지만 인정한다
+    const elapsedSec = Math.min(awaySec, offlineMaxSeconds());
     if (elapsedSec <= 20) return;
     // 오프라인 동안에는 부스트가 걸리지 않은 상태로 계산한다
     const savedActive = state.boosts.active;
     state.boosts.active = {};
     const gain = incomePerSecond() * elapsedSec * offlineEfficiency();
-    const diaGain = diamondPerSecond() * elapsedSec * offlineEfficiency();
     state.boosts.active = savedActive;
     if (gain > 0) {
       addChips(gain);
-      addDiamonds(diaGain);
-      showOfflineModal(gain, diaGain, elapsedSec);
+      showOfflineModal(gain, elapsedSec, awaySec);
     }
   }
 
-  function showOfflineModal(gain, diaGain, elapsedSec) {
-    const mins = Math.round(elapsedSec / 60);
-    const timeLabel = mins < 60 ? `${mins}분` : `${(mins / 60).toFixed(1)}시간`;
+  function showOfflineModal(gain, elapsedSec, awaySec) {
+    const label = (sec) => (sec < 3600 ? `${Math.round(sec / 60)}분` : `${(sec / 3600).toFixed(1)}시간`);
+    const capped = awaySec > elapsedSec + 60;
     $("offline-text").innerHTML =
-      `${timeLabel} 동안<br/><b>💰 ${formatChips(gain)}</b>${diaGain >= 1 ? ` · <b>💎 ${Math.floor(diaGain)}</b>` : ""}<br/>` +
-      `<span class="muted">오프라인 효율 ${Math.round(offlineEfficiency() * 100)}%</span>`;
+      `${label(elapsedSec)} 동안<br/><b>💰 ${formatChips(gain)}</b><br/>` +
+      `<span class="muted">오프라인 효율 ${Math.round(offlineEfficiency() * 100)}% · 최대 ${formatHours(offlineMaxSeconds())}</span>` +
+      (capped
+        ? `<br/><span class="offline-cap">⏰ ${label(awaySec)} 자리를 비웠지만 ${formatHours(offlineMaxSeconds())}까지만 벌었어요.<br/>🏆 트로피 상점 "영업시간 연장"으로 늘릴 수 있어요</span>`
+        : "");
     $("offline-modal").classList.remove("hidden");
   }
 
@@ -2345,7 +2943,6 @@
     lastTickAt = now;
 
     addChips(incomePerSecond() * dt);
-    addDiamonds(diamondPerSecond() * dt);
 
     // 만료된 부스트 정리
     let boostChanged = false;
@@ -2357,6 +2954,8 @@
     });
     tickGoldenHour();
     tickCelebrity();
+    tickTournament();
+    tickDiamondBubble();
     checkProfileLevelReward();
     ensureDailyState();
 
@@ -2383,6 +2982,7 @@
     if (window.PubScene3D) {
       window.PubScene3D.init($("pub-3d-container"));
       window.PubScene3D.onTap = handleSceneTap;
+      window.PubScene3D.onDiamondBubble = collectDiamondBubble;
     }
 
     await loadGameAndComputeOffline();
@@ -2395,6 +2995,28 @@
     $("expand-store-btn").addEventListener("click", () => expandStore());
     $("prestige-btn").addEventListener("click", doPrestige);
     setupPullButtons();
+    // 연속 뽑기 설정
+    $("auto-pull-size").addEventListener("change", (e) => {
+      state.ui.autoPull.sizeIdx = Number(e.target.value);
+      renderScoutTab();
+    });
+    $("auto-pull-stop").addEventListener("change", (e) => {
+      state.ui.autoPull.stop = e.target.value;
+    });
+    $("auto-pull-ticket-only").addEventListener("change", (e) => {
+      state.ui.autoPull.ticketOnly = e.target.checked;
+      renderScoutTab();
+    });
+    $("auto-pull-start").addEventListener("click", startAutoPull);
+    $("gacha-again").addEventListener("click", onGachaAgain);
+    $("gacha-close").addEventListener("click", closeGachaModal);
+    // 대회 결과 "보상 받기"(0.5초마다 다시 그려지는 영역이라 위임으로 받는다) · HUD 대회 알약 → 대회 탭
+    $("tourney-active").addEventListener("click", (e) => {
+      if (e.target.closest("[data-tourney-claim]")) claimTournament();
+    });
+    $("boost-strip").addEventListener("click", (e) => {
+      if (e.target.closest(".tourney-pill")) openSheet("tournament");
+    });
     $("codex-starup-all").addEventListener("click", starUpAll);
     $("codex-quick-deploy").addEventListener("click", quickDeploy);
     $("ad-free-pull-btn").addEventListener("click", () => watchAdFor("dailyFreePull"));
@@ -2418,7 +3040,7 @@
       renderProfileModal();
       $("profile-modal").classList.remove("hidden");
     });
-    $("prestige-badge").addEventListener("click", () => openSheet("prestige", "브랜드 리뉴얼"));
+    $("prestige-badge").addEventListener("click", () => (sheetOpen && activeTab === "prestige" ? closeSheet() : openSheet("prestige")));
     $("quest-claim").addEventListener("click", (e) => {
       e.stopPropagation();
       claimQuest();
@@ -2428,7 +3050,6 @@
     // 모달 닫기
     const closers = [
       ["offline-close", "offline-modal"],
-      ["gacha-close", "gacha-modal"],
       ["event-claim-btn", "event-modal"],
       ["attendance-close", "attendance-modal"],
       ["mission-close", "mission-modal"],
@@ -2439,7 +3060,9 @@
     closers.forEach(([btnId, modalId]) => $(btnId).addEventListener("click", () => $(modalId).classList.add("hidden")));
     document.querySelectorAll(".modal").forEach((m) =>
       m.addEventListener("click", (e) => {
-        if (e.target === m) m.classList.add("hidden");
+        if (e.target !== m) return;
+        if (m.id === "gacha-modal") closeGachaModal(); // 연속 뽑기 중이면 같이 멈춘다
+        else m.classList.add("hidden");
       })
     );
     $("attendance-claim").addEventListener("click", claimAttendance);

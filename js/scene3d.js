@@ -135,6 +135,19 @@ let customers = [];
 let activitySpots = [];
 let spawnTimer = 1.2;
 let ready = false;
+// 홀덤 테이블 좌석이 차는 목표 비율 — game.js가 방문객 수로 계산해서 넘겨준다
+let tableOccupancy = 0.5;
+let prefilled = false;
+// 💎 말풍선 (테이블에 앉은 손님 머리 위) — game.js가 spawnDiamondBubble()로 띄우고, 터치하면 onDiamondBubble()로 알린다
+let bubbles = [];
+let bubbleTexture = null;
+let deskSign = null;
+
+// 손님 수 상한 — 사람 1명이 메시 8개 남짓이라 휴대폰 성능을 생각해 코어 수로 나눈다
+const LOW_END = (navigator.hardwareConcurrency || 4) <= 4 || (navigator.deviceMemory || 8) <= 3;
+const MAX_CUSTOMERS = LOW_END ? 72 : 128;
+const OTHER_CUSTOMER_TARGET = 7; // 바·소파·다트·주크박스에 있는 손님 목표 수
+const MAX_BUBBLES = 3;
 let toonGradient, feltTexture;
 let outlineMat;
 let raycaster;
@@ -822,6 +835,24 @@ function buildVip() {
 }
 
 // 장식품은 레벨이 오를수록 개수가 늘어난다 (무한 업그레이드가 눈에 보이도록).
+// 대회 우승 트로피(접수대 카운터 위)
+const trophyGeo = {
+  cup: new THREE.CylinderGeometry(0.12, 0.06, 0.18, 10),
+  stem: new THREE.CylinderGeometry(0.025, 0.025, 0.1, 6),
+  base: new THREE.BoxGeometry(0.16, 0.05, 0.16),
+};
+function buildTrophyCup() {
+  const g = new THREE.Group();
+  const cup = plain(trophyGeo.cup, 0xffc21a);
+  cup.position.y = 0.22;
+  const stem = plain(trophyGeo.stem, 0xffc21a);
+  stem.position.y = 0.09;
+  const base = plain(trophyGeo.base, 0x8a5a2b);
+  base.position.y = 0.02;
+  g.add(cup, stem, base);
+  return g;
+}
+
 function placeDecorRow(builder, level, originX, y, z, stepX, maxShown) {
   const group = new THREE.Group();
   const count = Math.min(level, maxShown);
@@ -1191,8 +1222,9 @@ export function init(containerEl) {
       decor: new THREE.Group(),
       bursts: new THREE.Group(),
       customers: new THREE.Group(),
+      bubbles: new THREE.Group(),
     };
-    scene.add(groups.tables, groups.fixtures, groups.staff, groups.decor, groups.bursts, groups.customers);
+    scene.add(groups.tables, groups.fixtures, groups.staff, groups.decor, groups.bursts, groups.customers, groups.bubbles);
 
     clock = new THREE.Clock();
     ready = true;
@@ -1267,6 +1299,13 @@ function onPointerUp(e) {
   pointerStart = null;
   if (moved > 10 || elapsed > 500) return;
 
+  // 💎 말풍선이 먼저 — 작아서 누르기 어려우니 화면 거리로 넉넉하게 판정한다
+  const bubble = pickBubble(e.clientX, e.clientY);
+  if (bubble) {
+    collectBubble(bubble);
+    return;
+  }
+
   const rect = renderer.domElement.getBoundingClientRect();
   const ndc = new THREE.Vector2(
     ((e.clientX - rect.left) / rect.width) * 2 - 1,
@@ -1282,6 +1321,7 @@ function onPointerUp(e) {
   if (type === "table") window.PubScene3D.onTap({ type: "table", index });
   else if (type === "buyTable") window.PubScene3D.onTap({ type: "buyTable" });
   else if (type === "fixture") window.PubScene3D.onTap({ type: "fixture", id });
+  else if (type === "tournamentDesk") window.PubScene3D.onTap({ type: "tournament" });
 }
 
 // ============================================================
@@ -1302,9 +1342,12 @@ export function update(snapshot) {
     seatsMin = 4,
     seatsMax = 8,
     theme = "classic",
+    occupancy = 0.5,
+    tournamentWins = 0,
   } = snapshot;
 
   applyTheme(theme);
+  tableOccupancy = occupancy;
   currentPerTableIncome = perTableIncome;
   showCoinPops = showTableIncome;
   const feltPalette = (THEMES[theme] || THEMES.classic).felt;
@@ -1364,7 +1407,7 @@ export function update(snapshot) {
           z: z + s.z,
           rot: s.rot,
           seated: true,
-          duration: [10, 22],
+          duration: [35, 80], // 포커는 한 번 앉으면 오래 친다 — 짧으면 좌석이 금방 비어 테이블이 휑해 보인다
           ignore: `tbl${i}`, // 자기 자리로 가려면 자기 테이블은 통과해야 한다
         });
       });
@@ -1438,10 +1481,11 @@ export function update(snapshot) {
     groups.fixtures.add(light);
   }
 
-  // 칩 케이지(다이아 금고) — 실제 펍의 캐셔 자리
+  // 칩 케이지 = 대회 접수대 — 실제 펍의 캐셔 자리. 탭하면 대회 탭이 열리고, 우승할 때마다 카운터에 트로피가 늘어난다.
+  // (예전 "다이아 금고" 자리. 금고 업그레이드는 삭제됨)
   const vaultX = halfW - 2.4;
   const vaultGroup = new THREE.Group();
-  vaultGroup.userData = { type: "fixture", id: "vault" };
+  vaultGroup.userData = { type: "tournamentDesk" };
   const counter = meshWO(new RoundedBoxGeometry(2.0, 1.0, 0.7, 3, 0.08), COLORS.wood, 1.03);
   counter.position.set(vaultX, 0.5, zWall + 0.4);
   const cage = plain(new RoundedBoxGeometry(1.9, 1.0, 0.1, 2, 0.04), 0x8a8a9a);
@@ -1451,12 +1495,22 @@ export function update(snapshot) {
   const dial = plain(new THREE.TorusGeometry(0.12, 0.028, 8, 16), COLORS.vaultTrim);
   dial.position.set(vaultX, 0.5, zWall - 0.04);
   vaultGroup.add(counter, cage, safe, dial);
-  const vaultLevel = fixtures.vault || 0;
-  for (let i = 0; i < Math.min(vaultLevel, 12); i++) {
+  for (let i = 0; i < 3; i++) {
     const chip = plain(furnGeo.chipStack, [COLORS.chip, COLORS.chipRed, COLORS.chipBlue][i % 3]);
-    chip.position.set(vaultX - 0.7 + (i % 4) * 0.45, 1.12 + Math.floor(i / 4) * 0.21, zWall + 0.4);
+    chip.position.set(vaultX - 0.75 + i * 0.3, 1.12, zWall + 0.25);
     vaultGroup.add(chip);
   }
+  for (let i = 0; i < Math.min(tournamentWins, 5); i++) {
+    const cup = buildTrophyCup();
+    cup.position.set(vaultX + 0.1 + (i % 3) * 0.32, 1.02, zWall + 0.42 - Math.floor(i / 3) * 0.3);
+    vaultGroup.add(cup);
+  }
+  if (!deskSign) {
+    deskSign = makeTextSprite("🏆 대회 접수", "#b07800");
+    deskSign.scale.multiplyScalar(0.8);
+  }
+  deskSign.position.set(vaultX, 2.55, zWall + 0.4);
+  vaultGroup.add(deskSign);
   groups.fixtures.add(vaultGroup);
 
   // ---------- 라운지 (좌측벽) ----------
@@ -1599,6 +1653,14 @@ export function update(snapshot) {
     }
   });
 
+  // 처음 매장을 그릴 때는 손님이 한 명씩 걸어 들어올 때까지 텅 비어 보이지 않게, 목표 인원 대부분을 이미 앉혀둔다
+  if (!prefilled) {
+    prefilled = true;
+    const { poker, other } = customerTargets();
+    for (let i = 0; i < Math.round(poker * 0.85); i++) spawnCustomer("poker", true);
+    for (let i = 0; i < Math.round(other * 0.5); i++) spawnCustomer("other", true);
+  }
+
   const note = document.getElementById("floor-note");
   if (note) {
     if (capacity > shownCapacity) {
@@ -1618,20 +1680,51 @@ export function update(snapshot) {
 // ============================================================
 const ACTIVITY_LABEL = { poker: "♠", bar: "🍺", dart: "🎯", jukebox: "♪", sofa: "💬" };
 
-function spawnCustomer() {
-  const free = activitySpots.filter((s) => !s.taken);
-  if (!free.length) return;
-  if (customers.length >= Math.min(free.length + customers.length, 16)) return;
+// 손님 목표 인원 — 홀덤 테이블은 전체 좌석 × 착석 비율(방문객이 많을수록 큼), 나머지 기물은 소수만
+function customerTargets() {
+  let pokerSeats = 0;
+  activitySpots.forEach((s) => {
+    if (s.type === "poker") pokerSeats++;
+  });
+  const other = Math.min(activitySpots.length - pokerSeats, OTHER_CUSTOMER_TARGET);
+  const poker = Math.min(Math.round(pokerSeats * tableOccupancy), MAX_CUSTOMERS - other);
+  return { poker, other };
+}
 
-  // 어떤 종류의 자리로 갈지(테이블/바/소파/다트/주크박스)는 기존처럼 전체 빈자리 중 무작위로 고르되,
-  // 그 결과 홀덤 테이블로 가게 됐다면 안쪽(인덱스가 작은, 입구에서 먼) 테이블부터 채운다 — 여러 테이블에
-  // 손님이 듬성듬성 흩어지는 대신 안쪽 테이블이 꽉 차야 다음 테이블로 넘어가는 흐름을 만들면서도,
-  // 바/소파/다트/주크박스가 아예 안 쓰이게 되진 않게 한다.
+// 목표보다 모자란 쪽으로 손님을 들여보낸다. 테이블이 많이 비어 있으면 빠르게 연달아 들어온다.
+function updateSpawning(dt) {
+  spawnTimer -= dt;
+  if (spawnTimer > 0) return;
+  const { poker, other } = customerTargets();
+  let pokerNow = 0;
+  let otherNow = 0;
+  customers.forEach((c) => {
+    if (c.phase === "leave") return;
+    if (c.spot.type === "poker") pokerNow++;
+    else otherNow++;
+  });
+  const pokerGap = poker - pokerNow;
+  const otherGap = other - otherNow;
+  if (pokerGap <= 0 && otherGap <= 0) {
+    spawnTimer = 0.8;
+    return;
+  }
+  const goPoker = otherGap <= 0 || (pokerGap > 0 && Math.random() < pokerGap / (pokerGap + otherGap * 2));
+  spawnCustomer(goPoker ? "poker" : "other");
+  spawnTimer = goPoker && pokerGap > 3 ? 0.2 + Math.random() * 0.3 : 0.9 + Math.random() * 1.4;
+}
+
+// kind: "poker"(홀덤 테이블) | "other"(바/소파/다트/주크박스). seatNow면 걸어 들어오지 않고 바로 자리에 앉힌다.
+function spawnCustomer(kind, seatNow = false) {
+  const free = activitySpots.filter((s) => !s.taken && (kind === "poker" ? s.type === "poker" : s.type !== "poker"));
+  if (!free.length) return;
+
+  // 홀덤 테이블은 안쪽(인덱스가 작은, 입구에서 먼) 테이블부터 채운다 — 손님이 여러 테이블에 듬성듬성
+  // 흩어지는 대신 안쪽 테이블이 꽉 차야 다음 테이블로 넘어간다.
   let spot = free[Math.floor(Math.random() * free.length)];
-  if (spot.type === "poker") {
-    const freeTableSeats = free.filter((s) => s.type === "poker");
-    const innermostIndex = freeTableSeats.reduce((m, s) => Math.min(m, s.tableIndex), Infinity);
-    const innermostSeats = freeTableSeats.filter((s) => s.tableIndex === innermostIndex);
+  if (kind === "poker") {
+    const innermostIndex = free.reduce((m, s) => Math.min(m, s.tableIndex), Infinity);
+    const innermostSeats = free.filter((s) => s.tableIndex === innermostIndex);
     spot = innermostSeats[Math.floor(Math.random() * innermostSeats.length)];
   }
   spot.taken = true;
@@ -1643,25 +1736,33 @@ function spawnCustomer() {
   const wrap = new THREE.Group();
   wrap.add(standing, seated);
   wrap.scale.setScalar(0.82 + Math.random() * 0.14);
+  // 손님은 수가 많아서 그림자를 끈다(그림자 패스가 두 배로 무거워짐). 발밑은 테이블·의자 그림자로 충분하다.
+  wrap.traverse((o) => {
+    o.castShadow = false;
+  });
 
   const entryPos = new THREE.Vector3(entrancePos.x + (Math.random() - 0.5) * 1.2, 0, entrancePos.z + (Math.random() - 0.5) * 1.2);
-  wrap.position.copy(entryPos);
+  wrap.position.copy(seatNow ? new THREE.Vector3(spot.x, 0, spot.z) : entryPos);
   groups.customers.add(wrap);
 
   const [dMin, dMax] = spot.duration;
-  customers.push({
+  const c = {
     mesh: wrap,
     standing,
     seated,
     spot,
-    phase: "enter",
+    phase: seatNow ? "act" : "enter",
     target: new THREE.Vector3(spot.x, 0, spot.z),
     entryPos,
-    timer: dMin + Math.random() * (dMax - dMin),
+    // 미리 앉혀둔 손님은 남은 시간을 흩어놔야 한꺼번에 일어나지 않는다
+    timer: seatNow ? Math.random() * dMax : dMin + Math.random() * (dMax - dMin),
     bobPhase: Math.random() * 10,
     actTimer: 1 + Math.random() * 2,
     props: [],
-  });
+    bubble: null,
+  };
+  customers.push(c);
+  if (seatNow) startActivity(c);
 }
 
 // 자리에 도착했을 때 그 기물에 맞는 소품을 놓는다
@@ -1772,11 +1873,7 @@ function pushOutOfObstacles(pos, ignoreId) {
 }
 
 function updateCustomers(dt, t) {
-  spawnTimer -= dt;
-  if (spawnTimer <= 0) {
-    spawnCustomer();
-    spawnTimer = 1.0 + Math.random() * 1.8;
-  }
+  updateSpawning(dt);
 
   const walkSpeed = 2.4;
   for (let i = customers.length - 1; i >= 0; i--) {
@@ -1814,7 +1911,8 @@ function updateCustomers(dt, t) {
       // 앉아 있는 손님은 살짝 흔들, 서 있는 손님은 제자리 걸음
       const base = c.spot.seated ? c.spot.sitY || 0 : 0;
       m.position.y = base + Math.sin(t * 2.2 + c.bobPhase) * 0.02;
-      if (c.timer <= 0) {
+      // 말풍선을 띄운 손님은 말풍선이 사라질 때까지 자리를 지킨다
+      if (c.timer <= 0 && !c.bubble) {
         endActivity(c);
         c.spot.taken = false;
         c.phase = "leave";
@@ -1859,6 +1957,150 @@ function makeTextSprite(text, color = "#ff5c8a") {
   sprite.scale.set(canvas.width * scale, canvas.height * scale, 1);
   sprite.renderOrder = 999;
   return sprite;
+}
+
+// ============================================================
+// 💎 다이아 말풍선
+// ============================================================
+function getBubbleTexture() {
+  if (bubbleTexture) return bubbleTexture;
+  const canvas = document.createElement("canvas");
+  canvas.width = 128;
+  canvas.height = 144;
+  const ctx = canvas.getContext("2d");
+  ctx.lineJoin = "round";
+  // 말풍선 몸통 + 꼬리
+  ctx.fillStyle = "#ffffff";
+  ctx.strokeStyle = "#3a2a30";
+  ctx.lineWidth = 7;
+  ctx.beginPath();
+  ctx.moveTo(38, 8);
+  ctx.arcTo(120, 8, 120, 104, 30);
+  ctx.arcTo(120, 104, 8, 104, 30);
+  ctx.lineTo(78, 104);
+  ctx.lineTo(64, 134);
+  ctx.lineTo(50, 104);
+  ctx.arcTo(8, 104, 8, 8, 30);
+  ctx.arcTo(8, 8, 120, 8, 30);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  // 다이아(HUD 아이콘과 같은 모양을 도형으로 — 이모지는 기기마다 모양이 달라서 안 씀)
+  const P = (x, y) => [30 + x * 1.7, 22 + y * 1.7];
+  const poly = (pts, fill) => {
+    ctx.beginPath();
+    pts.forEach(([x, y], i) => (i ? ctx.lineTo(...P(x, y)) : ctx.moveTo(...P(x, y))));
+    ctx.closePath();
+    ctx.fillStyle = fill;
+    ctx.fill();
+  };
+  ctx.lineWidth = 4;
+  poly([[12, 5], [28, 5], [36, 15], [20, 35], [4, 15]], "#62d0f0");
+  ctx.stroke();
+  poly([[16, 15], [20, 5], [24, 15]], "#a8ecff");
+  ctx.beginPath();
+  ctx.moveTo(...P(4, 15));
+  ctx.lineTo(...P(36, 15));
+  ctx.moveTo(...P(16, 15));
+  ctx.lineTo(...P(20, 35));
+  ctx.lineTo(...P(24, 15));
+  ctx.moveTo(...P(16, 15));
+  ctx.lineTo(...P(20, 5));
+  ctx.lineTo(...P(24, 15));
+  ctx.stroke();
+  bubbleTexture = new THREE.CanvasTexture(canvas);
+  bubbleTexture.colorSpace = THREE.SRGBColorSpace;
+  return bubbleTexture;
+}
+
+// 화면에 보이는(HUD·시트에 안 가린) 위치인지 — 보이는 손님에게 우선 띄운다
+function isOnScreen(pos) {
+  const v = pos.clone().project(camera);
+  const bottom = document.body.classList.contains("sheet-open") ? 0.2 : -0.55;
+  return Math.abs(v.x) < 0.8 && v.y > bottom && v.y < 0.6;
+}
+
+export function spawnDiamondBubble(lifeSec = 12) {
+  if (!ready || bubbles.length >= MAX_BUBBLES) return false;
+  const seated = customers.filter((c) => c.phase === "act" && c.spot.type === "poker" && !c.bubble);
+  if (!seated.length) return false;
+  const visible = seated.filter((c) => isOnScreen(c.mesh.position));
+  const pool = visible.length ? visible : seated;
+  const c = pool[Math.floor(Math.random() * pool.length)];
+  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: getBubbleTexture(), depthTest: false, transparent: true }));
+  sprite.scale.set(1.0, 1.125, 1);
+  sprite.renderOrder = 998;
+  const baseY = 2.35;
+  sprite.position.set(c.mesh.position.x, baseY, c.mesh.position.z);
+  groups.bubbles.add(sprite);
+  const b = { sprite, customer: c, life: lifeSec, age: 0, baseY };
+  c.bubble = b;
+  bubbles.push(b);
+  return true;
+}
+
+function removeBubble(b) {
+  groups.bubbles.remove(b.sprite);
+  b.sprite.material.dispose();
+  if (b.customer.bubble === b) b.customer.bubble = null;
+  bubbles = bubbles.filter((x) => x !== b);
+}
+
+// 탭 위치에서 가장 가까운 말풍선(화면 거리 기준, 말풍선 크기보다 조금 넉넉하게)
+function pickBubble(clientX, clientY) {
+  if (!bubbles.length) return null;
+  const rect = renderer.domElement.getBoundingClientRect();
+  const pxPerUnit = (rect.height * camera.zoom) / (camera.top - camera.bottom);
+  const radius = Math.max(34, pxPerUnit * 0.8);
+  let best = null;
+  let bestD = radius;
+  bubbles.forEach((b) => {
+    const v = b.sprite.position.clone().project(camera);
+    const sx = rect.left + ((v.x + 1) / 2) * rect.width;
+    const sy = rect.top + ((1 - v.y) / 2) * rect.height;
+    const d = Math.hypot(sx - clientX, sy - clientY);
+    if (d < bestD) {
+      bestD = d;
+      best = b;
+    }
+  });
+  return best;
+}
+
+function collectBubble(b) {
+  const pos = b.sprite.position.clone();
+  removeBubble(b);
+  const amount = typeof window.PubScene3D.onDiamondBubble === "function" ? window.PubScene3D.onDiamondBubble() : 0;
+  for (let i = 0; i < 6; i++) {
+    const gem = new THREE.Mesh(furnGeo.chipStack, toonMat(0x62d0f0, { transparent: true }));
+    gem.scale.set(0.8, 0.3, 0.8);
+    gem.position.set(pos.x + (Math.random() - 0.5) * 0.7, pos.y - 0.2, pos.z + (Math.random() - 0.5) * 0.7);
+    groups.bursts.add(gem);
+    bursts.push({ obj: gem, life: 0.8, kind: "float", vy: 1.6 + Math.random(), spin: (Math.random() - 0.5) * 8 });
+  }
+  if (amount) {
+    const label = makeTextSprite(`💎+${amount}`, "#1f8fc0");
+    label.position.set(pos.x, pos.y + 0.3, pos.z);
+    groups.bursts.add(label);
+    bursts.push({ obj: label, life: 1.3, kind: "float", vy: 0.8, spin: 0 });
+  }
+}
+
+function updateBubbles(dt, t) {
+  for (const b of [...bubbles]) {
+    b.life -= dt;
+    b.age += dt;
+    // 손님이 자리를 떠났거나(매장 재배치 등) 시간이 다 되면 사라진다
+    if (b.life <= 0 || b.customer.phase !== "act") {
+      removeBubble(b);
+      continue;
+    }
+    const pop = Math.min(1, b.age / 0.25); // 처음 뜰 때 톡 튀어나오게
+    const pulse = 1 + Math.sin(t * 5) * 0.05;
+    b.sprite.scale.set(1.0 * pop * pulse, 1.125 * pop * pulse, 1);
+    b.sprite.position.set(b.customer.mesh.position.x, b.baseY + Math.sin(t * 3 + b.age) * 0.08, b.customer.mesh.position.z);
+    b.sprite.material.opacity = Math.min(1, b.life / 1.5);
+  }
 }
 
 export function chipBurst(colorHex) {
@@ -1958,6 +2200,7 @@ function animate() {
   });
 
   updateCustomers(dt, t);
+  updateBubbles(dt, t);
   updateTableCoins(dt);
   updateBursts(dt);
 
@@ -1966,7 +2209,7 @@ function animate() {
   renderer.render(scene, camera);
 }
 
-window.PubScene3D = { init, update, chipBurst };
+window.PubScene3D = { init, update, chipBurst, spawnDiamondBubble };
 
 // 개발용 점검 훅: 손님이 테이블/카운터 안으로 파고들었는지 실측한다.
 window.__pubDebug = () => {
@@ -1982,8 +2225,18 @@ window.__pubDebug = () => {
       }
     }
   });
+  const rect = renderer.domElement.getBoundingClientRect();
   return {
     customers: customers.length,
+    // 테이블에 앉아 있는 손님 / 테이블 좌석 / 목표
+    pokerSeated: customers.filter((c) => c.phase === "act" && c.spot.type === "poker").length,
+    pokerSeats: activitySpots.filter((s) => s.type === "poker").length,
+    targets: customerTargets(),
+    // 말풍선의 화면 좌표(터치 테스트용)
+    bubbles: bubbles.map((b) => {
+      const v = b.sprite.position.clone().project(camera);
+      return { x: rect.left + ((v.x + 1) / 2) * rect.width, y: rect.top + ((1 - v.y) / 2) * rect.height };
+    }),
     insideObstacles: inside,
     spots: activitySpots.length,
     obstacles: obstacles.length,

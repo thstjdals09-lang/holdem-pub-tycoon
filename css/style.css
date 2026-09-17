@@ -81,19 +81,55 @@ button, textarea, input { font-family: inherit; }
   align-items: flex-start;
 }
 
-.currency {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 5px 14px 5px 6px;
-  border-radius: 999px;
+/* ===== 재화 지갑: BB / 다이아 / 트로피를 한 장에 묶는다 =====
+   폭을 고정하고 숫자는 넘치면 말줄임 — 숫자 자릿수가 바뀔 때마다 패널이 길어졌다 짧아졌다 하지 않게 */
+.wallet {
+  width: 184px;
+  border-radius: 18px;
   background: var(--glass);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
   border: 2px solid var(--glass-line);
   box-shadow: 0 3px 0 rgba(58, 42, 48, 0.1), 0 6px 14px rgba(120, 70, 60, 0.16);
-  min-width: 124px;
+  overflow: hidden;
 }
+.wallet-main { display: flex; align-items: center; gap: 7px; padding: 6px 10px 5px 7px; }
+.wallet-main-body { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; line-height: 1.05; }
+.wallet-bb,
+.wallet-rate,
+.wallet-cell b {
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-variant-numeric: tabular-nums;
+}
+.wallet-bb { font-family: "Jua", sans-serif; font-size: 16px; color: var(--ink); letter-spacing: -0.3px; }
+.wallet-rate { font-size: 10px; color: var(--green-sh); margin-top: 2px; }
+.wallet-sub {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); /* 다이아 칸은 ＋ 버튼까지 들어가서 더 넓게 */
+  border-top: 1.5px dashed rgba(58, 42, 48, 0.16);
+}
+.wallet-cell {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  padding: 5px 5px 6px 7px;
+  margin: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.wallet-cell + .wallet-cell { border-left: 1.5px dashed rgba(58, 42, 48, 0.16); }
+.wallet-cell b { flex: 1 1 auto; min-width: 0; font-family: "Jua", sans-serif; font-size: 13.5px; }
+.wallet-cell:first-child b { color: #1f7f9c; }
+.wallet-cell:last-child b { color: #9a6200; }
 .cur-icon {
   width: 28px;
   height: 28px;
@@ -111,22 +147,20 @@ button, textarea, input { font-family: inherit; }
 .cur-icon-dia {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Cpath d='M12 5h16l8 10-16 20L4 15z' fill='%2362d0f0' stroke='%233a2a30' stroke-width='2.5' stroke-linejoin='round'/%3E%3Cpath d='M12 5l4 10-4 0z' fill='%23a8ecff'/%3E%3Cpath d='M4 15h32' stroke='%233a2a30' stroke-width='2'/%3E%3Cpath d='M16 15l4 20 4-20' stroke='%233a2a30' stroke-width='2' fill='none'/%3E%3Cpath d='M16 15l4-10 4 10' fill='%23a8ecff' stroke='%233a2a30' stroke-width='2' stroke-linejoin='round'/%3E%3C/svg%3E");
 }
-.cur-body { display: flex; flex-direction: column; line-height: 1.05; min-width: 0; }
-.cur-value {
-  font-family: "Jua", sans-serif;
-  font-size: 17px;
-  color: var(--ink);
-  letter-spacing: -0.3px;
+/* 트로피 아이콘 */
+.cur-icon-trophy {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Cpath d='M11 9H6v3a6 6 0 0 0 6 6M29 9h5v3a6 6 0 0 1-6 6' fill='none' stroke='%233a2a30' stroke-width='2.8' stroke-linecap='round'/%3E%3Cpath d='M11 5h18v9a9 9 0 0 1-18 0z' fill='%23ffc85c' stroke='%233a2a30' stroke-width='2.5' stroke-linejoin='round'/%3E%3Cpath d='M15.5 8.5v5' stroke='%23ffe08a' stroke-width='2.6' stroke-linecap='round'/%3E%3Cpath d='M20 23v6' stroke='%233a2a30' stroke-width='3.2'/%3E%3Crect x='12' y='29' width='16' height='6.5' rx='2' fill='%23cf9522' stroke='%233a2a30' stroke-width='2.5'/%3E%3C/svg%3E");
 }
-.cur-rate { font-size: 10px; color: var(--muted); margin-top: 2px; }
-.currency-dia .cur-value { color: #1f7f9c; }
+.cur-icon.sm { width: 19px; height: 19px; flex: 0 0 19px; }
 
-/* 활성 부스트 표시 */
+/* 활성 부스트·대회 표시 */
 /* 재화와 같은 우측 열에 있으므로 오른쪽으로 붙인다 */
 .boost-strip { display: flex; gap: 5px; flex-wrap: wrap; justify-content: flex-end; max-width: 180px; }
 .boost-pill {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
+  min-width: 84px; /* 남은 시간 글자가 바뀌어도 알약 폭이 흔들리지 않게 */
   gap: 4px;
   font-size: 11px;
   font-family: "Jua", sans-serif;
@@ -138,6 +172,16 @@ button, textarea, input { font-family: inherit; }
   box-shadow: 0 2px 0 var(--gold-sh);
   animation: boostPulse 1.4s ease-in-out infinite;
 }
+.boost-pill i { font-style: normal; font-variant-numeric: tabular-nums; }
+.tourney-pill {
+  min-width: 66px;
+  cursor: pointer;
+  color: #fff;
+  background: linear-gradient(180deg, #4fbf7a, #1f7a4a);
+  box-shadow: 0 2px 0 #145233;
+  animation: none;
+}
+.tourney-pill.ready { color: #6b2a00; background: linear-gradient(180deg, #ffe08a, #ffb43c); box-shadow: 0 2px 0 var(--gold-sh); animation: boostPulse 1.1s ease-in-out infinite; }
 @keyframes boostPulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.06); } }
 
 /* ===== 우측 상단: 재화 ===== */
@@ -204,7 +248,7 @@ button, textarea, input { font-family: inherit; }
   box-shadow: 0 1px 3px rgba(0,0,0,.25);
 }
 .profile-meta { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
-.profile-name { font-family: "Jua", sans-serif; font-size: 13px; color: var(--ink); }
+.profile-name { font-family: "Jua", sans-serif; font-size: 13px; color: var(--ink); width: 72px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .xp-bar {
   display: block;
   width: 62px;
@@ -242,7 +286,8 @@ button, textarea, input { font-family: inherit; }
   cursor: pointer;
   position: relative;
 }
-.icon-btn small { font-size: 9px; font-family: "Jua", sans-serif; color: var(--pink-d); }
+.icon-btn small { font-size: 9px; font-family: "Jua", sans-serif; color: var(--pink-d); font-variant-numeric: tabular-nums; }
+#prestige-badge { min-width: 52px; }
 .icon-btn:active { transform: translateY(2px); box-shadow: 0 1px 0 rgba(58,42,48,.1); }
 
 /* ===== 우측 사이드 레일 ===== */
@@ -346,7 +391,8 @@ body.sheet-open .floor-note { display: none; }
   -webkit-backdrop-filter: blur(10px);
   border: 2px solid var(--glass-line);
   box-shadow: 0 3px 0 rgba(58, 42, 48, 0.1), 0 6px 14px rgba(120, 70, 60, 0.18);
-  max-width: min(300px, 80vw);
+  /* 내용(진행도 숫자·설명)이 바뀔 때마다 배지 폭이 흔들리지 않게 폭을 고정 */
+  width: min(300px, 80vw);
   align-self: flex-end;
   cursor: pointer;
 }
@@ -396,10 +442,14 @@ body.sheet-open .floor-note { display: none; }
   transition: width 0.35s ease;
 }
 .quest-claim {
-  flex: 0 0 auto;
-  min-width: 0;
-  padding: 6px 10px;
-  font-size: 11.5px;
+  flex: 0 0 76px;
+  width: 76px;
+  padding: 6px 4px;
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-variant-numeric: tabular-nums;
 }
 .quest-banner.ready .quest-claim { animation: boostPulse 1.1s ease-in-out infinite; }
 
@@ -537,6 +587,44 @@ body.sheet-open .floor-note { display: none; }
   background: rgba(58, 42, 48, 0.18);
 }
 .sheet-title { font-family: "Jua", sans-serif; font-size: 17px; color: var(--pink-d); }
+.sheet-title[hidden] { display: none; }
+/* 세부 탭 칩 — 네비 묶음 안의 탭을 고른다. 칩이 많으면 가로로 스크롤 */
+.sheet-handle-row:has(.sheet-subtabs:not([hidden])) { justify-content: flex-start; padding-left: 10px; }
+.sheet-subtabs {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  gap: 5px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  touch-action: pan-x;
+  scrollbar-width: none;
+  padding: 3px 2px;
+}
+.sheet-subtabs::-webkit-scrollbar { display: none; }
+.sheet-subtabs[hidden] { display: none; }
+.subtab {
+  position: relative;
+  flex: 0 0 auto;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 2px solid rgba(58, 42, 48, 0.12);
+  background: #fff;
+  font-family: "Jua", sans-serif;
+  font-size: 12.5px;
+  color: var(--ink-soft);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.subtab.active {
+  background: linear-gradient(180deg, #ff9ec2, var(--pink-d));
+  border-color: transparent;
+  color: #fff;
+  box-shadow: 0 2px 0 var(--pink-sh);
+}
+.subtab .dot { top: -3px; right: -2px; width: 11px; height: 11px; }
+.tab-lead { margin: 0 2px 10px; line-height: 1.45; }
+.tab-lead b { color: var(--ink); }
 .sheet-qty-row {
   flex: 0 0 auto;
   display: flex;
@@ -652,6 +740,9 @@ body.sheet-open .floor-note { display: none; }
 .btn:disabled { filter: grayscale(0.75) opacity(0.55); cursor: not-allowed; box-shadow: 0 3px 0 rgba(58,42,48,.16); }
 .btn-wide { width: 100%; }
 
+/* 카드 버튼은 폭 고정 — 가격 자릿수가 바뀔 때마다 카드 설명이 다시 줄바꿈되며 흔들리지 않게 */
+.item-card > .btn { flex: 0 0 102px; width: 102px; padding-left: 4px; padding-right: 4px; }
+.item-card > .btn small { max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
 .btn-buy {
   flex: 0 0 auto;
   min-width: 78px;
@@ -752,6 +843,35 @@ body.sheet-open .floor-note { display: none; }
   box-shadow: 0 4px 0 #2e8a48, 0 6px 12px rgba(46, 138, 72, 0.35);
   animation: boostPulse 1.4s ease-in-out infinite;
 }
+/* 연속 뽑기 설정 */
+.auto-pull {
+  position: relative;
+  margin-top: 10px;
+  padding: 8px;
+  border-radius: 14px;
+  background: rgba(0, 0, 0, 0.22);
+  border: 1.5px solid rgba(255, 255, 255, 0.22);
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.auto-pull-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.auto-pull-label { font-family: "Jua", sans-serif; font-size: 12.5px; color: #ffe08a; flex: 0 0 auto; }
+.auto-pull select {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 30px;
+  padding: 0 6px;
+  border-radius: 10px;
+  border: 1.5px solid rgba(255, 255, 255, 0.45);
+  background: rgba(255, 255, 255, 0.95);
+  color: var(--ink);
+  font-family: "Jua", sans-serif;
+  font-size: 12px;
+}
+.auto-pull-ticket { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; color: rgba(255, 255, 255, 0.92); flex: 1 1 auto; }
+.auto-pull-ticket input { width: 17px; height: 17px; accent-color: #45c46a; margin: 0; }
+.auto-pull .btn { flex: 0 0 auto; padding: 7px 12px; font-size: 12.5px; }
 .gacha-ticket-count {
   position: relative;
   margin-left: auto;
@@ -931,6 +1051,9 @@ body.sheet-open .floor-note { display: none; }
 
 /* 딜러 상세 모달 */
 .dealer-modal-box { max-width: 330px; }
+.dealer-modal-actions { display: flex; gap: 8px; margin-top: 10px; }
+.dealer-modal-actions .btn { flex: 1 1 0; min-width: 0; }
+.dealer-modal-actions .btn small { white-space: nowrap; }
 .dealer-detail { text-align: center; }
 .dealer-detail img {
   width: 128px;
@@ -1000,6 +1123,65 @@ body.sheet-open .floor-note { display: none; }
 .theme-name { font-family: "Jua", sans-serif; font-size: 13px; }
 .theme-cost { font-size: 11px; color: var(--ink-soft); }
 .theme-card .btn { width: 100%; }
+
+/* ---------- 🏆 대회 ---------- */
+.tourney-hero {
+  position: relative;
+  overflow: hidden;
+  border-radius: 20px;
+  padding: 12px;
+  color: #fff;
+  background: radial-gradient(120% 90% at 50% 0%, #2f9a5e, #17603a 60%, #0f4128);
+  border: 3px solid rgba(255, 255, 255, 0.35);
+  box-shadow: var(--shadow-card);
+}
+.tourney-hero-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+.tourney-stat { display: inline-flex; align-items: center; gap: 5px; font-family: "Jua", sans-serif; font-size: 13px; }
+.tourney-stat b { font-size: 16px; color: #ffe08a; font-variant-numeric: tabular-nums; }
+.tourney-power-detail { font-size: 10.5px; color: rgba(255, 255, 255, 0.8); margin: 3px 0 10px; }
+.tourney-idle {
+  padding: 12px;
+  border-radius: 14px;
+  background: rgba(0, 0, 0, 0.22);
+  font-size: 12px;
+  text-align: center;
+}
+.tourney-live {
+  padding: 10px 11px;
+  border-radius: 14px;
+  background: rgba(0, 0, 0, 0.26);
+  border: 1.5px solid rgba(255, 255, 255, 0.25);
+}
+.tl-head { display: flex; justify-content: space-between; align-items: baseline; gap: 6px; font-family: "Jua", sans-serif; font-size: 13.5px; }
+.tl-time { font-size: 13px; color: #ffe08a; font-variant-numeric: tabular-nums; min-width: 58px; text-align: right; }
+.tl-bar { height: 9px; margin: 8px 0 6px; border-radius: 999px; background: rgba(0, 0, 0, 0.35); overflow: hidden; }
+.tl-bar i { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, #ffe08a, #ffb43c); transition: width 0.5s linear; }
+.tl-info { font-size: 11.5px; color: rgba(255, 255, 255, 0.9); font-variant-numeric: tabular-nums; }
+.tl-info b { color: #fff; font-family: "Jua", sans-serif; font-size: 13px; }
+.tourney-live.done { text-align: center; }
+.tl-place { font-family: "Jua", sans-serif; font-size: 22px; margin: 8px 0 2px; color: #fff; }
+.tl-place small { display: block; font-size: 11.5px; color: rgba(255, 255, 255, 0.8); margin-top: 2px; }
+.place-win .tl-place,
+.place-podium .tl-place { color: #ffe08a; text-shadow: 0 0 10px rgba(255, 224, 138, 0.6); }
+.tl-reward { font-family: "Jua", sans-serif; font-size: 14px; margin: 6px 0 10px; }
+.tl-reward small { display: block; font-family: inherit; font-size: 10.5px; color: #ffd0a0; margin-top: 2px; }
+.tourney-card .item-icon { background: linear-gradient(180deg, #d9f5e3, #9fdcb5); }
+.tourney-card.locked { opacity: 0.72; }
+.tourney-card.locked .item-icon { filter: grayscale(1); }
+.matchup {
+  font-size: 10px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  color: #fff;
+  background: #9b8b7f;
+}
+.matchup.good { background: #3faa62; }
+.matchup.even { background: #e0a020; }
+.matchup.hard { background: #e0605a; }
+.matchup.over { background: #7a7aa0; }
+.trophy-card .item-icon { background: linear-gradient(180deg, #fff2c2, #ffd36a); }
+.lvl-chip[hidden] { display: none; }
+.offline-cap { display: inline-block; margin-top: 8px; font-size: 11.5px; line-height: 1.5; color: #b0602a; }
 
 /* ---------- 프레스티지 ---------- */
 .prestige-box {
@@ -1126,7 +1308,22 @@ body.sheet-open .floor-note { display: none; }
   border-color: rgba(255,255,255,.4);
 }
 .gacha-head { flex: none; color: #ffe08a !important; }
-.gacha-result-box #gacha-close { flex: none; }
+.gacha-modal-actions { flex: none; display: flex; gap: 8px; }
+.gacha-modal-actions .btn { flex: 1 1 0; min-width: 0; white-space: nowrap; }
+/* 연속 뽑기 누적 요약 */
+.gacha-auto-summary {
+  flex: none;
+  margin: -2px 0 10px;
+  padding: 8px;
+  border-radius: 14px;
+  background: rgba(0, 0, 0, 0.28);
+  color: #fff;
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+.gacha-auto-summary[hidden] { display: none; }
+.gacha-auto-summary .rarity-chip-row { margin: 6px 0; justify-content: center; }
+.gacha-auto-summary .gas-reason { color: #ffe08a; font-family: "Jua", sans-serif; min-height: 1.45em; }
 .gacha-results {
   flex: 1 1 auto;
   min-height: 0;
@@ -1139,6 +1336,8 @@ body.sheet-open .floor-note { display: none; }
   margin-bottom: 14px;
 }
 .gacha-results.many { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 5px; }
+/* 연속 뽑기 중엔 다음 묶음이 금방 오니까 카드가 짧게 한꺼번에 뜬다 */
+.gacha-results.auto .gacha-result-item { animation-duration: 0.16s; }
 .gacha-results.many .gacha-result-item { padding: 3px; border-radius: 10px; }
 .gacha-results.many .gacha-result-item img { border-radius: 7px; }
 .gacha-results.many .gr-name { font-size: 8.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -1254,8 +1453,11 @@ body:has(.modal:not(.hidden)) #toast-wrap { bottom: auto; top: calc(var(--safe-t
 /* ---------- 작은 화면 대응 ---------- */
 @media (max-width: 380px) {
   :root { --nav-h: 56px; }
-  .currency { min-width: 108px; padding-right: 10px; }
-  .cur-value { font-size: 15.5px; }
+  .wallet { width: 174px; }
+  .wallet-bb { font-size: 15px; }
+  .wallet-cell b { font-size: 12.5px; }
+  .subtab { padding: 5px 8px; font-size: 11.5px; }
+  .item-card > .btn { flex-basis: 94px; width: 94px; }
   .rail-btn { width: 44px; height: 44px; font-size: 19px; }
   .bottom-nav .nav-label { font-size: 9.5px; }
   .bottom-nav .nav-icon { font-size: 17px; }
@@ -1326,27 +1528,24 @@ body:has(.modal:not(.hidden)) #toast-wrap { bottom: auto; top: calc(var(--safe-t
 .auth-form .btn { margin-top: 4px; }
 
 /* ---------- 재화 옆 상점 바로가기 ---------- */
-.currency-dia { position: relative; padding-right: 34px; }
 .add-currency-btn {
-  position: absolute;
-  right: 4px;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 24px;
-  height: 24px;
+  flex: 0 0 19px;
+  width: 19px;
+  height: 19px;
+  padding: 0;
   border-radius: 999px;
   border: none;
   background: linear-gradient(180deg, var(--gold-l), var(--gold));
   color: #6b3f00;
   font-family: "Jua", sans-serif;
-  font-size: 15px;
+  font-size: 13px;
   line-height: 1;
   display: grid;
   place-items: center;
   box-shadow: 0 2px 0 var(--gold-sh);
   cursor: pointer;
 }
-.add-currency-btn:active { transform: translateY(-50%) translateY(2px); box-shadow: none; }
+.add-currency-btn:active { transform: translateY(2px); box-shadow: none; }
 
 /* ---------- 상점 ---------- */
 .shop-card .item-icon { background: linear-gradient(180deg, #d6f0ff, #a6dcff); }
