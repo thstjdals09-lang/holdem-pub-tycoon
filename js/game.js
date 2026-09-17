@@ -1687,9 +1687,10 @@
     }
     setHtml(strip, pills.join(""));
   }
-  // 같은 글자면 DOM을 건드리지 않는다(0.2초마다 갱신되는 HUD가 레이아웃을 흔들지 않게)
+  // 같은 글자면 DOM을 건드리지 않는다(0.2초마다 갱신되는 HUD가 레이아웃을 흔들지 않게).
+  // 요소가 없어도 게임 전체가 멈추지 않게 조용히 넘어간다(캐시가 섞여 옛 HTML이 뜨는 경우 대비).
   function setText(el, text) {
-    if (el.textContent !== text) el.textContent = text;
+    if (el && el.textContent !== text) el.textContent = text;
   }
 
   // 하단 퀘스트 배너 — 성장 미션이 남아 있으면 그걸, 끝났으면 반복 퀘스트를 보여준다.
@@ -1806,7 +1807,7 @@
 
   // 내용이 바뀔 때만 다시 쓴다(0.5초마다 같은 내용을 덮어쓰면 누르는 도중 버튼 속 글자가 교체됨)
   function setHtml(el, html) {
-    if (el.dataset.html === html) return;
+    if (!el || el.dataset.html === html) return;
     el.innerHTML = html;
     el.dataset.html = html;
   }
