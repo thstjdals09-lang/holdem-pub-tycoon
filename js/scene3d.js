@@ -1,20 +1,24 @@
 // PubScene3D: 홀덤펍을 귀여운 카툰(셀셰이딩) 스타일 3D 씬으로 렌더링한다.
 // game.js(클래식 스크립트)가 window.PubScene3D를 통해 이 모듈과 통신한다.
+//
+// 화면 설계 메모
+//  - 안개(Fog)를 쓰지 않는다. 직교(Orthographic) 아이소메트릭 카메라는 씬 전체가 비슷한
+//    깊이에 놓이기 때문에 Fog를 걸면 매장 안쪽 절반이 통째로 하얗게 날아간다.
+//    공간감은 Fog 대신 하늘 그라디언트 + 그림자로 낸다.
+//  - 세로로 긴 모바일 화면에서도 테이블이 충분히 크게 보이도록 프러스텀을 가로 기준으로 맞추고,
+//    대신 드래그로 매장 안을 둘러볼 수 있게 팬(pan)을 허용한다 (각도는 고정).
+//  - 매장 슬롯이 늘어나면 바닥/벽이 실제로 함께 넓어진다.
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
 
 // 사이트 CSS 팔레트(--accent, --accent-2, --green 등)와 통일한 3D 색상
 const COLORS = {
-  sky: 0xffe3d1,
-  fog: 0xffe3d1,
   floorBase: 0xf3c988,
   floorLine: 0xdba55f,
   wallBack: 0xffd3e6,
   wallSide: 0xffe6d5,
   wallTrim: 0xff8fab,
-  tableFelt: 0x7bc67e,
-  tableFeltDark: 0x5fa663,
   tableRim: 0xb97a4a,
   tableLeg: 0x7a5233,
   emptySlot: 0xffc85c,
@@ -37,12 +41,25 @@ const COLORS = {
   lightPink: 0xff9ec2,
 };
 
+// 딜러 등급별 정장/포인트 색 — 도감 등급이 매장 안에서도 바로 보이게 한다.
+const DEALER_RARITY_LOOK = {
+  common: { suit: 0x5b5b6b, accent: 0xb9b9c6 },
+  rare: { suit: 0x2f4a7a, accent: 0x4fa3ff },
+  epic: { suit: 0x4a2f6b, accent: 0xc86bff },
+  legendary: { suit: 0x6b4a10, accent: 0xffc83c },
+};
+
 const CUSTOMER_SHIRT_COLORS = [0xff8fab, 0xffc85c, 0x7bc67e, 0x6fc1ff, 0xd98cff, 0xffa8a8, 0xffe08a];
-const ENTRANCE_Z = 7.5;
 const seatGeo = new THREE.CapsuleGeometry(0.15, 0.24, 2, 6);
 const COIN_POP_INTERVAL = 2.6;
 
-// 인테리어 테마: 바닥/벽/테이블 색상 + 바닥 무늬를 통째로 바꾼다.
+const TABLE_SPACING = 3.7;
+const ROOM_CENTER_Z = -1; // 매장 바닥의 중심 z
+const ROOM_MIN_W = 16;
+const ROOM_MIN_D = 15;
+const WALL_H = 7;
+
+// 인테리어 테마: 바닥/벽/테이블 색상 + 바닥 무늬 + 하늘 그라디언트를 통째로 바꾼다.
 const THEMES = {
   classic: {
     floor: 0xf3c988,
@@ -50,6 +67,7 @@ const THEMES = {
     wallBack: 0xffd3e6,
     wallSide: 0xffe6d5,
     trim: 0xff8fab,
+    sky: ["#fff3e4", "#ffd9c2"],
     felt: [0x7bc67e, 0xff9ec2, 0x6fc1ff, 0xffc85c, 0xd0a0ff, 0x8fe0c8],
   },
   princess: {
@@ -58,6 +76,7 @@ const THEMES = {
     wallBack: 0xffe6f5,
     wallSide: 0xfff0fa,
     trim: 0xff8fd8,
+    sky: ["#fff6fb", "#ffdcef"],
     felt: [0xff9ec2, 0xffc4e0, 0xffe08a, 0xd9a8ff, 0xffb3d9, 0xfcd7ff],
   },
   european: {
@@ -66,6 +85,7 @@ const THEMES = {
     wallBack: 0x7a5a3f,
     wallSide: 0x9a7a54,
     trim: 0xd4af37,
+    sky: ["#f0e2c6", "#cbae80"],
     felt: [0x6b3f2a, 0x8a5a3b, 0x4a6741, 0x5a4a7a, 0x7a3a3a, 0x8a6a2a],
   },
   neon: {
@@ -74,6 +94,7 @@ const THEMES = {
     wallBack: 0x1a1030,
     wallSide: 0x231640,
     trim: 0x00e5ff,
+    sky: ["#3a2560", "#140c26"],
     felt: [0xff2fd0, 0x00e5ff, 0xffe600, 0x7c3aff, 0x2fffb0, 0xff5050],
   },
 };
@@ -88,13 +109,24 @@ let ready = false;
 let toonGradient;
 let outlineMat;
 let seatMaterials = [];
-let frustumHalfHeight = 11;
 let raycaster;
 let pointerStart = null;
-let currentTheme = "classic";
+let currentTheme = null;
 let currentPerTableIncome = 0;
 let showCoinPops = true;
 let floorMesh, floorMat, backWallMat, sideWallMat, backTrimMat;
+let backWallMesh, leftWallMesh, rightWallMesh, backTrimMesh, stringLightsGroup;
+
+// 매장 크기 (확장에 따라 커진다)
+let roomW = 0;
+let roomD = 0;
+let entranceZ = 8;
+
+// 고정 45°/35° 아이소메트릭 오프셋 — 카메라는 항상 target + 이 벡터에 놓인다.
+const ISO_OFFSET = new THREE.Vector3(14, 13.5, 14);
+const BASE_HALF_H = 9.5; // 기본 세로 프러스텀 (테이블이 시원하게 보이는 크기)
+const MIN_HALF_W = 6.4; // 세로 화면에서도 최소한 이만큼의 가로 폭은 보이게
+let frustumHalfHeight = BASE_HALF_H;
 
 // ---------- 헬퍼: 카툰 재질 / 텍스처 / 아웃라인 ----------
 function makeToonGradient() {
@@ -114,6 +146,22 @@ function makeToonGradient() {
 
 function toonMat(color, extra) {
   return new THREE.MeshToonMaterial({ color, gradientMap: toonGradient, ...extra });
+}
+
+// Fog 대신 공간감을 주는 배경 그라디언트
+function makeSkyTexture(topColor, bottomColor) {
+  const canvas = document.createElement("canvas");
+  canvas.width = 2;
+  canvas.height = 256;
+  const ctx = canvas.getContext("2d");
+  const grad = ctx.createLinearGradient(0, 0, 0, 256);
+  grad.addColorStop(0, topColor);
+  grad.addColorStop(1, bottomColor);
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, 2, 256);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
 }
 
 function makeFloorTexture(pattern) {
@@ -197,8 +245,8 @@ const sharedGeo = {
   tableRim: new THREE.TorusGeometry(0.95, 0.1, 10, 28),
   tableLeg: new THREE.CylinderGeometry(0.12, 0.18, 0.5, 10),
   tableBase: new THREE.CylinderGeometry(0.4, 0.4, 0.06, 16),
-  emptyRing: new THREE.RingGeometry(0.5, 0.7, 28),
-  emptyPlus: new THREE.BoxGeometry(0.3, 0.04, 0.08),
+  emptyRing: new THREE.RingGeometry(0.76, 0.98, 28),
+  emptyPlus: new THREE.BoxGeometry(0.46, 0.04, 0.12),
   chip: new THREE.CylinderGeometry(0.26, 0.26, 0.07, 16),
   bottle: new THREE.CylinderGeometry(0.07, 0.09, 0.4, 8),
 };
@@ -259,13 +307,13 @@ function makeTextSprite(text) {
   tex.colorSpace = THREE.SRGBColorSpace;
   const mat = new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true });
   const sprite = new THREE.Sprite(mat);
-  const scale = 0.011;
+  const scale = 0.0068;
   sprite.scale.set(canvas.width * scale, canvas.height * scale, 1);
   sprite.renderOrder = 999;
   return sprite;
 }
 
-function buildTable({ index, hasDealer, feltColor, seatCount }) {
+function buildTable({ index, dealer, feltColor, seatCount }) {
   const g = new THREE.Group();
   g.userData = { type: "table", index, coinTimer: (index % 7) * (COIN_POP_INTERVAL / 7) };
   const base = new THREE.Mesh(sharedGeo.tableBase, toonMat(COLORS.tableLeg));
@@ -281,12 +329,25 @@ function buildTable({ index, hasDealer, feltColor, seatCount }) {
   rim.rotation.x = Math.PI / 2;
   rim.castShadow = true;
   g.add(base, leg, top, rim);
+
+  const hasDealer = !!dealer;
   if (hasDealer) {
-    const dealer = makePersonMesh(COLORS.dealerSuit, COLORS.dealerAccent, true);
-    dealer.position.set(1.35, 0, 0);
-    dealer.rotation.y = -Math.PI / 2.4;
-    dealer.scale.setScalar(0.82);
-    g.add(dealer);
+    const look = DEALER_RARITY_LOOK[dealer.rarity] || DEALER_RARITY_LOOK.common;
+    const person = makePersonMesh(look.suit, look.accent, true);
+    person.position.set(1.35, 0, 0);
+    person.rotation.y = -Math.PI / 2.4;
+    person.scale.setScalar(0.82);
+    g.add(person);
+    // 전설 딜러는 발치에 은은한 빛을 깔아 한눈에 구분되게 한다
+    if (dealer.rarity === "legendary" || dealer.rarity === "epic") {
+      const halo = new THREE.Mesh(
+        new THREE.RingGeometry(0.45, 0.72, 24),
+        new THREE.MeshBasicMaterial({ color: look.accent, transparent: true, opacity: 0.5, side: THREE.DoubleSide })
+      );
+      halo.rotation.x = -Math.PI / 2;
+      halo.position.set(1.35, 0.03, 0);
+      g.add(halo);
+    }
   }
 
   // 테이블 하나에 4~8명이 둘러앉은 모습 (딜러 자리는 비워둠)
@@ -326,11 +387,12 @@ function buildEmptySlot() {
   return g;
 }
 
-function gridPosition(i, cols, spacing) {
+// 테이블 격자를 매장 중앙에 맞춰 배치한다 (행/열 모두 가운데 정렬).
+function gridPosition(i, cols, rows, spacing) {
   const col = i % cols;
   const row = Math.floor(i / cols);
   const x = (col - (cols - 1) / 2) * spacing;
-  const z = row * spacing - 5;
+  const z = (row - (rows - 1) / 2) * spacing + ROOM_CENTER_Z;
   return [x, z];
 }
 
@@ -347,14 +409,8 @@ function buildPlant() {
 
 function buildNeon() {
   const g = new THREE.Group();
-  const board = new THREE.Mesh(
-    new RoundedBoxGeometry(2.2, 0.8, 0.1, 3, 0.12),
-    toonMat(0x3a2436)
-  );
-  const glow = new THREE.Mesh(
-    new THREE.PlaneGeometry(1.9, 0.5),
-    new THREE.MeshBasicMaterial({ color: 0xff6fa5 })
-  );
+  const board = new THREE.Mesh(new RoundedBoxGeometry(2.2, 0.8, 0.1, 3, 0.12), toonMat(0x3a2436));
+  const glow = new THREE.Mesh(new THREE.PlaneGeometry(1.9, 0.5), new THREE.MeshBasicMaterial({ color: 0xff6fa5 }));
   glow.position.z = 0.06;
   g.add(board, glow);
   return g;
@@ -375,10 +431,7 @@ function buildJukebox() {
   const g = new THREE.Group();
   const body = meshWO(new RoundedBoxGeometry(0.7, 1.1, 0.5, 3, 0.1), 0xffcf6b, 1.06);
   body.position.y = 0.55;
-  const screen = new THREE.Mesh(
-    new THREE.PlaneGeometry(0.4, 0.3),
-    new THREE.MeshBasicMaterial({ color: 0xfff1de })
-  );
+  const screen = new THREE.Mesh(new THREE.PlaneGeometry(0.4, 0.3), new THREE.MeshBasicMaterial({ color: 0xfff1de }));
   screen.position.set(0, 0.75, 0.26);
   g.add(body, screen);
   return g;
@@ -391,10 +444,7 @@ function buildChandelier() {
   const bulbs = new THREE.Group();
   for (let i = 0; i < 6; i++) {
     const a = (i / 6) * Math.PI * 2;
-    const bulb = new THREE.Mesh(
-      new THREE.SphereGeometry(0.06, 8, 8),
-      new THREE.MeshBasicMaterial({ color: COLORS.lightWarm })
-    );
+    const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 8), new THREE.MeshBasicMaterial({ color: COLORS.lightWarm }));
     bulb.position.set(Math.cos(a) * 0.4, -0.05, Math.sin(a) * 0.4);
     bulbs.add(bulb);
   }
@@ -413,21 +463,69 @@ function buildVip() {
   return g;
 }
 
-function buildStringLights() {
-  const g = new THREE.Group();
-  const count = 11;
+// 장식품은 레벨이 오를수록 개수가 늘어난다 (무한 업그레이드가 눈에 보이도록).
+function placeDecorRow(builder, level, originX, y, z, stepX, maxShown) {
+  const group = new THREE.Group();
+  const count = Math.min(level, maxShown);
+  for (let i = 0; i < count; i++) {
+    const mesh = builder();
+    mesh.position.set(originX + i * stepX, mesh.position.y + y, z);
+    // 레벨이 높을수록 아주 살짝 커진다
+    mesh.scale.setScalar(1 + Math.min(level, 20) * 0.012);
+    group.add(mesh);
+  }
+  return group;
+}
+
+function rebuildStringLights() {
+  if (stringLightsGroup) scene.remove(stringLightsGroup);
+  stringLightsGroup = new THREE.Group();
+  const count = Math.max(7, Math.round(roomW / 2.2));
+  const zBack = ROOM_CENTER_Z - roomD / 2;
   for (let i = 0; i < count; i++) {
     const t = i / (count - 1);
-    const x = (t - 0.5) * 26;
+    const x = (t - 0.5) * (roomW - 2);
     const sag = Math.sin(t * Math.PI) * 0.5;
     const bulb = new THREE.Mesh(
       new THREE.SphereGeometry(0.09, 8, 8),
       new THREE.MeshBasicMaterial({ color: i % 2 === 0 ? COLORS.lightWarm : COLORS.lightPink })
     );
-    bulb.position.set(x, 6.1 - sag, -10.9);
-    g.add(bulb);
+    bulb.position.set(x, 6.1 - sag, zBack + 0.1);
+    stringLightsGroup.add(bulb);
   }
-  return g;
+  scene.add(stringLightsGroup);
+}
+
+// 매장 크기(바닥/벽/전구)를 다시 만든다. 슬롯이 늘어나면 실제로 매장이 넓어진다.
+function applyRoomSize(w, d) {
+  if (w === roomW && d === roomD) return;
+  roomW = w;
+  roomD = d;
+  const zBack = ROOM_CENTER_Z - d / 2;
+  const zFront = ROOM_CENTER_Z + d / 2;
+  entranceZ = zFront - 1.2;
+
+  floorMesh.geometry.dispose();
+  floorMesh.geometry = new THREE.PlaneGeometry(w, d);
+  floorMesh.position.set(0, 0, ROOM_CENTER_Z);
+  floorMat.map.repeat.set(w / 4.6, d / 4.4);
+
+  backWallMesh.geometry.dispose();
+  backWallMesh.geometry = new THREE.PlaneGeometry(w, WALL_H);
+  backWallMesh.position.set(0, WALL_H / 2, zBack);
+
+  backTrimMesh.geometry.dispose();
+  backTrimMesh.geometry = new THREE.BoxGeometry(w, 0.3, 0.05);
+  backTrimMesh.position.set(0, 1.3, zBack + 0.03);
+
+  const sideGeo = new THREE.PlaneGeometry(d, WALL_H);
+  leftWallMesh.geometry.dispose();
+  leftWallMesh.geometry = sideGeo;
+  leftWallMesh.position.set(-w / 2, WALL_H / 2, ROOM_CENTER_Z);
+  rightWallMesh.geometry = sideGeo;
+  rightWallMesh.position.set(w / 2, WALL_H / 2, ROOM_CENTER_Z);
+
+  rebuildStringLights();
 }
 
 export function init(containerEl) {
@@ -440,16 +538,14 @@ export function init(containerEl) {
     raycaster = new THREE.Raycaster();
 
     scene = new THREE.Scene();
-    scene.background = new THREE.Color(COLORS.sky);
-    scene.fog = new THREE.Fog(COLORS.fog, 18, 34);
+    scene.background = makeSkyTexture(THEMES.classic.sky[0], THEMES.classic.sky[1]);
+    // Fog 없음 — 직교 카메라에서는 매장 안쪽이 통째로 날아가버린다.
 
     const width = container.clientWidth || 320;
     const height = container.clientHeight || 320;
-    camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 100);
-    // 고정된 45°/35° 대각선 앵글 - 카이로소프트류 타이쿤 게임의 아이소메트릭 시점
-    const isoOffset = new THREE.Vector3(14, 13.5, 14);
-    const isoTarget = new THREE.Vector3(0, 0, -1);
-    camera.position.copy(isoTarget).add(isoOffset);
+    camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 200);
+    const isoTarget = new THREE.Vector3(0, 0, ROOM_CENTER_Z);
+    camera.position.copy(isoTarget).add(ISO_OFFSET);
     applyFrustum(width / height);
 
     renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -462,63 +558,61 @@ export function init(containerEl) {
 
     controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
-    controls.dampingFactor = 0.08;
-    controls.enablePan = false;
-    controls.enableRotate = false; // 고정 아이소메트릭 시점 - 회전 대신 확대/축소만 허용
-    controls.minZoom = 0.65;
-    controls.maxZoom = 1.8;
+    controls.dampingFactor = 0.1;
+    controls.enableRotate = false; // 고정 아이소메트릭 시점
+    controls.enablePan = true; // 대신 드래그로 매장 안을 둘러본다
+    controls.screenSpacePanning = false;
+    controls.panSpeed = 1.1;
+    controls.minZoom = 0.6;
+    controls.maxZoom = 2.4;
+    controls.touches = { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_PAN };
+    controls.mouseButtons = { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
     controls.target.copy(isoTarget);
     controls.update();
 
-    scene.add(new THREE.HemisphereLight(0xfff0e0, 0xd9a35f, 0.85));
+    scene.add(new THREE.HemisphereLight(0xfff0e0, 0xd9a35f, 0.9));
     const sun = new THREE.DirectionalLight(0xfff3d6, 1.0);
-    sun.position.set(6, 12, 7);
+    sun.position.set(6, 14, 7);
     sun.castShadow = true;
-    sun.shadow.mapSize.set(1024, 1024);
-    sun.shadow.camera.left = -18;
-    sun.shadow.camera.right = 18;
-    sun.shadow.camera.top = 14;
-    sun.shadow.camera.bottom = -14;
+    sun.shadow.mapSize.set(2048, 2048);
+    sun.shadow.camera.left = -24;
+    sun.shadow.camera.right = 24;
+    sun.shadow.camera.top = 20;
+    sun.shadow.camera.bottom = -20;
     sun.shadow.camera.near = 1;
-    sun.shadow.camera.far = 30;
+    sun.shadow.camera.far = 46;
     sun.shadow.bias = -0.002;
     scene.add(sun);
-    const fill = new THREE.DirectionalLight(0xffd7ea, 0.25);
+    const fill = new THREE.DirectionalLight(0xffd7ea, 0.3);
     fill.position.set(-6, 6, -4);
     scene.add(fill);
 
     floorMat = toonMat(COLORS.floorBase, { map: makeFloorTexture("plank") });
     floorMat.userData.pattern = "plank";
-    floorMesh = new THREE.Mesh(new THREE.PlaneGeometry(28, 20), floorMat);
+    floorMesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), floorMat);
     floorMesh.rotation.x = -Math.PI / 2;
-    floorMesh.position.z = -1;
     floorMesh.receiveShadow = true;
     scene.add(floorMesh);
 
     backWallMat = toonMat(COLORS.wallBack);
-    const backWall = new THREE.Mesh(new THREE.PlaneGeometry(28, 7), backWallMat);
-    backWall.position.set(0, 3.5, -11);
-    backWall.receiveShadow = true;
-    scene.add(backWall);
+    backWallMesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), backWallMat);
+    backWallMesh.receiveShadow = true;
+    scene.add(backWallMesh);
+
     backTrimMat = toonMat(COLORS.wallTrim);
-    const backTrim = new THREE.Mesh(new THREE.BoxGeometry(28, 0.3, 0.05), backTrimMat);
-    backTrim.position.set(0, 1.3, -10.97);
-    scene.add(backTrim);
+    backTrimMesh = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), backTrimMat);
+    scene.add(backTrimMesh);
 
     sideWallMat = toonMat(COLORS.wallSide);
-    const sideWallGeo = new THREE.PlaneGeometry(20, 7);
-    const leftWall = new THREE.Mesh(sideWallGeo, sideWallMat);
-    leftWall.rotation.y = Math.PI / 2;
-    leftWall.position.set(-14, 3.5, -1);
-    leftWall.receiveShadow = true;
-    scene.add(leftWall);
-    const rightWall = new THREE.Mesh(sideWallGeo, sideWallMat);
-    rightWall.rotation.y = -Math.PI / 2;
-    rightWall.position.set(14, 3.5, -1);
-    rightWall.receiveShadow = true;
-    scene.add(rightWall);
+    leftWallMesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), sideWallMat);
+    leftWallMesh.rotation.y = Math.PI / 2;
+    leftWallMesh.receiveShadow = true;
+    rightWallMesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), sideWallMat);
+    rightWallMesh.rotation.y = -Math.PI / 2;
+    rightWallMesh.receiveShadow = true;
+    scene.add(leftWallMesh, rightWallMesh);
 
-    scene.add(buildStringLights());
+    applyRoomSize(ROOM_MIN_W, ROOM_MIN_D);
 
     groups = {
       tables: new THREE.Group(),
@@ -539,26 +633,32 @@ export function init(containerEl) {
   } catch (err) {
     console.error("[PubScene3D] init failed", err);
     container.innerHTML =
-      '<div style="padding:24px;text-align:center;color:#9b8b7f;font-size:13px;">이 브라우저는 3D 미리보기를 지원하지 않아요.<br/>게임 진행에는 문제없어요!</div>';
+      '<div style="padding:24px;text-align:center;color:#9b8b7f;font-size:13px;">이 브라우저는 3D 매장 화면을 지원하지 않아요.<br/>게임 진행에는 문제없어요!</div>';
   }
 }
 
 function applyTheme(themeId) {
   const t = THEMES[themeId] || THEMES.classic;
-  if (themeId === currentTheme && floorMat.userData.pattern === t.floorPattern) return;
+  if (themeId === currentTheme) return;
   currentTheme = themeId;
   floorMat.color.set(t.floor);
   if (floorMat.userData.pattern !== t.floorPattern) {
+    const repeat = floorMat.map.repeat.clone();
     floorMat.map = makeFloorTexture(t.floorPattern);
+    floorMat.map.repeat.copy(repeat);
     floorMat.needsUpdate = true;
     floorMat.userData.pattern = t.floorPattern;
   }
   backWallMat.color.set(t.wallBack);
   sideWallMat.color.set(t.wallSide);
   backTrimMat.color.set(t.trim);
+  if (scene.background && scene.background.dispose) scene.background.dispose();
+  scene.background = makeSkyTexture(t.sky[0], t.sky[1]);
 }
 
+// 세로로 긴 화면에서는 가로 폭 기준으로 프러스텀을 키워서 매장이 잘려 보이지 않게 한다.
 function applyFrustum(aspect) {
+  frustumHalfHeight = Math.max(BASE_HALF_H, MIN_HALF_W / Math.max(aspect, 0.2));
   camera.left = -frustumHalfHeight * aspect;
   camera.right = frustumHalfHeight * aspect;
   camera.top = frustumHalfHeight;
@@ -624,7 +724,7 @@ export function update(snapshot) {
     fixtures,
     staff,
     decor,
-    dealerCount = 0,
+    assignedDealers = [],
     perTableIncome = 0,
     showTableIncome = true,
     seatsMin = 4,
@@ -637,21 +737,30 @@ export function update(snapshot) {
   showCoinPops = showTableIncome;
   const feltPalette = (THEMES[theme] || THEMES.classic).felt;
 
-  clearGroup(groups.tables);
   const shownCapacity = Math.min(capacity, maxShown);
-  // 실제 홀덤 테이블(가로 약 2m)처럼 넉넉한 통로 간격을 두고, casino 플로어처럼 가로로 넓게 줄지어 배치
-  // (연구 근거: 테이블 간 약 1.1~1.2m 간격, 통로를 낀 여러 열의 가로 배치)
-  const cols = Math.min(7, Math.max(2, Math.ceil(Math.sqrt(shownCapacity * 1.3))));
-  const spacing = 3.7;
+  // 세로 화면 기준으로 4열까지만 가로로 늘어놓고, 나머지는 안쪽으로 줄을 늘린다.
+  const cols = Math.min(4, Math.max(2, Math.ceil(Math.sqrt(shownCapacity))));
+  const rows = Math.ceil(shownCapacity / cols);
+
+  // 테이블 격자가 다 들어가도록 매장을 넓힌다 (통로 + 시설 공간 여유 포함)
+  applyRoomSize(
+    Math.max(ROOM_MIN_W, cols * TABLE_SPACING + 5),
+    Math.max(ROOM_MIN_D, rows * TABLE_SPACING + 6)
+  );
+
+  const zBack = ROOM_CENTER_Z - roomD / 2;
+  const halfW = roomW / 2;
+
+  clearGroup(groups.tables);
   const newTableSlots = [];
   for (let i = 0; i < shownCapacity; i++) {
-    const [x, z] = gridPosition(i, cols, spacing);
-    const hasDealer = i < dealerCount;
+    const [x, z] = gridPosition(i, cols, rows, TABLE_SPACING);
+    const dealer = i < tables ? assignedDealers[i] : null;
     const obj =
       i < tables
         ? buildTable({
             index: i,
-            hasDealer,
+            dealer,
             feltColor: feltPalette[i % feltPalette.length],
             seatCount: seatCountFor(i, seatsMin, seatsMax),
           })
@@ -659,65 +768,71 @@ export function update(snapshot) {
     obj.position.x = x;
     obj.position.z = z;
     groups.tables.add(obj);
-    if (i < tables) newTableSlots.push({ x, z, hasDealer });
+    if (i < tables) newTableSlots.push({ x, z, hasDealer: !!dealer });
   }
   tableSlots = newTableSlots;
   clearGroup(groups.customers);
   customers = [];
 
+  // ---------- 시설 (뒷벽을 따라 배치) ----------
   clearGroup(groups.fixtures);
+  const zWall = zBack + 1.2;
+  const barX = -halfW + 3.2;
   const barGroup = new THREE.Group();
   barGroup.userData = { type: "fixture", id: "bar" };
   const bar = meshWO(new RoundedBoxGeometry(3.2, 0.9, 0.6, 3, 0.1), COLORS.bar, 1.04);
-  bar.position.set(-10, 0.45, -9.8);
+  bar.position.set(barX, 0.45, zWall);
   const barTrim = new THREE.Mesh(new THREE.BoxGeometry(3.22, 0.12, 0.62), toonMat(COLORS.barTrim));
-  barTrim.position.set(-10, 0.85, -9.8);
+  barTrim.position.set(barX, 0.85, zWall);
   barGroup.add(bar, barTrim);
   const barLevel = fixtures.bar || 0;
-  for (let i = 0; i < Math.min(barLevel, 5); i++) {
-    const bottle = new THREE.Mesh(sharedGeo.bottle, toonMat(0x5c3a21));
-    bottle.position.set(-11.1 + i * 0.28, 1.1, -9.8);
+  for (let i = 0; i < Math.min(barLevel, 8); i++) {
+    const bottle = new THREE.Mesh(sharedGeo.bottle, toonMat(i % 2 ? 0x5c3a21 : 0x2f6b4a));
+    bottle.position.set(barX - 1.2 + i * 0.3, 1.1, zWall);
     bottle.castShadow = true;
     barGroup.add(bottle);
   }
   groups.fixtures.add(barGroup);
   if (staff.bartender > 0) {
     const bartender = makePersonMesh(COLORS.bartenderShirt, COLORS.bartenderAccent, false);
-    bartender.position.set(-10, 0, -10.6);
+    bartender.position.set(barX, 0, zWall - 0.9);
     groups.fixtures.add(bartender);
   }
 
+  const fridgeX = barX + 3.4;
   const fridgeGroup = new THREE.Group();
   fridgeGroup.userData = { type: "fixture", id: "fridge" };
   const fridge = meshWO(new RoundedBoxGeometry(0.8, 1.2, 0.7, 3, 0.1), COLORS.fridge, 1.05);
-  fridge.position.set(-6.5, 0.6, -9.8);
+  fridge.position.set(fridgeX, 0.6, zWall);
   const fridgeDoor = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.9, 0.05), toonMat(COLORS.fridgeDoor));
-  fridgeDoor.position.set(-6.5, 0.65, -9.44);
+  fridgeDoor.position.set(fridgeX, 0.65, zWall + 0.36);
   fridgeGroup.add(fridge, fridgeDoor);
   groups.fixtures.add(fridgeGroup);
   const fridgeLevel = fixtures.fridge || 0;
   if (fridgeLevel > 0) {
-    const light = new THREE.PointLight(0xbdeeff, Math.min(fridgeLevel, 5) * 0.15, 2.5);
-    light.position.set(-6.5, 1.3, -9.8);
+    const light = new THREE.PointLight(0xbdeeff, Math.min(fridgeLevel, 6) * 0.15, 2.5);
+    light.position.set(fridgeX, 1.3, zWall);
     groups.fixtures.add(light);
   }
 
+  const vaultX = halfW - 2.6;
   const vaultGroup = new THREE.Group();
   vaultGroup.userData = { type: "fixture", id: "vault" };
   const vault = meshWO(new RoundedBoxGeometry(0.9, 0.9, 0.8, 3, 0.08), COLORS.vault, 1.05);
-  vault.position.set(9.5, 0.45, -9.8);
+  vault.position.set(vaultX, 0.45, zWall);
   const vaultRing = new THREE.Mesh(new THREE.TorusGeometry(0.12, 0.025, 8, 16), toonMat(COLORS.vaultTrim));
-  vaultRing.position.set(9.5, 0.5, -9.39);
+  vaultRing.position.set(vaultX, 0.5, zWall + 0.41);
   vaultGroup.add(vault, vaultRing);
   const vaultLevel = fixtures.vault || 0;
-  for (let i = 0; i < Math.min(vaultLevel, 6); i++) {
+  for (let i = 0; i < Math.min(vaultLevel, 10); i++) {
     const chip = new THREE.Mesh(sharedGeo.chip, toonMat(COLORS.chip));
-    chip.position.set(9.5, 0.93 + i * 0.075, -9.2);
+    chip.position.set(vaultX + (i % 2) * 0.5, 0.93 + Math.floor(i / 2) * 0.075, zWall + 0.6);
     chip.castShadow = true;
     vaultGroup.add(chip);
   }
   groups.fixtures.add(vaultGroup);
 
+  // ---------- 돌아다니는 직원 ----------
   clearGroup(groups.staff);
   const roamDefs = [
     { id: "server", color: COLORS.serverShirt },
@@ -725,46 +840,45 @@ export function update(snapshot) {
   ];
   let idx = 0;
   roamDefs.forEach((r) => {
-    const count = Math.min(staff[r.id] || 0, 6);
+    const count = Math.min(staff[r.id] || 0, 8);
     for (let i = 0; i < count; i++) {
       const person = makePersonMesh(r.color, null, false);
-      const angle = (idx / 12) * Math.PI * 2;
-      person.position.set(Math.cos(angle) * 11, 0, 3.5 + Math.sin(angle) * 1.8);
+      const angle = (idx / 10) * Math.PI * 2;
+      person.position.set(Math.cos(angle) * (halfW - 1.5), 0, entranceZ - 2 + Math.sin(angle) * 1.8);
       person.userData.bobPhase = idx;
       groups.staff.add(person);
       idx++;
     }
   });
 
+  // ---------- 장식품 (레벨이 오를수록 개수가 늘어난다) ----------
   clearGroup(groups.decor);
-  const place = (mesh, x, y, z) => {
-    mesh.position.set(x, mesh.position.y + y, z);
-    groups.decor.add(mesh);
-  };
-  if (decor.plant) place(buildPlant(), -12.5, 0, -2);
-  if (decor.neon) place(buildNeon(), 0, 3.1, -10.9);
-  if (decor.dart) place(buildDartboard(), 12.5, 1.6, -10.9);
-  if (decor.jukebox) place(buildJukebox(), 12.5, 0, -5);
-  if (decor.chandelier) place(buildChandelier(), 0, 5.2, -2);
-  if (decor.vip) place(buildVip(), -12.5, 0, -7);
+  const lv = (id) => decor[id] || 0;
+  if (lv("plant")) groups.decor.add(placeDecorRow(buildPlant, lv("plant"), -halfW + 1, 0, ROOM_CENTER_Z - 2, 0, 1));
+  if (lv("plant") > 1) groups.decor.add(placeDecorRow(buildPlant, lv("plant") - 1, -halfW + 1, 0, ROOM_CENTER_Z + 1.6, 0.9, 5));
+  if (lv("neon")) groups.decor.add(placeDecorRow(buildNeon, lv("neon"), -2.5, 3.1, zBack + 0.12, 2.5, 3));
+  if (lv("dart")) groups.decor.add(placeDecorRow(buildDartboard, lv("dart"), halfW - 3, 1.6, zBack + 0.12, -1.3, 4));
+  if (lv("jukebox")) groups.decor.add(placeDecorRow(buildJukebox, lv("jukebox"), halfW - 1.2, 0, ROOM_CENTER_Z - 1, 0, 1));
+  if (lv("chandelier")) groups.decor.add(placeDecorRow(buildChandelier, lv("chandelier"), -3, 5.2, ROOM_CENTER_Z, 3, 3));
+  if (lv("vip")) groups.decor.add(placeDecorRow(buildVip, lv("vip"), -halfW + 1.2, 0, ROOM_CENTER_Z - 5, 0, 1));
 
   const note = document.getElementById("floor-note");
   if (note) {
     if (capacity > shownCapacity) {
-      note.textContent = `+${capacity - shownCapacity}개 테이블 슬롯 더 있음`;
-      note.style.display = "";
+      note.textContent = `+${capacity - shownCapacity}개 슬롯 더 있음`;
+      note.hidden = false;
     } else if (tables >= capacity) {
-      note.textContent = "매장이 가득 찼어요! 매장 탭에서 확장해보세요 🏗";
-      note.style.display = "";
+      note.textContent = "매장이 가득 찼어요! 🏗 확장해보세요";
+      note.hidden = false;
     } else {
-      note.style.display = "none";
+      note.hidden = true;
     }
   }
 }
 
 function spawnCustomer() {
   if (tableSlots.length === 0) return;
-  const maxCustomers = Math.min(tableSlots.length * 2, 10);
+  const maxCustomers = Math.min(tableSlots.length * 2, 14);
   if (customers.length >= maxCustomers) return;
 
   const table = tableSlots[Math.floor(Math.random() * tableSlots.length)];
@@ -772,8 +886,8 @@ function spawnCustomer() {
   const mesh = makePersonMesh(color, null, false);
   mesh.scale.setScalar(0.78 + Math.random() * 0.14);
 
-  const entryX = (Math.random() - 0.5) * 10;
-  const entryPos = new THREE.Vector3(entryX, 0, ENTRANCE_Z);
+  const entryX = (Math.random() - 0.5) * Math.min(10, roomW - 4);
+  const entryPos = new THREE.Vector3(entryX, 0, entranceZ);
   mesh.position.copy(entryPos);
 
   const seatOffset = table.hasDealer ? -1.4 : 1.25;
@@ -833,11 +947,13 @@ function updateCustomers(dt, t) {
 export function chipBurst(colorHex) {
   if (!ready) return;
   const color = colorHex || COLORS.chip;
-  for (let i = 0; i < 6; i++) {
+  const cx = controls.target.x;
+  const cz = controls.target.z;
+  for (let i = 0; i < 8; i++) {
     const mat = toonMat(color, { transparent: true });
     const chip = new THREE.Mesh(sharedGeo.chip, mat);
-    chip.position.set((Math.random() - 0.5) * 1.5, 0.6, 1.5 + (Math.random() - 0.5) * 1.5);
-    chip.userData.life = 0.8;
+    chip.position.set(cx + (Math.random() - 0.5) * 2, 0.6, cz + (Math.random() - 0.5) * 2);
+    chip.userData.life = 0.85;
     chip.userData.vy = 1.7 + Math.random();
     chip.userData.spin = (Math.random() - 0.5) * 6;
     groups.bursts.add(chip);
@@ -845,20 +961,18 @@ export function chipBurst(colorHex) {
   }
 }
 
-// 테이블 위에서 동전이 튀어오르며 벌어들인 금액을 보여주는 이펙트 (초당 텍스트 대신 주기적으로 발생)
+// 테이블 위에서 동전이 튀어오르며 벌어들인 금액을 보여주는 이펙트
 function formatCoinAmount(n) {
   if (n < 10) return (Math.round(n * 10) / 10).toFixed(1);
+  if (n >= 1e8) return (n / 1e8).toFixed(1) + "억";
+  if (n >= 1e4) return (n / 1e4).toFixed(1) + "만";
   return Math.round(n).toLocaleString("ko-KR");
 }
 
 function spawnTableCoin(tablePos, amount) {
   for (let i = 0; i < 2; i++) {
     const coin = new THREE.Mesh(sharedGeo.chip, toonMat(COLORS.chip, { transparent: true }));
-    coin.position.set(
-      tablePos.x + (Math.random() - 0.5) * 0.5,
-      0.75,
-      tablePos.z + (Math.random() - 0.5) * 0.5
-    );
+    coin.position.set(tablePos.x + (Math.random() - 0.5) * 0.5, 0.75, tablePos.z + (Math.random() - 0.5) * 0.5);
     coin.userData.life = 0.9;
     coin.userData.vy = 1.4 + Math.random() * 0.4;
     coin.userData.spin = 5 + Math.random() * 3;
@@ -887,6 +1001,17 @@ function updateTableCoins(dt) {
   });
 }
 
+// 드래그로 매장 밖까지 나가버리지 않도록 시점을 매장 안으로 가둔다.
+function clampCameraTarget() {
+  const marginX = Math.max(1, roomW / 2 - 2);
+  const marginZ = Math.max(1, roomD / 2 - 2);
+  const t = controls.target;
+  t.x = Math.min(marginX, Math.max(-marginX, t.x));
+  t.y = 0;
+  t.z = Math.min(ROOM_CENTER_Z + marginZ, Math.max(ROOM_CENTER_Z - marginZ, t.z));
+  camera.position.copy(t).add(ISO_OFFSET);
+}
+
 function animate() {
   requestAnimationFrame(animate);
   const dt = Math.min(clock.getDelta(), 0.1);
@@ -913,6 +1038,7 @@ function animate() {
   }
 
   controls.update();
+  clampCameraTarget();
   renderer.render(scene, camera);
 }
 

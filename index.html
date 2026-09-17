@@ -2,9 +2,10 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no" />
 <title>홀덤펍 키우기 🍺🃏</title>
 <meta name="description" content="작은 홀덤펍을 손님 가득한 대박 펍으로 키우는 방치형(incremental) 게임" />
+<meta name="theme-color" content="#ffd9c2" />
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2280%22>🍺</text></svg>" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -21,102 +22,113 @@
 </head>
 <body>
 
-<div id="offline-modal" class="modal hidden">
-  <div class="modal-box">
-    <div class="modal-emoji">🌙☕</div>
-    <h2>펍이 문을 닫은 사이에도...</h2>
-    <p id="offline-text">손님들이 다녀갔어요!</p>
-    <button id="offline-close" class="btn btn-primary">영업 시작! 🍺</button>
+<!-- ===== 3D 매장: 화면 전체를 채우는 배경 레이어 ===== -->
+<div id="pub-3d-container" class="pub-3d-container"></div>
+
+<!-- ===== HUD: 3D 위에 떠 있는 UI ===== -->
+<div class="hud">
+
+  <!-- 좌측 상단: 재화 -->
+  <div class="hud-left">
+    <div class="currency" id="currency-chips">
+      <span class="cur-icon cur-icon-chip" aria-hidden="true"></span>
+      <span class="cur-body">
+        <b class="cur-value" id="chips-value">0</b>
+        <small class="cur-rate" id="income-value">0/초</small>
+      </span>
+    </div>
+    <div class="currency currency-dia" id="currency-diamonds">
+      <span class="cur-icon cur-icon-dia" aria-hidden="true"></span>
+      <span class="cur-body">
+        <b class="cur-value" id="diamonds-value">0</b>
+        <small class="cur-rate" id="diamond-rate">0/분</small>
+      </span>
+    </div>
+    <div class="boost-strip" id="boost-strip"></div>
   </div>
+
+  <!-- 우측 상단: 프로필 -->
+  <div class="hud-right">
+    <button class="profile-card" id="profile-btn" aria-label="프로필">
+      <span class="avatar-ring" id="avatar-ring">
+        <span class="avatar" id="avatar-face">🧑</span>
+        <span class="avatar-lv" id="avatar-lv">1</span>
+      </span>
+      <span class="profile-meta">
+        <b class="profile-name" id="profile-title">펍 알바</b>
+        <span class="xp-bar"><i id="xp-fill"></i></span>
+      </span>
+    </button>
+    <div class="hud-right-row">
+      <button class="icon-btn" id="prestige-badge" title="프레스티지 배율">✨<small id="prestige-mult">x1.00</small></button>
+      <button class="icon-btn tab-btn" data-tab="settings" data-title="설정" title="설정" aria-label="설정">⚙️</button>
+    </div>
+  </div>
+
+  <!-- 우측 사이드 레일: 리텐션 기능 버튼 -->
+  <div class="side-rail" id="side-rail">
+    <button class="rail-btn" id="gift-btn" data-label="선물">🎁<span class="dot" id="gift-dot"></span></button>
+    <button class="rail-btn" id="attendance-btn" data-label="출석">📅<span class="dot" id="attendance-dot"></span></button>
+    <button class="rail-btn" id="mission-btn" data-label="미션">📋<span class="dot" id="mission-dot"></span></button>
+    <button class="rail-btn" id="boost-btn" data-label="부스트">⚡<span class="dot" id="boost-dot"></span></button>
+  </div>
+
+  <!-- 좌측 하단 안내 -->
+  <div class="floor-note" id="floor-note" hidden></div>
+
+  <!-- 하단 컨트롤 바: 일괄 구매 배수 + 자동 업그레이드 -->
+  <div class="control-bar">
+    <div class="qty-group" id="qty-group" role="group" aria-label="일괄 구매 배수"></div>
+    <button class="auto-toggle" id="auto-toggle">
+      <span class="auto-led"></span><span class="auto-text">자동 <b>OFF</b></span>
+    </button>
+  </div>
+
+  <!-- 하단 네비게이션 -->
+  <nav class="bottom-nav" id="bottom-nav">
+    <button class="tab-btn active" data-tab="store" data-title="매장">
+      <span class="nav-icon">🏗</span><span class="nav-label">매장</span>
+    </button>
+    <button class="tab-btn" data-tab="tables" data-title="테이블">
+      <span class="nav-icon">🎲</span><span class="nav-label">테이블</span>
+    </button>
+    <button class="tab-btn" data-tab="staff" data-title="직원 &amp; 가챠">
+      <span class="nav-icon">👥</span><span class="nav-label">직원</span>
+    </button>
+    <button class="tab-btn" data-tab="codex" data-title="딜러 도감">
+      <span class="nav-icon">📖</span><span class="nav-label">도감</span><span class="dot" id="codex-dot"></span>
+    </button>
+    <button class="tab-btn" data-tab="decor" data-title="인테리어">
+      <span class="nav-icon">🎨</span><span class="nav-label">인테리어</span>
+    </button>
+    <button class="tab-btn" data-tab="prestige" data-title="브랜드 리뉴얼">
+      <span class="nav-icon">✨</span><span class="nav-label">리뉴얼</span>
+    </button>
+  </nav>
 </div>
 
-<div id="gacha-modal" class="modal hidden">
-  <div class="modal-box gacha-result-box" id="gacha-result-box">
-    <div class="modal-emoji" id="gacha-result-emoji">🃏</div>
-    <h2 id="gacha-result-name">일반 딜러 획득!</h2>
-    <p id="gacha-result-bonus">테이블 수익 +5%</p>
-    <button id="gacha-close" class="btn btn-primary">확인</button>
-  </div>
-</div>
-
-<div id="context-popup" class="modal hidden">
-  <div class="modal-box context-popup-box">
-    <button class="context-popup-close" id="context-popup-close" aria-label="닫기">✕</button>
-    <h3 id="context-popup-title">테이블</h3>
-    <p id="context-popup-desc"></p>
-    <button class="btn btn-buy context-popup-action" id="context-popup-action">강화</button>
-  </div>
-</div>
-
-<div id="event-modal" class="modal hidden">
-  <div class="modal-box">
-    <div class="modal-emoji">🎁</div>
-    <h2>사장님 선물</h2>
-    <p id="event-text">잠시 후 다시 확인해주세요!</p>
-    <button id="event-claim-btn" class="btn btn-primary">받기</button>
-  </div>
-</div>
-
-<div id="toast-wrap"></div>
-
-<header class="topbar">
-  <div class="brand">🍺 홀덤펍 키우기 <span class="brand-sub">Hold'em Pub Tycoon</span></div>
-  <div class="stats">
-    <div class="stat">
-      <span class="stat-label">보유 칩</span>
-      <span class="stat-value" id="chips-value">0</span>
-    </div>
-    <div class="stat stat-diamond">
-      <span class="stat-label">다이아</span>
-      <span class="stat-value" id="diamonds-value">0</span>
-    </div>
-    <div class="stat">
-      <span class="stat-label">초당 수익</span>
-      <span class="stat-value" id="income-value">0 / 초</span>
-    </div>
-    <div class="stat prestige-badge" id="prestige-badge" title="프레스티지 보너스">
-      ✨ x1.00
-    </div>
-    <button class="icon-btn" id="event-btn" title="선물" aria-label="선물">🎁<span class="notif-dot" id="event-dot"></span></button>
-    <button class="icon-btn tab-btn" data-tab="settings" data-title="설정" id="settings-gear-btn" title="설정" aria-label="설정">⚙️</button>
-  </div>
-</header>
-
-<main class="layout">
-  <section class="pub-scene-wrap">
-    <div class="pub-scene" id="pub-scene">
-      <div class="pub-sign">🍺 <span id="pub-name">사장님의 홀덤펍</span> 🃏</div>
-      <div class="suit-strip">
-        <img src="assets/img/cards/card_spades_A.png" alt="스페이드 A" />
-        <img src="assets/img/cards/card_hearts_A.png" alt="하트 A" />
-        <img src="assets/img/cards/card_diamonds_A.png" alt="다이아몬드 A" />
-        <img src="assets/img/cards/card_clubs_A.png" alt="클럽 A" />
-      </div>
-      <div id="pub-3d-container" class="pub-3d-container"></div>
-      <div class="floor-note" id="floor-note"></div>
-      <p class="drag-hint">👆 테이블/시설을 탭해서 바로 강화해보세요 · 🔍 꼬집어서 확대/축소</p>
-    </div>
-  </section>
-</main>
-
+<!-- ===== 바텀시트 (높이 고정 · 내부 스크롤) ===== -->
 <div class="sheet-backdrop" id="sheet-backdrop"></div>
-<section class="sheet" id="sheet-panel">
+<section class="sheet" id="sheet-panel" aria-hidden="true">
   <div class="sheet-handle-row">
+    <span class="sheet-grip"></span>
     <span class="sheet-title" id="sheet-title">매장</span>
     <button class="sheet-close" id="sheet-close-btn" aria-label="닫기">✕</button>
   </div>
-  <div class="sheet-body">
+  <div class="sheet-body" id="sheet-body">
+
     <div class="tab-panel active" id="tab-store">
       <div class="card-row">
         <div class="item-card">
           <div class="item-icon">🏗</div>
           <div class="item-info">
             <div class="item-title">매장 확장</div>
-            <div class="item-desc">현재 테이블 슬롯: <span id="store-capacity">6</span>칸 · 확장 시 +4칸</div>
+            <div class="item-desc">테이블 슬롯 <b id="store-capacity">6</b>칸 · 확장 시 +4칸</div>
           </div>
-          <button class="btn btn-buy" id="expand-store-btn">확장<br /><small id="expand-store-cost">300 칩</small></button>
+          <button class="btn btn-buy" id="expand-store-btn">확장<small id="expand-store-cost">300</small></button>
         </div>
       </div>
+      <h4 class="sheet-sub">매장 시설 <span class="muted">· 무한 업그레이드</span></h4>
       <div class="card-row" id="fixture-list"></div>
     </div>
 
@@ -126,17 +138,17 @@
           <div class="item-icon">🃏</div>
           <div class="item-info">
             <div class="item-title">홀덤 테이블 추가</div>
-            <div class="item-desc">보유 테이블: <span id="table-count">1</span> / <span id="table-capacity">6</span>개 · 테이블 1개당 <span id="table-per-income">0.5</span> 칩/초 (4~8명 착석)</div>
+            <div class="item-desc">보유 <b id="table-count">1</b> / <span id="table-capacity">6</span>개 · 개당 <b id="table-per-income">0.5</b>/초</div>
           </div>
-          <button class="btn btn-buy" id="buy-table-btn">구매<br /><small id="buy-table-cost">15 칩</small></button>
+          <button class="btn btn-buy" id="buy-table-btn">구매<small id="buy-table-cost">15</small></button>
         </div>
         <div class="item-card">
           <div class="item-icon">📈</div>
           <div class="item-info">
-            <div class="item-title">테이블 리모델링 (전체 수익 강화)</div>
-            <div class="item-desc">현재 레벨: <span id="table-level">0</span> · 레벨당 +10% 수익</div>
+            <div class="item-title">테이블 리모델링 <span class="lvl-chip" id="table-level-chip">Lv.0</span></div>
+            <div class="item-desc">모든 테이블 수익 +10%/레벨 · 상한 없음</div>
           </div>
-          <button class="btn btn-buy" id="upgrade-table-btn">강화<br /><small id="upgrade-table-cost">50 칩</small></button>
+          <button class="btn btn-buy" id="upgrade-table-btn">강화<small id="upgrade-table-cost">50</small></button>
         </div>
       </div>
     </div>
@@ -146,87 +158,159 @@
         <div class="gacha-box-head">
           <div class="item-icon">🎰</div>
           <div class="item-info">
-            <div class="item-title">딜러 가챠</div>
-            <div class="item-desc">💎 다이아로 딜러를 뽑아요 · 보유 딜러 <span id="dealer-count">0</span>명 (수익 <span id="dealer-bonus-total">+0%</span>)</div>
+            <div class="item-title">딜러 스카우트</div>
+            <div class="item-desc">보유 <b id="dealer-count">0</b>종 · 수익 <b id="dealer-bonus-total">+0%</b></div>
           </div>
         </div>
         <div class="rarity-chip-row" id="dealer-breakdown"></div>
-        <button class="btn btn-buy gacha-pull-btn" id="gacha-pull-btn">💎 뽑기<br /><small><span id="gacha-cost">50</span> 다이아</small></button>
+        <div class="gacha-btn-row">
+          <button class="btn btn-buy gacha-pull-btn" id="gacha-pull-btn">1회 뽑기<small><span id="gacha-cost">80</span>💎</small></button>
+          <button class="btn btn-buy gacha-pull-btn gacha-multi" id="gacha-multi-btn">10연차<small><span id="gacha-multi-cost">720</span>💎 · R확정</small></button>
+        </div>
       </div>
+      <h4 class="sheet-sub">직원 고용 <span class="muted">· 무한 고용</span></h4>
       <div class="card-row" id="staff-list"></div>
     </div>
 
-    <div class="tab-panel" id="tab-decor">
-      <div class="theme-shop-head">
-        <div class="item-icon">🏰</div>
-        <div class="item-info">
-          <div class="item-title">인테리어 테마</div>
-          <div class="item-desc">매장 전체 분위기를 통째로 바꿔요 — 바닥/벽/테이블 색이 테마에 맞게 바뀝니다</div>
+    <div class="tab-panel" id="tab-codex">
+      <div class="codex-head">
+        <div class="codex-progress">
+          <b id="codex-owned">0</b> / <span id="codex-total">16</span>종 수집
+          <span class="xp-bar codex-bar"><i id="codex-fill"></i></span>
         </div>
+        <div class="codex-filter" id="codex-filter"></div>
       </div>
+      <div class="codex-grid" id="codex-grid"></div>
+    </div>
+
+    <div class="tab-panel" id="tab-decor">
+      <h4 class="sheet-sub">인테리어 테마 <span class="muted">· 등급 무한 강화</span></h4>
       <div class="theme-row" id="theme-list"></div>
+      <h4 class="sheet-sub">장식품 <span class="muted">· 무한 업그레이드</span></h4>
       <div class="card-row" id="decor-list"></div>
     </div>
 
     <div class="tab-panel" id="tab-prestige">
       <div class="prestige-box">
-        <div class="item-icon">✨</div>
+        <div class="prestige-emoji">✨</div>
         <h3>브랜드 리뉴얼</h3>
-        <p>지금까지 누적 <b id="prestige-total-earned">0</b> 칩을 벌었어요.<br />
-          다음 리뉴얼까지 <b id="prestige-requirement">100,000</b> 칩 필요.</p>
-        <p>리뉴얼하면 테이블/직원/칩이 초기화되지만, <b>명성 포인트</b>를 얻어 <b>영구 수익 보너스</b>를 받아요.</p>
-        <p>지금 리뉴얼 시 획득: <b id="prestige-gain">0</b> 포인트 (현재 배율 <span id="prestige-current-mult">x1.00</span> → <span id="prestige-next-mult">x1.00</span>) · 💎<b id="prestige-diamond-reward">0</b></p>
-        <p class="muted">💎 다이아와 딜러 컬렉션은 리뉴얼해도 사라지지 않아요.</p>
-        <button class="btn btn-primary" id="prestige-btn" disabled>브랜드 리뉴얼 하기</button>
+        <p>누적 <b id="prestige-total-earned">0</b> 칩 · 다음 포인트까지 <b id="prestige-requirement">100,000</b></p>
+        <p class="muted">리뉴얼하면 테이블·직원·칩·시설이 초기화되지만 <b>명성 포인트</b>로 영구 수익 보너스를 받아요.</p>
+        <div class="prestige-gain-row">
+          <div><span class="muted">획득 포인트</span><b id="prestige-gain">0</b></div>
+          <div><span class="muted">배율</span><b><span id="prestige-current-mult">x1.00</span> → <span id="prestige-next-mult">x1.00</span></b></div>
+          <div><span class="muted">다이아</span><b>💎<span id="prestige-diamond-reward">0</span></b></div>
+        </div>
+        <p class="muted">💎 다이아 · 딜러 도감 · 인테리어 테마는 유지됩니다.</p>
+        <button class="btn btn-primary btn-wide" id="prestige-btn" disabled>브랜드 리뉴얼 하기</button>
       </div>
     </div>
 
     <div class="tab-panel" id="tab-settings">
       <div class="settings-box">
-        <h3>화면 표시</h3>
+        <h4>화면 표시</h4>
         <label class="toggle-row">
           <span>테이블 수익 코인 애니메이션</span>
           <input type="checkbox" id="show-table-income-toggle" checked />
         </label>
+        <label class="toggle-row">
+          <span>딜러 자동 배치 (수익 높은 순)</span>
+          <input type="checkbox" id="auto-assign-toggle" checked />
+        </label>
       </div>
       <div class="settings-box">
-        <h3>저장 데이터</h3>
-        <p class="muted">자동 저장은 브라우저 로컬 저장소(localStorage)에 보관됩니다. 아래 코드로 백업/이전할 수 있어요.</p>
+        <h4>저장 데이터</h4>
+        <p class="muted">자동 저장은 브라우저 로컬 저장소에 보관됩니다. 아래 코드로 백업/이전할 수 있어요.</p>
         <div class="settings-row">
           <button class="btn" id="export-btn">내보내기</button>
           <button class="btn" id="import-btn">가져오기</button>
           <button class="btn btn-danger" id="reset-btn">전체 초기화</button>
         </div>
-        <textarea id="save-code" placeholder="여기에 저장 코드가 표시되거나, 붙여넣어 가져올 수 있어요"></textarea>
+        <textarea id="save-code" placeholder="저장 코드가 여기에 표시되거나, 붙여넣어 가져올 수 있어요"></textarea>
       </div>
     </div>
   </div>
 </section>
 
-<nav class="bottom-nav" id="bottom-nav">
-  <button class="tab-btn active" data-tab="store" data-title="매장">
-    <span class="nav-icon">🏗</span><span class="nav-label">매장</span>
-  </button>
-  <button class="tab-btn" data-tab="tables" data-title="테이블">
-    <span class="nav-icon">🎲</span><span class="nav-label">테이블</span>
-  </button>
-  <button class="tab-btn" data-tab="staff" data-title="직원">
-    <span class="nav-icon">👥</span><span class="nav-label">직원</span>
-  </button>
-  <button class="tab-btn" data-tab="decor" data-title="인테리어">
-    <span class="nav-icon">🪴</span><span class="nav-label">인테리어</span>
-  </button>
-  <button class="tab-btn" data-tab="prestige" data-title="프레스티지">
-    <span class="nav-icon">✨</span><span class="nav-label">프레스티지</span>
-  </button>
-</nav>
+<!-- ===== 모달 ===== -->
+<div id="offline-modal" class="modal hidden">
+  <div class="modal-box">
+    <div class="modal-emoji">🌙☕</div>
+    <h2>펍이 문을 닫은 사이에도...</h2>
+    <p id="offline-text">손님들이 다녀갔어요!</p>
+    <button id="offline-close" class="btn btn-primary btn-wide">영업 시작! 🍺</button>
+  </div>
+</div>
 
-<footer class="footer">
-  카드 이미지: <a href="https://kenney.nl/assets/playing-cards-pack" target="_blank" rel="noopener">Kenney.nl Playing Cards Pack</a> (CC0) ·
-  <a href="https://github.com/thstjdals09-lang/holdem-pub-tycoon" id="repo-link" target="_blank" rel="noopener">GitHub</a>
-</footer>
+<div id="gacha-modal" class="modal hidden">
+  <div class="modal-box gacha-result-box" id="gacha-result-box">
+    <h2 class="gacha-head" id="gacha-head">딜러 영입!</h2>
+    <div class="gacha-results" id="gacha-results"></div>
+    <button id="gacha-close" class="btn btn-primary btn-wide">확인</button>
+  </div>
+</div>
+
+<div id="context-popup" class="modal hidden">
+  <div class="modal-box context-popup-box">
+    <button class="context-popup-close" id="context-popup-close" aria-label="닫기">✕</button>
+    <h3 id="context-popup-title">테이블</h3>
+    <p id="context-popup-desc"></p>
+    <button class="btn btn-buy btn-wide" id="context-popup-action">강화</button>
+  </div>
+</div>
+
+<div id="event-modal" class="modal hidden">
+  <div class="modal-box">
+    <div class="modal-emoji">🎁</div>
+    <h2>사장님 선물</h2>
+    <p id="event-text">잠시 후 다시 확인해주세요!</p>
+    <button id="event-claim-btn" class="btn btn-primary btn-wide">받기</button>
+  </div>
+</div>
+
+<div id="attendance-modal" class="modal hidden">
+  <div class="modal-box wide-modal">
+    <button class="context-popup-close" id="attendance-close" aria-label="닫기">✕</button>
+    <div class="modal-emoji">📅</div>
+    <h2>출석 보상</h2>
+    <p class="muted" id="attendance-sub">매일 접속하면 보상을 드려요!</p>
+    <div class="attend-grid" id="attendance-grid"></div>
+    <button class="btn btn-primary btn-wide" id="attendance-claim">오늘의 보상 받기</button>
+  </div>
+</div>
+
+<div id="mission-modal" class="modal hidden">
+  <div class="modal-box wide-modal">
+    <button class="context-popup-close" id="mission-close" aria-label="닫기">✕</button>
+    <div class="modal-emoji">📋</div>
+    <h2>일일 미션</h2>
+    <p class="muted" id="mission-sub">매일 자정에 새로 갱신돼요</p>
+    <div class="mission-list" id="mission-list"></div>
+    <div class="mission-allclear" id="mission-allclear"></div>
+  </div>
+</div>
+
+<div id="boost-modal" class="modal hidden">
+  <div class="modal-box wide-modal">
+    <button class="context-popup-close" id="boost-close" aria-label="닫기">✕</button>
+    <div class="modal-emoji">⚡</div>
+    <h2>영업 부스트</h2>
+    <p class="muted">부스트는 서로 곱해져서 적용돼요</p>
+    <div class="boost-list" id="boost-list"></div>
+  </div>
+</div>
+
+<div id="dealer-modal" class="modal hidden">
+  <div class="modal-box dealer-modal-box" id="dealer-modal-box">
+    <button class="context-popup-close" id="dealer-close" aria-label="닫기">✕</button>
+    <div class="dealer-detail" id="dealer-detail"></div>
+  </div>
+</div>
+
+<div id="toast-wrap"></div>
 
 <script src="js/data.js" defer></script>
+<script src="js/portraits.js" defer></script>
 <script src="js/backend.js" defer></script>
 <script type="module" src="js/scene3d.js"></script>
 <script src="js/game.js" defer></script>
