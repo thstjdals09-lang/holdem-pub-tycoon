@@ -28,18 +28,20 @@ const GAME_DATA = {
     },
     {
       id: "vault",
-      name: "칩 금고",
+      name: "다이아 금고",
       emoji: "🗄️",
-      desc: "칩 보관 용량 증가로 클릭(딜링) 수익 증가",
+      desc: "손님이 놓고 가는 다이아 획득 확률 증가",
       baseCost: 400,
       costGrowth: 1.32,
-      clickPerLevel: 0.6,
+      diamondChancePerLevel: 0.006,
     },
   ],
   table: {
     baseCost: 15,
     costGrowth: 1.15,
     baseIncome: 0.5, // 테이블 1개당 초당 수익
+    seatsMin: 4,
+    seatsMax: 8,
   },
   tableUpgrade: {
     baseCost: 50,
@@ -51,19 +53,10 @@ const GAME_DATA = {
       id: "bartender",
       name: "바텐더",
       emoji: "🍹",
-      desc: "클릭(직접 딜링) 수익 +1 · 바 카운터에 배치됨",
+      desc: "바 카운터 서비스 향상 → 테이블 수익 +5% · 바 카운터에 배치됨",
       baseCost: 80,
       costGrowth: 1.14,
-      effect: { type: "click", value: 1 },
-    },
-    {
-      id: "dealer",
-      name: "딜러",
-      emoji: "🎩",
-      desc: "테이블 수익 +8% · 테이블에 1명씩 배치됨",
-      baseCost: 100,
-      costGrowth: 1.16,
-      effect: { type: "incomeMult", value: 0.08 },
+      effect: { type: "incomeMult", value: 0.05 },
     },
     {
       id: "server",
@@ -84,6 +77,21 @@ const GAME_DATA = {
       effect: { type: "incomeMult", value: 0.12 },
     },
   ],
+  // 딜러는 칩으로 고용하지 않고 다이아 가챠로 뽑는다.
+  gacha: {
+    costDiamonds: 50,
+    rarities: [
+      { id: "common", name: "일반", weight: 58, bonus: 0.05, color: "#9b9b9b", emoji: "🃏" },
+      { id: "rare", name: "희귀", weight: 27, bonus: 0.1, color: "#4fa3ff", emoji: "🎩" },
+      { id: "epic", name: "영웅", weight: 12, bonus: 0.2, color: "#c86bff", emoji: "👑" },
+      { id: "legendary", name: "전설", weight: 3, bonus: 0.4, color: "#ffb400", emoji: "✨" },
+    ],
+  },
+  diamond: {
+    baseRatePerTableSecond: 0.0025, // 테이블 1개당 초당 다이아(냉장고 없어도 조금씩 적립)
+    vaultBonusPerLevel: 0.35, // 금고 레벨당 다이아 적립 배율 +35%
+    prestigeReward: 5, // 프레스티지 포인트 1당 지급 다이아
+  },
   decor: [
     { id: "plant", name: "화분", emoji: "🪴", desc: "+1% 수익", cost: 200, bonus: 0.01 },
     { id: "neon", name: "네온사인", emoji: "🎰", desc: "+2% 수익", cost: 500, bonus: 0.02 },

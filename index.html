@@ -30,6 +30,24 @@
   </div>
 </div>
 
+<div id="gacha-modal" class="modal hidden">
+  <div class="modal-box gacha-result-box" id="gacha-result-box">
+    <div class="modal-emoji" id="gacha-result-emoji">🃏</div>
+    <h2 id="gacha-result-name">일반 딜러 획득!</h2>
+    <p id="gacha-result-bonus">테이블 수익 +5%</p>
+    <button id="gacha-close" class="btn btn-primary">확인</button>
+  </div>
+</div>
+
+<div id="context-popup" class="modal hidden">
+  <div class="modal-box context-popup-box">
+    <button class="context-popup-close" id="context-popup-close" aria-label="닫기">✕</button>
+    <h3 id="context-popup-title">테이블</h3>
+    <p id="context-popup-desc"></p>
+    <button class="btn btn-buy context-popup-action" id="context-popup-action">강화</button>
+  </div>
+</div>
+
 <div id="toast-wrap"></div>
 
 <header class="topbar">
@@ -38,6 +56,10 @@
     <div class="stat">
       <span class="stat-label">보유 칩</span>
       <span class="stat-value" id="chips-value">0</span>
+    </div>
+    <div class="stat stat-diamond">
+      <span class="stat-label">다이아</span>
+      <span class="stat-value" id="diamonds-value">0</span>
     </div>
     <div class="stat">
       <span class="stat-label">초당 수익</span>
@@ -62,13 +84,8 @@
       </div>
       <div id="pub-3d-container" class="pub-3d-container"></div>
       <div class="floor-note" id="floor-note"></div>
-      <p class="drag-hint">🔍 꼬집어서(또는 스크롤해서) 확대/축소해보세요</p>
+      <p class="drag-hint">👆 테이블/시설을 탭해서 바로 강화해보세요 · 🔍 꼬집어서 확대/축소</p>
     </div>
-
-    <button id="deal-btn" class="deal-btn">
-      <img src="assets/img/cards/card_back.png" alt="" class="deal-card-img" />
-      <span>딜링하기<br /><small id="click-power-label">+1 칩</small></span>
-    </button>
   </section>
 
   <section class="panel">
@@ -92,7 +109,7 @@
           <div class="item-icon">🃏</div>
           <div class="item-info">
             <div class="item-title">홀덤 테이블 추가</div>
-            <div class="item-desc">보유 테이블: <span id="table-count">1</span> / <span id="table-capacity">6</span>개 · 테이블당 <span id="table-base-income">0.5</span> 칩/초</div>
+            <div class="item-desc">보유 테이블: <span id="table-count">1</span> / <span id="table-capacity">6</span>개 · 테이블 1개당 <span id="table-per-income">0.5</span> 칩/초 (4~8명 착석)</div>
           </div>
           <button class="btn btn-buy" id="buy-table-btn">구매<br /><small id="buy-table-cost">15 칩</small></button>
         </div>
@@ -108,6 +125,17 @@
     </div>
 
     <div class="tab-panel" id="tab-staff">
+      <div class="gacha-box">
+        <div class="gacha-box-head">
+          <div class="item-icon">🎰</div>
+          <div class="item-info">
+            <div class="item-title">딜러 가챠</div>
+            <div class="item-desc">💎 다이아로 딜러를 뽑아요 · 보유 딜러 <span id="dealer-count">0</span>명 (수익 <span id="dealer-bonus-total">+0%</span>)</div>
+          </div>
+        </div>
+        <div class="rarity-chip-row" id="dealer-breakdown"></div>
+        <button class="btn btn-buy gacha-pull-btn" id="gacha-pull-btn">💎 뽑기<br /><small><span id="gacha-cost">50</span> 다이아</small></button>
+      </div>
       <div class="card-row" id="staff-list"></div>
     </div>
 
@@ -122,12 +150,20 @@
         <p>지금까지 누적 <b id="prestige-total-earned">0</b> 칩을 벌었어요.<br />
           다음 리뉴얼까지 <b id="prestige-requirement">100,000</b> 칩 필요.</p>
         <p>리뉴얼하면 테이블/직원/칩이 초기화되지만, <b>명성 포인트</b>를 얻어 <b>영구 수익 보너스</b>를 받아요.</p>
-        <p>지금 리뉴얼 시 획득: <b id="prestige-gain">0</b> 포인트 (현재 배율 <span id="prestige-current-mult">x1.00</span> → <span id="prestige-next-mult">x1.00</span>)</p>
+        <p>지금 리뉴얼 시 획득: <b id="prestige-gain">0</b> 포인트 (현재 배율 <span id="prestige-current-mult">x1.00</span> → <span id="prestige-next-mult">x1.00</span>) · 💎<b id="prestige-diamond-reward">0</b></p>
+        <p class="muted">💎 다이아와 딜러 컬렉션은 리뉴얼해도 사라지지 않아요.</p>
         <button class="btn btn-primary" id="prestige-btn" disabled>브랜드 리뉴얼 하기</button>
       </div>
     </div>
 
     <div class="tab-panel" id="tab-settings">
+      <div class="settings-box">
+        <h3>화면 표시</h3>
+        <label class="toggle-row">
+          <span>테이블 초당 수익 표시</span>
+          <input type="checkbox" id="show-table-income-toggle" checked />
+        </label>
+      </div>
       <div class="settings-box">
         <h3>저장 데이터</h3>
         <p class="muted">자동 저장은 브라우저 로컬 저장소(localStorage)에 보관됩니다. 아래 코드로 백업/이전할 수 있어요.</p>

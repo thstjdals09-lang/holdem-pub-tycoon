@@ -69,6 +69,7 @@ button, textarea, input { font-family: inherit; }
 }
 .stat-label { font-size: 11px; color: var(--text-muted); }
 .stat-value { font-size: 16px; font-weight: bold; color: var(--accent-dark); }
+.stat-diamond .stat-value { color: #2f9fd0; }
 
 .prestige-badge {
   background: linear-gradient(135deg, #ffd88a, #ffb0d0);
@@ -130,7 +131,7 @@ button, textarea, input { font-family: inherit; }
 
 .pub-3d-container {
   width: 100%;
-  height: 320px;
+  height: 380px;
   border-radius: 14px;
   overflow: hidden;
   background: #fff1de;
@@ -151,27 +152,6 @@ button, textarea, input { font-family: inherit; }
   color: var(--text-muted);
   margin: 0;
 }
-
-.deal-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  background: linear-gradient(135deg, var(--accent), var(--accent-dark));
-  color: white;
-  border: none;
-  border-radius: var(--radius);
-  padding: 18px;
-  font-size: 18px;
-  font-family: "Jua", sans-serif;
-  cursor: pointer;
-  box-shadow: var(--shadow);
-  transition: transform 0.08s ease;
-}
-.deal-btn:active { transform: scale(0.96) translateY(2px); }
-.deal-card-img { width: 42px; image-rendering: pixelated; filter: drop-shadow(0 2px 2px rgba(0,0,0,0.2)); transition: transform 0.15s ease; }
-.deal-btn.dealing .deal-card-img { transform: rotateY(180deg) scale(1.1); }
-.deal-btn small { font-weight: normal; opacity: 0.9; }
 
 .panel {
   background: var(--card-bg);
@@ -272,6 +252,37 @@ button, textarea, input { font-family: inherit; }
 .item-title { font-weight: bold; font-size: 14px; }
 .item-desc { font-size: 12px; color: var(--text-muted); }
 
+.gacha-box {
+  background: linear-gradient(135deg, #2f2b4a, #4a2f5c);
+  border-radius: 16px;
+  padding: 12px;
+  color: white;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  box-shadow: 0 3px 0 rgba(0,0,0,0.15);
+}
+.gacha-box-head { display: flex; align-items: center; gap: 12px; }
+.gacha-box .item-desc { color: #d8c9ff; }
+.rarity-chip-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.rarity-chip {
+  background: rgba(255,255,255,0.12);
+  border: 1px solid var(--rc, #fff);
+  border-radius: 20px;
+  padding: 3px 10px;
+  font-size: 11px;
+}
+.gacha-pull-btn {
+  background: linear-gradient(135deg, #ffd88a, #ff8fab);
+  color: #4a2b1a;
+  font-weight: bold;
+  align-self: stretch;
+}
+.gacha-pull-btn:disabled {
+  background: #6b6478;
+  color: #cfc9dd;
+}
+
 .btn {
   border: none;
   border-radius: 12px;
@@ -294,6 +305,13 @@ button, textarea, input { font-family: inherit; }
 .prestige-box { text-align: center; padding: 10px; }
 .prestige-box p { font-size: 13px; line-height: 1.6; }
 
+.settings-box {
+  background: #fff;
+  border-radius: 14px;
+  padding: 12px;
+  box-shadow: 0 3px 0 rgba(0,0,0,0.05);
+}
+.settings-box h3 { margin: 0 0 8px; font-size: 14px; }
 .settings-box textarea {
   width: 100%;
   min-height: 80px;
@@ -330,6 +348,39 @@ button, textarea, input { font-family: inherit; }
   box-shadow: var(--shadow);
 }
 .modal-emoji { font-size: 36px; }
+
+.gacha-result-box {
+  border: 3px solid var(--rarity-color, var(--accent));
+  box-shadow: 0 0 0 6px color-mix(in srgb, var(--rarity-color, var(--accent)) 25%, transparent), var(--shadow);
+}
+#gacha-result-name { color: var(--rarity-color, var(--accent-dark)); }
+
+.context-popup-box { position: relative; text-align: left; }
+.context-popup-close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  border: none;
+  background: #f3e6da;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+.context-popup-box h3 { margin: 0 22px 8px 0; }
+.context-popup-box p { font-size: 13px; line-height: 1.6; color: var(--text-main); }
+.context-popup-action { width: 100%; margin-top: 10px; }
+
+.toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13px;
+  padding: 4px 0;
+}
+.toggle-row input[type="checkbox"] { width: 20px; height: 20px; accent-color: var(--accent-dark); }
 
 #toast-wrap {
   position: fixed;

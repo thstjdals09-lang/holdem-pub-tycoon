@@ -40,6 +40,7 @@ const COLORS = {
 const TABLE_FELT_COLORS = [0x7bc67e, 0xff9ec2, 0x6fc1ff, 0xffc85c, 0xd0a0ff, 0x8fe0c8];
 const CUSTOMER_SHIRT_COLORS = [0xff8fab, 0xffc85c, 0x7bc67e, 0x6fc1ff, 0xd98cff, 0xffa8a8, 0xffe08a];
 const ENTRANCE_Z = 6.2;
+const seatGeo = new THREE.CapsuleGeometry(0.15, 0.24, 2, 6);
 
 let scene, camera, renderer, controls, container, clock;
 let groups = {};
@@ -50,7 +51,10 @@ let spawnTimer = 1.5;
 let ready = false;
 let toonGradient;
 let outlineMat;
+let seatMaterials = [];
 let frustumHalfHeight = 9.6;
+let raycaster;
+let pointerStart = null;
 
 // ---------- 헬퍼: 카툰 재질 / 텍스처 / 아웃라인 ----------
 function makeToonGradient() {
@@ -154,8 +158,50 @@ function makePersonMesh(shirtColor, accentColor, withHat) {
   return group;
 }
 
-function buildTable(hasDealer, feltColor) {
+// 테이블 인덱스마다 결정론적으로 4~8명 사이 좌석 수를 정한다 (같은 테이블은 항상 같은 좌석 수).
+function seatCountFor(index, seatsMin, seatsMax) {
+  const range = Math.max(1, seatsMax - seatsMin + 1);
+  const hash = (index * 2654435761) >>> 0;
+  return seatsMin + (hash % range);
+}
+
+function makeTextSprite(text) {
+  const fontSize = 54;
+  const canvas = document.createElement("canvas");
+  const ctx = canvas.getContext("2d");
+  ctx.font = `bold ${fontSize}px "Gowun Dodum", sans-serif`;
+  const textWidth = ctx.measureText(text).width;
+  const paddingX = 22;
+  canvas.width = Math.ceil(textWidth + paddingX * 2);
+  canvas.height = Math.ceil(fontSize * 1.7);
+  ctx.font = `bold ${fontSize}px "Gowun Dodum", sans-serif`;
+  const r = canvas.height / 2;
+  ctx.fillStyle = "rgba(255,255,255,0.92)";
+  ctx.beginPath();
+  ctx.moveTo(r, 0);
+  ctx.arcTo(canvas.width, 0, canvas.width, canvas.height, r);
+  ctx.arcTo(canvas.width, canvas.height, 0, canvas.height, r);
+  ctx.arcTo(0, canvas.height, 0, 0, r);
+  ctx.arcTo(0, 0, canvas.width, 0, r);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = "#ff5c8a";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(text, canvas.width / 2, canvas.height / 2 + 2);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const mat = new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true });
+  const sprite = new THREE.Sprite(mat);
+  const scale = 0.011;
+  sprite.scale.set(canvas.width * scale, canvas.height * scale, 1);
+  sprite.renderOrder = 999;
+  return sprite;
+}
+
+function buildTable({ index, hasDealer, feltColor, seatCount, incomeLabel }) {
   const g = new THREE.Group();
+  g.userData = { type: "table", index };
   const base = new THREE.Mesh(sharedGeo.tableBase, toonMat(COLORS.tableLeg));
   base.position.y = 0.03;
   base.castShadow = base.receiveShadow = true;
@@ -176,11 +222,33 @@ function buildTable(hasDealer, feltColor) {
     dealer.scale.setScalar(0.82);
     g.add(dealer);
   }
+
+  // 테이블 하나에 4~8명이 둘러앉은 모습 (딜러 자리는 비워둠)
+  const ringRadius = 1.05;
+  for (let s = 0; s < seatCount; s++) {
+    const angle = (s / seatCount) * Math.PI * 2 + Math.PI / seatCount;
+    if (hasDealer && Math.cos(angle) > 0.6 && Math.abs(Math.sin(angle)) < 0.5) continue; // 딜러 쪽 자리 비우기
+    const mat = seatMaterials.length ? seatMaterials[(index + s) % seatMaterials.length] : undefined;
+    const seat = new THREE.Mesh(seatGeo, mat || toonMat(CUSTOMER_SHIRT_COLORS[s % CUSTOMER_SHIRT_COLORS.length]));
+    const sx = Math.cos(angle) * ringRadius;
+    const sz = Math.sin(angle) * ringRadius;
+    seat.position.set(sx, 0.13, sz);
+    seat.rotation.y = Math.atan2(-sx, -sz);
+    seat.castShadow = true;
+    g.add(seat);
+  }
+
+  if (incomeLabel) {
+    const label = makeTextSprite(incomeLabel);
+    label.position.set(0, 1.5, 0);
+    g.add(label);
+  }
   return g;
 }
 
 function buildEmptySlot() {
   const g = new THREE.Group();
+  g.userData = { type: "buyTable" };
   const ring = new THREE.Mesh(
     sharedGeo.emptyRing,
     new THREE.MeshBasicMaterial({ color: COLORS.emptySlot, transparent: true, opacity: 0.55, side: THREE.DoubleSide })
@@ -307,6 +375,8 @@ export function init(containerEl) {
   try {
     toonGradient = makeToonGradient();
     outlineMat = new THREE.MeshBasicMaterial({ color: COLORS.outline, side: THREE.BackSide });
+    seatMaterials = CUSTOMER_SHIRT_COLORS.map((c) => toonMat(c));
+    raycaster = new THREE.Raycaster();
 
     scene = new THREE.Scene();
     scene.background = new THREE.Color(COLORS.sky);
@@ -401,6 +471,8 @@ export function init(containerEl) {
     clock = new THREE.Clock();
     ready = true;
     window.addEventListener("resize", onResize);
+    renderer.domElement.addEventListener("pointerdown", onPointerDown);
+    renderer.domElement.addEventListener("pointerup", onPointerUp);
     animate();
   } catch (err) {
     console.error("[PubScene3D] init failed", err);
@@ -430,18 +502,76 @@ function clearGroup(group) {
   while (group.children.length) group.remove(group.children[0]);
 }
 
+function findTaggedAncestor(obj) {
+  let cur = obj;
+  while (cur && !(cur.userData && cur.userData.type)) cur = cur.parent;
+  return cur;
+}
+
+function onPointerDown(e) {
+  pointerStart = { x: e.clientX, y: e.clientY, t: performance.now() };
+}
+
+function onPointerUp(e) {
+  if (!pointerStart) return;
+  const dx = e.clientX - pointerStart.x;
+  const dy = e.clientY - pointerStart.y;
+  const moved = Math.hypot(dx, dy);
+  const elapsed = performance.now() - pointerStart.t;
+  pointerStart = null;
+  if (moved > 10 || elapsed > 500) return; // 드래그/핀치는 탭으로 취급하지 않음
+
+  const rect = renderer.domElement.getBoundingClientRect();
+  const ndc = new THREE.Vector2(
+    ((e.clientX - rect.left) / rect.width) * 2 - 1,
+    -((e.clientY - rect.top) / rect.height) * 2 + 1
+  );
+  raycaster.setFromCamera(ndc, camera);
+  const hits = raycaster.intersectObjects([groups.tables, groups.fixtures], true);
+  if (!hits.length) return;
+  const target = findTaggedAncestor(hits[0].object);
+  if (!target || !window.PubScene3D || typeof window.PubScene3D.onTap !== "function") return;
+
+  const { type, index, id } = target.userData;
+  if (type === "table") window.PubScene3D.onTap({ type: "table", index });
+  else if (type === "buyTable") window.PubScene3D.onTap({ type: "buyTable" });
+  else if (type === "fixture") window.PubScene3D.onTap({ type: "fixture", id });
+}
+
 export function update(snapshot) {
   if (!ready) return;
-  const { tables, capacity, maxShown, fixtures, staff, decor } = snapshot;
+  const {
+    tables,
+    capacity,
+    maxShown,
+    fixtures,
+    staff,
+    decor,
+    dealerCount = 0,
+    perTableIncome = 0,
+    showTableIncome = true,
+    seatsMin = 4,
+    seatsMax = 8,
+  } = snapshot;
 
   clearGroup(groups.tables);
   const shownCapacity = Math.min(capacity, maxShown);
   const cols = Math.min(6, Math.max(2, Math.ceil(Math.sqrt(shownCapacity * 1.6))));
   const newTableSlots = [];
+  const incomeLabel = showTableIncome ? `+${perTableIncome < 100 ? (Math.round(perTableIncome * 10) / 10).toFixed(1) : Math.round(perTableIncome)}/초` : null;
   for (let i = 0; i < shownCapacity; i++) {
     const [x, z] = gridPosition(i, cols, 1.9);
-    const hasDealer = i < staff.dealer;
-    const obj = i < tables ? buildTable(hasDealer, TABLE_FELT_COLORS[i % TABLE_FELT_COLORS.length]) : buildEmptySlot();
+    const hasDealer = i < dealerCount;
+    const obj =
+      i < tables
+        ? buildTable({
+            index: i,
+            hasDealer,
+            feltColor: TABLE_FELT_COLORS[i % TABLE_FELT_COLORS.length],
+            seatCount: seatCountFor(i, seatsMin, seatsMax),
+            incomeLabel,
+          })
+        : buildEmptySlot();
     obj.position.x = x;
     obj.position.z = z;
     groups.tables.add(obj);
@@ -452,29 +582,35 @@ export function update(snapshot) {
   customers = [];
 
   clearGroup(groups.fixtures);
+  const barGroup = new THREE.Group();
+  barGroup.userData = { type: "fixture", id: "bar" };
   const bar = meshWO(new RoundedBoxGeometry(3.2, 0.9, 0.6, 3, 0.1), COLORS.bar, 1.04);
   bar.position.set(-6.2, 0.45, -6.8);
   const barTrim = new THREE.Mesh(new THREE.BoxGeometry(3.22, 0.12, 0.62), toonMat(COLORS.barTrim));
   barTrim.position.set(-6.2, 0.85, -6.8);
-  groups.fixtures.add(bar, barTrim);
+  barGroup.add(bar, barTrim);
   const barLevel = fixtures.bar || 0;
   for (let i = 0; i < Math.min(barLevel, 5); i++) {
     const bottle = new THREE.Mesh(sharedGeo.bottle, toonMat(0x5c3a21));
     bottle.position.set(-7.3 + i * 0.28, 1.1, -6.8);
     bottle.castShadow = true;
-    groups.fixtures.add(bottle);
+    barGroup.add(bottle);
   }
+  groups.fixtures.add(barGroup);
   if (staff.bartender > 0) {
     const bartender = makePersonMesh(COLORS.bartenderShirt, COLORS.bartenderAccent, false);
     bartender.position.set(-6.2, 0, -7.6);
     groups.fixtures.add(bartender);
   }
 
+  const fridgeGroup = new THREE.Group();
+  fridgeGroup.userData = { type: "fixture", id: "fridge" };
   const fridge = meshWO(new RoundedBoxGeometry(0.8, 1.2, 0.7, 3, 0.1), COLORS.fridge, 1.05);
   fridge.position.set(-3.6, 0.6, -7.2);
   const fridgeDoor = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.9, 0.05), toonMat(COLORS.fridgeDoor));
   fridgeDoor.position.set(-3.6, 0.65, -6.84);
-  groups.fixtures.add(fridge, fridgeDoor);
+  fridgeGroup.add(fridge, fridgeDoor);
+  groups.fixtures.add(fridgeGroup);
   const fridgeLevel = fixtures.fridge || 0;
   if (fridgeLevel > 0) {
     const light = new THREE.PointLight(0xbdeeff, Math.min(fridgeLevel, 5) * 0.15, 2.5);
@@ -482,18 +618,21 @@ export function update(snapshot) {
     groups.fixtures.add(light);
   }
 
+  const vaultGroup = new THREE.Group();
+  vaultGroup.userData = { type: "fixture", id: "vault" };
   const vault = meshWO(new RoundedBoxGeometry(0.9, 0.9, 0.8, 3, 0.08), COLORS.vault, 1.05);
   vault.position.set(6.2, 0.45, -7.2);
   const vaultRing = new THREE.Mesh(new THREE.TorusGeometry(0.12, 0.025, 8, 16), toonMat(COLORS.vaultTrim));
   vaultRing.position.set(6.2, 0.5, -6.79);
-  groups.fixtures.add(vault, vaultRing);
+  vaultGroup.add(vault, vaultRing);
   const vaultLevel = fixtures.vault || 0;
   for (let i = 0; i < Math.min(vaultLevel, 6); i++) {
     const chip = new THREE.Mesh(sharedGeo.chip, toonMat(COLORS.chip));
     chip.position.set(6.2, 0.93 + i * 0.075, -6.6);
     chip.castShadow = true;
-    groups.fixtures.add(chip);
+    vaultGroup.add(chip);
   }
+  groups.fixtures.add(vaultGroup);
 
   clearGroup(groups.staff);
   const roamDefs = [
@@ -607,10 +746,11 @@ function updateCustomers(dt, t) {
   }
 }
 
-export function chipBurst() {
+export function chipBurst(colorHex) {
   if (!ready) return;
+  const color = colorHex || COLORS.chip;
   for (let i = 0; i < 6; i++) {
-    const mat = toonMat(COLORS.chip, { transparent: true });
+    const mat = toonMat(color, { transparent: true });
     const chip = new THREE.Mesh(sharedGeo.chip, mat);
     chip.position.set((Math.random() - 0.5) * 1.5, 0.6, 1.5 + (Math.random() - 0.5) * 1.5);
     chip.userData.life = 0.8;

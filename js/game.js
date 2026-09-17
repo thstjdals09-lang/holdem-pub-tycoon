@@ -2,16 +2,19 @@
 (() => {
   const D = GAME_DATA;
 
-  const defaultState = (keepPrestige) => ({
+  const defaultState = (overrides = {}) => ({
     chips: 20,
     totalEarned: 0,
+    diamonds: overrides.diamonds ?? 0,
     tables: 1,
     tableLevel: 0,
     store: { expansions: 0 },
     fixtures: Object.fromEntries(D.fixtures.map((f) => [f.id, 0])),
     staff: Object.fromEntries(D.staff.map((s) => [s.id, 0])),
+    dealers: overrides.dealers ?? [],
     decor: Object.fromEntries(D.decor.map((d) => [d.id, false])),
-    prestige: keepPrestige || { points: 0 },
+    prestige: overrides.prestige ?? { points: 0 },
+    settings: { showTableIncome: true },
   });
 
   let state = defaultState();
@@ -21,13 +24,24 @@
   // 저장된 데이터에 새 필드(신규 시설/직원 등)가 없어도 기본값으로 채워준다.
   const mergeWithDefaults = (saved) => {
     const base = defaultState();
+    // 예전 버전(칩으로 고용하는 딜러)의 세이브를 새 다이아 가챠 딜러 컬렉션으로 자연스럽게 옮겨준다.
+    let dealers = base.dealers;
+    if (Array.isArray(saved.dealers)) {
+      dealers = saved.dealers;
+    } else if (saved.staff && saved.staff.dealer > 0) {
+      const commonBonus = D.gacha.rarities.find((r) => r.id === "common").bonus;
+      dealers = Array.from({ length: saved.staff.dealer }, () => ({ rarity: "common", bonus: commonBonus }));
+    }
+    const { dealer: _oldDealerCount, ...restSavedStaff } = saved.staff || {};
     return {
       ...base,
       ...saved,
       store: { ...base.store, ...saved.store },
       fixtures: { ...base.fixtures, ...saved.fixtures },
-      staff: { ...base.staff, ...saved.staff },
+      staff: { ...base.staff, ...restSavedStaff },
       decor: { ...base.decor, ...saved.decor },
+      settings: { ...base.settings, ...saved.settings },
+      dealers,
     };
   };
 
@@ -61,11 +75,14 @@
 
   const prestigeMultiplier = (points = state.prestige.points) => 1 + points * D.prestige.pointBonus;
 
+  const dealerBonusSum = () => state.dealers.reduce((sum, d) => sum + d.bonus, 0);
+
   const incomeMultiplier = () => {
     let mult = 1;
     D.staff.forEach((s) => {
       if (s.effect.type === "incomeMult") mult += s.effect.value * state.staff[s.id];
     });
+    mult += dealerBonusSum();
     D.decor.forEach((d) => {
       if (state.decor[d.id]) mult += d.bonus;
     });
@@ -81,19 +98,14 @@
     return income;
   };
 
-  const incomePerSecond = () => {
-    const tableIncome = state.tables * D.table.baseIncome * (1 + state.tableLevel * D.tableUpgrade.bonusPerLevel);
-    return (tableIncome + fixtureIncome()) * incomeMultiplier();
-  };
+  // 테이블 한 개가 버는 초당 수익 (3D 씬에 테이블별로 표시됨)
+  const perTableIncome = () => D.table.baseIncome * (1 + state.tableLevel * D.tableUpgrade.bonusPerLevel) * incomeMultiplier();
 
-  const clickPower = () => {
-    let power = 1;
-    D.staff.forEach((s) => {
-      if (s.effect.type === "click") power += s.effect.value * state.staff[s.id];
-    });
-    const vault = fixtureDef("vault");
-    if (vault) power += vault.clickPerLevel * state.fixtures.vault;
-    return power * prestigeMultiplier();
+  const incomePerSecond = () => state.tables * perTableIncome() + fixtureIncome() * incomeMultiplier();
+
+  const diamondPerSecond = () => {
+    const vaultLevel = state.fixtures.vault || 0;
+    return D.diamond.baseRatePerTableSecond * state.tables * (1 + vaultLevel * D.diamond.vaultBonusPerLevel) * prestigeMultiplier();
   };
 
   const offlineEfficiency = () => {
@@ -109,6 +121,9 @@
     state.chips += amount;
     state.totalEarned += amount;
   };
+  const addDiamonds = (amount) => {
+    state.diamonds += amount;
+  };
 
   const buyTable = () => {
     if (state.tables >= tableCapacity()) return;
@@ -119,6 +134,7 @@
     dirty = true;
     render();
     toast(`🃏 테이블 ${state.tables}번 오픈!`);
+    if (window.PubScene3D) window.PubScene3D.chipBurst();
   };
 
   const expandStore = () => {
@@ -172,23 +188,41 @@
     toast(`${def.emoji} ${def.name} 설치 완료!`);
   };
 
-  const manualDeal = () => {
-    addChips(clickPower());
+  const weightedRandomRarity = () => {
+    const total = D.gacha.rarities.reduce((sum, r) => sum + r.weight, 0);
+    let roll = Math.random() * total;
+    for (const r of D.gacha.rarities) {
+      if (roll < r.weight) return r;
+      roll -= r.weight;
+    }
+    return D.gacha.rarities[D.gacha.rarities.length - 1];
+  };
+
+  const pullGacha = () => {
+    const cost = D.gacha.costDiamonds;
+    if (state.diamonds < cost) return;
+    state.diamonds -= cost;
+    const rarity = weightedRandomRarity();
+    state.dealers.push({ rarity: rarity.id, bonus: rarity.bonus });
+    dirty = true;
     render();
-    const btn = document.getElementById("deal-btn");
-    btn.classList.add("dealing");
-    setTimeout(() => btn.classList.remove("dealing"), 180);
-    if (window.PubScene3D) window.PubScene3D.chipBurst();
+    showGachaModal(rarity);
+    if (window.PubScene3D) window.PubScene3D.chipBurst(rarity.color);
   };
 
   const doPrestige = () => {
     const gain = potentialPrestigePoints();
     if (gain <= state.prestige.points) return;
     if (!window.confirm(`정말 브랜드를 리뉴얼할까요?\n테이블/직원/칩이 초기화되고, 명성 포인트가 ${gain}점이 됩니다.`)) return;
-    state = defaultState({ points: gain });
+    const diamondReward = D.diamond.prestigeReward * gain;
+    state = defaultState({
+      prestige: { points: gain },
+      diamonds: state.diamonds + diamondReward,
+      dealers: state.dealers,
+    });
     dirty = true;
     render();
-    toast(`✨ 브랜드 리뉴얼 완료! 명성 포인트 ${gain}점`);
+    toast(`✨ 브랜드 리뉴얼 완료! 명성 포인트 ${gain}점 · 💎+${diamondReward}`);
   };
 
   const resetGame = async () => {
@@ -219,7 +253,7 @@
   };
   const formatChips = (n) => `${formatNumber(n)} 칩`;
 
-  // 초당 수익/클릭 수익처럼 1보다 작을 수 있는 값은 반올림해도 0으로 보이지 않게 소수 1자리 유지
+  // 초당 수익처럼 1보다 작을 수 있는 값은 반올림해도 0으로 보이지 않게 소수 1자리 유지
   const formatRate = (n) => {
     if (n < 100) {
       return (Math.round(n * 10) / 10).toLocaleString("ko-KR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
@@ -227,7 +261,7 @@
     return formatNumber(n);
   };
 
-  // ---------- 이펙트: 토스트 / 팝 애니메이션 ----------
+  // ---------- 이펙트: 토스트 / 모달 ----------
   const toast = (msg) => {
     const wrap = document.getElementById("toast-wrap");
     const el = document.createElement("div");
@@ -236,6 +270,68 @@
     wrap.appendChild(el);
     setTimeout(() => el.remove(), 2600);
   };
+
+  function showGachaModal(rarity) {
+    const modal = document.getElementById("gacha-modal");
+    const box = document.getElementById("gacha-result-box");
+    box.style.setProperty("--rarity-color", rarity.color);
+    document.getElementById("gacha-result-emoji").textContent = rarity.emoji;
+    document.getElementById("gacha-result-name").textContent = `${rarity.name} 딜러 획득!`;
+    document.getElementById("gacha-result-bonus").textContent = `테이블 수익 +${Math.round(rarity.bonus * 100)}%`;
+    modal.classList.remove("hidden");
+  }
+
+  // 3D 씬에서 테이블/시설을 탭했을 때 뜨는 업그레이드 팝업
+  let popupAction = null;
+  function openContextPopup({ title, bodyHtml, actionLabel, actionDisabled, onAction }) {
+    document.getElementById("context-popup-title").textContent = title;
+    document.getElementById("context-popup-desc").innerHTML = bodyHtml;
+    const btn = document.getElementById("context-popup-action");
+    btn.textContent = actionLabel;
+    btn.disabled = !!actionDisabled;
+    popupAction = onAction;
+    document.getElementById("context-popup").classList.remove("hidden");
+  }
+  function closeContextPopup() {
+    document.getElementById("context-popup").classList.add("hidden");
+    popupAction = null;
+  }
+  function handleSceneTap(info) {
+    if (info.type === "buyTable") {
+      const capacity = tableCapacity();
+      if (state.tables >= capacity) {
+        toast("🏗 매장이 가득 찼어요! 매장 탭에서 확장해보세요");
+        return;
+      }
+      openContextPopup({
+        title: "🃏 새 테이블 추가",
+        bodyHtml: `빈 자리에 새 홀덤 테이블을 놓을까요?<br/>예상 수익: <b>${formatChips(perTableIncome())}/초</b>`,
+        actionLabel: `테이블 추가 (${formatChips(tableCost())})`,
+        actionDisabled: state.chips < tableCost(),
+        onAction: buyTable,
+      });
+    } else if (info.type === "table") {
+      openContextPopup({
+        title: "🃏 테이블 강화",
+        bodyHtml: `이 테이블은 <b>${formatChips(perTableIncome())}/초</b>를 벌고 있어요.<br/>현재 리모델링 레벨: <b>Lv.${state.tableLevel}</b>`,
+        actionLabel: `전체 테이블 강화 (${formatChips(tableUpgradeCost())})`,
+        actionDisabled: state.chips < tableUpgradeCost(),
+        onAction: upgradeTable,
+      });
+    } else if (info.type === "fixture") {
+      const f = fixtureDef(info.id);
+      if (!f) return;
+      const cost = fixtureCost(info.id);
+      const level = state.fixtures[info.id];
+      openContextPopup({
+        title: `${f.emoji} ${f.name}`,
+        bodyHtml: `${f.desc}<br/>현재 레벨: <b>Lv.${level}</b>`,
+        actionLabel: `${level === 0 ? "설치" : "업그레이드"} (${formatChips(cost)})`,
+        actionDisabled: state.chips < cost,
+        onAction: () => upgradeFixture(info.id),
+      });
+    }
+  }
 
   // ---------- 렌더링 ----------
   function renderScene() {
@@ -247,14 +343,19 @@
       fixtures: state.fixtures,
       staff: state.staff,
       decor: state.decor,
+      dealerCount: state.dealers.length,
+      perTableIncome: perTableIncome(),
+      showTableIncome: state.settings.showTableIncome,
+      seatsMin: D.table.seatsMin,
+      seatsMax: D.table.seatsMax,
     });
   }
 
   function renderHeader() {
     document.getElementById("chips-value").textContent = formatNumber(state.chips);
+    document.getElementById("diamonds-value").textContent = formatNumber(state.diamonds);
     document.getElementById("income-value").textContent = `${formatRate(incomePerSecond())} / 초`;
     document.getElementById("prestige-badge").textContent = `✨ x${prestigeMultiplier().toFixed(2)}`;
-    document.getElementById("click-power-label").textContent = `+${formatRate(clickPower())} 칩`;
   }
 
   function renderTablesTab() {
@@ -262,7 +363,7 @@
     document.getElementById("table-count").textContent = state.tables;
     document.getElementById("table-capacity").textContent = capacity;
     document.getElementById("table-level").textContent = state.tableLevel;
-    document.getElementById("table-base-income").textContent = D.table.baseIncome;
+    document.getElementById("table-per-income").textContent = formatRate(perTableIncome());
 
     const buyBtn = document.getElementById("buy-table-btn");
     const atCapacity = state.tables >= capacity;
@@ -328,6 +429,19 @@
       card.querySelector("button").addEventListener("click", () => hireStaff(s.id));
       wrap.appendChild(card);
     });
+
+    const cost = D.gacha.costDiamonds;
+    document.getElementById("gacha-cost").textContent = formatNumber(cost);
+    document.getElementById("gacha-pull-btn").disabled = state.diamonds < cost;
+    document.getElementById("dealer-count").textContent = state.dealers.length;
+    document.getElementById("dealer-bonus-total").textContent = `+${Math.round(dealerBonusSum() * 100)}%`;
+    const breakdown = document.getElementById("dealer-breakdown");
+    breakdown.innerHTML = D.gacha.rarities
+      .map((r) => {
+        const count = state.dealers.filter((d) => d.rarity === r.id).length;
+        return `<span class="rarity-chip" style="--rc:${r.color}">${r.emoji} ${r.name} x${count}</span>`;
+      })
+      .join("");
   }
 
   function renderDecorTab() {
@@ -361,8 +475,13 @@
     document.getElementById("prestige-gain").textContent = gain;
     document.getElementById("prestige-current-mult").textContent = `x${prestigeMultiplier().toFixed(2)}`;
     document.getElementById("prestige-next-mult").textContent = `x${prestigeMultiplier(Math.max(gain, state.prestige.points)).toFixed(2)}`;
+    document.getElementById("prestige-diamond-reward").textContent = D.diamond.prestigeReward * gain;
     const btn = document.getElementById("prestige-btn");
     btn.disabled = gain <= state.prestige.points;
+  }
+
+  function renderSettingsTab() {
+    document.getElementById("show-table-income-toggle").checked = state.settings.showTableIncome;
   }
 
   function render() {
@@ -372,6 +491,7 @@
     renderStaffTab();
     renderDecorTab();
     renderPrestigeTab();
+    renderSettingsTab();
     if (dirty) {
       renderScene();
       dirty = false;
@@ -412,6 +532,11 @@
       }
     });
     document.getElementById("reset-btn").addEventListener("click", resetGame);
+    document.getElementById("show-table-income-toggle").addEventListener("change", (e) => {
+      state.settings.showTableIncome = e.target.checked;
+      dirty = true;
+      render();
+    });
   }
 
   // ---------- 저장/오프라인 수익 ----------
@@ -428,18 +553,21 @@
       const elapsedSec = Math.max(0, Math.min((Date.now() - savedAt) / 1000, D.offline.maxSeconds));
       if (elapsedSec > 20) {
         const gain = incomePerSecond() * elapsedSec * offlineEfficiency();
+        const diaGain = diamondPerSecond() * elapsedSec * offlineEfficiency();
         if (gain > 0) {
           addChips(gain);
-          showOfflineModal(gain, elapsedSec);
+          addDiamonds(diaGain);
+          showOfflineModal(gain, diaGain, elapsedSec);
         }
       }
     }
   }
 
-  function showOfflineModal(gain, elapsedSec) {
+  function showOfflineModal(gain, diaGain, elapsedSec) {
     const mins = Math.round(elapsedSec / 60);
     const timeLabel = mins < 60 ? `${mins}분` : `${(mins / 60).toFixed(1)}시간`;
-    document.getElementById("offline-text").textContent = `${timeLabel} 동안 ${formatChips(gain)}을 벌었어요! (효율 ${Math.round(offlineEfficiency() * 100)}%)`;
+    document.getElementById("offline-text").textContent =
+      `${timeLabel} 동안 ${formatChips(gain)}` + (diaGain >= 1 ? ` · 💎${Math.floor(diaGain)}` : "") + `을 벌었어요! (효율 ${Math.round(offlineEfficiency() * 100)}%)`;
     document.getElementById("offline-modal").classList.remove("hidden");
   }
 
@@ -449,20 +577,35 @@
     const dt = (now - lastTickAt) / 1000;
     lastTickAt = now;
     addChips(incomePerSecond() * dt);
+    addDiamonds(diamondPerSecond() * dt);
     render();
   }
 
   async function init() {
     setupTabs();
     setupSettings();
-    if (window.PubScene3D) window.PubScene3D.init(document.getElementById("pub-3d-container"));
+    if (window.PubScene3D) {
+      window.PubScene3D.init(document.getElementById("pub-3d-container"));
+      window.PubScene3D.onTap = handleSceneTap;
+    }
     document.getElementById("buy-table-btn").addEventListener("click", buyTable);
     document.getElementById("upgrade-table-btn").addEventListener("click", upgradeTable);
     document.getElementById("expand-store-btn").addEventListener("click", expandStore);
-    document.getElementById("deal-btn").addEventListener("click", manualDeal);
     document.getElementById("prestige-btn").addEventListener("click", doPrestige);
+    document.getElementById("gacha-pull-btn").addEventListener("click", pullGacha);
     document.getElementById("offline-close").addEventListener("click", () => {
       document.getElementById("offline-modal").classList.add("hidden");
+    });
+    document.getElementById("gacha-close").addEventListener("click", () => {
+      document.getElementById("gacha-modal").classList.add("hidden");
+    });
+    document.getElementById("context-popup-close").addEventListener("click", closeContextPopup);
+    document.getElementById("context-popup").addEventListener("click", (e) => {
+      if (e.target.id === "context-popup") closeContextPopup();
+    });
+    document.getElementById("context-popup-action").addEventListener("click", () => {
+      if (popupAction) popupAction();
+      closeContextPopup();
     });
 
     await loadGameAndComputeOffline();
