@@ -28,8 +28,26 @@
 <!-- ===== HUD: 3D 위에 떠 있는 UI ===== -->
 <div class="hud">
 
-  <!-- 좌측 상단: 재화 -->
+  <!-- 좌측 상단: 프로필 -->
   <div class="hud-left">
+    <button class="profile-card" id="profile-btn" aria-label="프로필">
+      <span class="avatar-ring" id="avatar-ring">
+        <span class="avatar" id="avatar-face">🧑</span>
+        <span class="avatar-lv" id="avatar-lv">1</span>
+      </span>
+      <span class="profile-meta">
+        <b class="profile-name" id="profile-title">펍 알바</b>
+        <span class="xp-bar"><i id="xp-fill"></i></span>
+      </span>
+    </button>
+    <div class="hud-icon-row">
+      <button class="icon-btn" id="prestige-badge" title="프레스티지 배율">✨<small id="prestige-mult">x1.00</small></button>
+      <button class="icon-btn tab-btn" data-tab="settings" data-title="설정" title="설정" aria-label="설정">⚙️</button>
+    </div>
+  </div>
+
+  <!-- 우측 상단: 재화 -->
+  <div class="hud-right">
     <div class="currency" id="currency-chips">
       <span class="cur-icon cur-icon-chip" aria-hidden="true"></span>
       <span class="cur-body">
@@ -45,24 +63,6 @@
       </span>
     </div>
     <div class="boost-strip" id="boost-strip"></div>
-  </div>
-
-  <!-- 우측 상단: 프로필 -->
-  <div class="hud-right">
-    <button class="profile-card" id="profile-btn" aria-label="프로필">
-      <span class="avatar-ring" id="avatar-ring">
-        <span class="avatar" id="avatar-face">🧑</span>
-        <span class="avatar-lv" id="avatar-lv">1</span>
-      </span>
-      <span class="profile-meta">
-        <b class="profile-name" id="profile-title">펍 알바</b>
-        <span class="xp-bar"><i id="xp-fill"></i></span>
-      </span>
-    </button>
-    <div class="hud-right-row">
-      <button class="icon-btn" id="prestige-badge" title="프레스티지 배율">✨<small id="prestige-mult">x1.00</small></button>
-      <button class="icon-btn tab-btn" data-tab="settings" data-title="설정" title="설정" aria-label="설정">⚙️</button>
-    </div>
   </div>
 
   <!-- 우측 사이드 레일: 리텐션 기능 버튼 -->

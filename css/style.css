@@ -70,7 +70,7 @@ button, textarea, input { font-family: inherit; }
 }
 .hud > * { pointer-events: auto; }
 
-/* ===== 좌측 상단: 재화 ===== */
+/* ===== 좌측 상단: 프로필 ===== */
 .hud-left {
   position: absolute;
   top: calc(10px + var(--safe-t));
@@ -122,7 +122,8 @@ button, textarea, input { font-family: inherit; }
 .currency-dia .cur-value { color: #1f7f9c; }
 
 /* 활성 부스트 표시 */
-.boost-strip { display: flex; gap: 5px; flex-wrap: wrap; max-width: 180px; }
+/* 재화와 같은 우측 열에 있으므로 오른쪽으로 붙인다 */
+.boost-strip { display: flex; gap: 5px; flex-wrap: wrap; justify-content: flex-end; max-width: 180px; }
 .boost-pill {
   display: inline-flex;
   align-items: center;
@@ -139,7 +140,7 @@ button, textarea, input { font-family: inherit; }
 }
 @keyframes boostPulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.06); } }
 
-/* ===== 우측 상단: 프로필 ===== */
+/* ===== 우측 상단: 재화 ===== */
 .hud-right {
   position: absolute;
   top: calc(10px + var(--safe-t));
@@ -218,7 +219,7 @@ button, textarea, input { font-family: inherit; }
   transition: width 0.4s ease;
 }
 
-.hud-right-row { display: flex; gap: 6px; }
+.hud-icon-row { display: flex; gap: 6px; }
 .icon-btn {
   display: inline-flex;
   flex-direction: column;
