@@ -1359,6 +1359,7 @@ export function update(snapshot) {
         spots.push({
           id: `t${i}s${si}`,
           type: "poker",
+          tableIndex: i, // 손님 배치 우선순위 계산용(안쪽 테이블=인덱스가 작은 쪽부터 채움)
           x: x + s.x,
           z: z + s.z,
           rot: s.rot,
@@ -1601,7 +1602,17 @@ function spawnCustomer() {
   if (!free.length) return;
   if (customers.length >= Math.min(free.length + customers.length, 16)) return;
 
-  const spot = free[Math.floor(Math.random() * free.length)];
+  // 어떤 종류의 자리로 갈지(테이블/바/소파/다트/주크박스)는 기존처럼 전체 빈자리 중 무작위로 고르되,
+  // 그 결과 홀덤 테이블로 가게 됐다면 안쪽(인덱스가 작은, 입구에서 먼) 테이블부터 채운다 — 여러 테이블에
+  // 손님이 듬성듬성 흩어지는 대신 안쪽 테이블이 꽉 차야 다음 테이블로 넘어가는 흐름을 만들면서도,
+  // 바/소파/다트/주크박스가 아예 안 쓰이게 되진 않게 한다.
+  let spot = free[Math.floor(Math.random() * free.length)];
+  if (spot.type === "poker") {
+    const freeTableSeats = free.filter((s) => s.type === "poker");
+    const innermostIndex = freeTableSeats.reduce((m, s) => Math.min(m, s.tableIndex), Infinity);
+    const innermostSeats = freeTableSeats.filter((s) => s.tableIndex === innermostIndex);
+    spot = innermostSeats[Math.floor(Math.random() * innermostSeats.length)];
+  }
   spot.taken = true;
 
   const look = randomCustomerLook();

@@ -1,4 +1,4 @@
-// DealerPortraits: 딜러 16명의 치비 초상화를 SVG로 그려서 data URI로 돌려준다.
+// DealerPortraits: 운영진 치비 초상화를 SVG로 그려서 data URI로 돌려준다.
 // 외부 이미지 에셋 없이 도감/가챠 연출에 쓸 일러스트를 확보하기 위한 모듈.
 // 아트 방향: 쿠키런류의 두꺼운 아웃라인 + 셀셰이딩 + 파스텔, 3D 씬 팔레트와 톤을 맞췄다.
 const DealerPortraits = (() => {
@@ -7,32 +7,51 @@ const DealerPortraits = (() => {
   // 등급별 배경 그라디언트 / 테두리
   const RARITY_STYLE = {
     common: { a: "#e9e9ef", b: "#c7c7d4", ring: "#9b9b9b" },
+    uncommon: { a: "#e2f5e2", b: "#b4e0b4", ring: "#7bc67e" },
     rare: { a: "#d6ecff", b: "#9fccff", ring: "#4fa3ff" },
     epic: { a: "#f0dcff", b: "#cfa4ff", ring: "#c86bff" },
     legendary: { a: "#fff0c9", b: "#ffd166", ring: "#ffb400" },
+    mythic: { a: "#ffe0f4", b: "#ff9fd8", ring: "#ff5fd0" },
   };
 
-  // 딜러별 외형 정의 — 이름/설명과 맞아떨어지도록 하나씩 지정했다.
-  const LOOKS = {
-    minsu: { skin: "#ffd9b3", hair: "#4a3628", style: "short", outfit: "#7fb3e8", accent: "#ffffff", acc: "cap" },
-    jieun: { skin: "#ffe0c2", hair: "#6b4a2f", style: "bob", outfit: "#ffc2d9", accent: "#ffffff", acc: "ribbon" },
-    taeho: { skin: "#ffd2a8", hair: "#2f2a26", style: "spiky", outfit: "#a8e0c0", accent: "#ffffff", acc: "cup" },
-    sujin: { skin: "#ffe3c9", hair: "#3b2b20", style: "ponytail", outfit: "#c9b8ff", accent: "#ffffff", acc: "glasses" },
-    doyun: { skin: "#ffd9b3", hair: "#5a4632", style: "wavy", outfit: "#ffd98a", accent: "#ffffff", acc: "headphones" },
-    haneul: { skin: "#ffe6cf", hair: "#8a6a4a", style: "bun", outfit: "#bfe6ff", accent: "#ffffff", acc: "cloud" },
-    jungwoo: { skin: "#f2c79a", hair: "#241f1c", style: "short", outfit: "#2f3550", accent: "#4fa3ff", acc: "sunglasses" },
-    soyeon: { skin: "#ffe0c2", hair: "#7a3f2a", style: "long", outfit: "#2f3550", accent: "#ff8fab", acc: "shaker" },
-    leo: { skin: "#ffd2a8", hair: "#1f1a2e", style: "wavy", outfit: "#3a2f55", accent: "#ffd166", acc: "tophat" },
-    yuna: { skin: "#ffe6cf", hair: "#c98a4a", style: "bob", outfit: "#ffb9d2", accent: "#ffffff", acc: "sparkle" },
-    jun: { skin: "#ffd9b3", hair: "#332a24", style: "ponytail", outfit: "#3f4a6b", accent: "#ffd166", acc: "cards" },
-    sera: { skin: "#ffe0c2", hair: "#2a2a3a", style: "bob", outfit: "#26304f", accent: "#ffffff", acc: "bowtie" },
-    kangtae: { skin: "#eabb8c", hair: "#1c1a1a", style: "spiky", outfit: "#4a2140", accent: "#5fe0b0", acc: "dragon" },
-    mina: { skin: "#ffe6cf", hair: "#5aa85a", style: "long", outfit: "#a8e0a8", accent: "#ffffff", acc: "clover" },
-    royal: { skin: "#f7d3ab", hair: "#d4b06a", style: "wavy", outfit: "#5a2a6b", accent: "#ffd166", acc: "crown" },
-    diana: { skin: "#ffe3c9", hair: "#2b2440", style: "long", outfit: "#2a2350", accent: "#9fe7ff", acc: "tiara" },
+  // 로스터가 50명 이상이라 사람마다 외형을 손으로 지정하지 않고, id를 해시해서 팔레트에서 결정적으로 고른다
+  // (같은 id는 항상 같은 얼굴). 액세서리는 등급이 높을수록 화려한 것 중에서 고른다.
+  const SKINS = ["#ffd9b3", "#ffe0c2", "#ffd2a8", "#ffe3c9", "#f2c79a", "#eabb8c", "#f7d3ab", "#ffe6cf"];
+  const HAIRS = ["#2f2a26", "#4a3628", "#6b4a2f", "#1c1a1a", "#7a3f2a", "#c98a4a", "#d4b06a", "#2b2440", "#8a6a4a", "#5a4632"];
+  const STYLES = ["short", "bob", "spiky", "ponytail", "wavy", "bun", "long"];
+  const OUTFITS = ["#7fb3e8", "#ffc2d9", "#a8e0c0", "#c9b8ff", "#ffd98a", "#bfe6ff", "#2f3550", "#3a2f55", "#ffb9d2", "#3f4a6b", "#26304f", "#4a2140", "#a8e0a8", "#5a2a6b"];
+  const ACCENTS = ["#ffffff", "#4fa3ff", "#ff8fab", "#ffd166", "#5fe0b0", "#9fe7ff"];
+  const ACCESSORIES_BY_RARITY = {
+    common: ["none", "cap", "cup", "glasses", "cloud"],
+    uncommon: ["ribbon", "headphones", "glasses", "cap", "clover"],
+    rare: ["sunglasses", "shaker", "cards", "sparkle", "headphones"],
+    epic: ["tophat", "bowtie", "dragon", "sparkle", "shaker"],
+    legendary: ["crown", "tiara", "tophat", "sparkle"],
+    mythic: ["crown"],
   };
 
-  const FALLBACK = { skin: "#ffd9b3", hair: "#4a3628", style: "short", outfit: "#9b9b9b", accent: "#fff", acc: "none" };
+  // FNV-1a 해시 + 매 선택마다 섞어서 다음 선택이 이전 선택과 상관없이 퍼지게 한다
+  function lookFor(dealerId, rarity) {
+    let h = 2166136261;
+    for (let i = 0; i < dealerId.length; i++) {
+      h ^= dealerId.charCodeAt(i);
+      h = Math.imul(h, 16777619);
+    }
+    h >>>= 0;
+    const pick = (arr) => {
+      const v = arr[h % arr.length];
+      h = Math.imul(h ^ (h >>> 15), 2246822519) >>> 0;
+      return v;
+    };
+    return {
+      skin: pick(SKINS),
+      hair: pick(HAIRS),
+      style: pick(STYLES),
+      outfit: pick(OUTFITS),
+      accent: pick(ACCENTS),
+      acc: pick(ACCESSORIES_BY_RARITY[rarity] || ACCESSORIES_BY_RARITY.common),
+    };
+  }
 
   // ---------- 헤어 ----------
   function hairBack(L) {
@@ -162,9 +181,9 @@ const DealerPortraits = (() => {
 
   // ---------- 조립 ----------
   function buildSvg(dealerId, rarity) {
-    const L = LOOKS[dealerId] || FALLBACK;
+    const L = lookFor(dealerId, rarity);
     const R = RARITY_STYLE[rarity] || RARITY_STYLE.common;
-    const isLegend = rarity === "legendary";
+    const isLegend = rarity === "legendary" || rarity === "mythic";
 
     const shoulders = `<path d="M16 100 Q18 78 34 72 L66 72 Q82 78 84 100 Z" fill="${L.outfit}" stroke="${OUTLINE}" stroke-width="2.8" stroke-linejoin="round"/>
       <path d="M44 72 L50 84 L56 72" fill="${L.accent}" stroke="${OUTLINE}" stroke-width="2.2" stroke-linejoin="round"/>`;
@@ -173,7 +192,7 @@ const DealerPortraits = (() => {
     const ears = `<circle cx="25" cy="47" r="4.5" fill="${L.skin}" stroke="${OUTLINE}" stroke-width="2.2"/>
       <circle cx="75" cy="47" r="4.5" fill="${L.skin}" stroke="${OUTLINE}" stroke-width="2.2"/>`;
 
-    // 선글라스를 끼는 딜러는 눈을 그리지 않는다
+    // 선글라스를 끼면 눈을 그리지 않는다
     const hidesEyes = L.acc === "sunglasses";
     const eyes = hidesEyes
       ? ""

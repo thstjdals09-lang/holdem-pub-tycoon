@@ -47,7 +47,7 @@ const GAME_DATA = {
     costGrowth: 1.15,
     baseIncome: 0.5, // 테이블 1개당 초당 수익
     seatsMin: 4,
-    seatsMax: 8,
+    seatsMax: 9,
   },
   tableUpgrade: {
     baseCost: 50,
@@ -149,20 +149,68 @@ const GAME_DATA = {
   // 이름 붙은 운영진 로스터 — 도감 탭에서 개별로 확인/승급, "운영" 탭에서 배치(최대 10명)한다.
   // role은 개별 능력치가 아니라 배치 시너지 계산용 태그(서로 다른 role을 고루 배치할수록 보너스가 커짐).
   // 초상화는 js/portraits.js가 SVG로 그린다 (외부 이미지 에셋 없음).
+  //
+  // 구성: 사용자가 지정한 실명 10명은 전부 SR 이상(특별 취급) + 랜덤 이름 40명을 N~SSR에 고르게 채워 넣어
+  // 로스터를 총 50명(+ 상점 전용 신화 1명)으로 확장했다.
   dealerRoster: [
-    { id: "jiseok", name: "강지석", rarity: "common", role: "서비스", emoji: "📋", desc: "성실함으로 승부하는 신입" },
-    { id: "jihyung", name: "이지형", rarity: "common", role: "인맥", emoji: "🗺️", desc: "동네 상권은 이미 다 꿰고 있다" },
-    { id: "taewoong", name: "김태웅", rarity: "uncommon", role: "영업", emoji: "🔥", desc: "패기 하나는 최고참 못지않다" },
-    { id: "yeonju", name: "조연주", rarity: "uncommon", role: "영업", emoji: "😊", desc: "웃는 얼굴로 재방문율을 끌어올린다" },
-    { id: "hyeyeon", name: "윤혜연", rarity: "rare", role: "서비스", emoji: "🧾", desc: "디테일 하나 놓치지 않는 꼼꼼함" },
-    { id: "yujin", name: "최유진", rarity: "rare", role: "이벤트", emoji: "🎶", desc: "분위기 메이커, 테이블이 늘 시끌시끌" },
-    { id: "hyeseo", name: "김혜서", rarity: "epic", role: "서비스", emoji: "🍹", desc: "손님 취향을 한 번에 기억하는 감각파" },
-    { id: "seongmin", name: "손성민", rarity: "epic", role: "이벤트", emoji: "🎉", desc: "판을 키우는 이벤트 기획의 달인" },
+    // ---------- N (일반) 14명 ----------
+    { id: "ex01", name: "김도윤", rarity: "common", role: "영업", emoji: "🎒", desc: "출근 첫날부터 웃음이 한가득" },
+    { id: "ex02", name: "이서준", rarity: "common", role: "서비스", emoji: "🧻", desc: "정리정돈은 내가 최고" },
+    { id: "ex03", name: "박하은", rarity: "common", role: "이벤트", emoji: "🎈", desc: "풍선 하나로 분위기를 바꾼다" },
+    { id: "ex04", name: "최시우", rarity: "common", role: "인맥", emoji: "📱", desc: "단골 번호는 다 외우고 있어요" },
+    { id: "ex05", name: "정은우", rarity: "common", role: "영업", emoji: "🥤", desc: "음료 서빙 속도 매장 1등" },
+    { id: "ex06", name: "조수아", rarity: "common", role: "서비스", emoji: "🧽", desc: "테이블 닦기 달인" },
+    { id: "ex07", name: "장민서", rarity: "common", role: "이벤트", emoji: "🎊", desc: "깜짝 이벤트 아이디어 뱅크" },
+    { id: "ex08", name: "임지호", rarity: "common", role: "인맥", emoji: "🤙", desc: "동네 사장님들이랑 다 친해요" },
+    { id: "ex09", name: "한소율", rarity: "common", role: "영업", emoji: "🧾", desc: "계산은 정확하고 친절하게" },
+    { id: "ex10", name: "오준영", rarity: "common", role: "서비스", emoji: "🧊", desc: "얼음은 항상 넉넉하게" },
+    { id: "ex11", name: "서예은", rarity: "common", role: "이벤트", emoji: "🎤", desc: "사회 보는 걸 제일 좋아해요" },
+    { id: "ex12", name: "신다인", rarity: "common", role: "인맥", emoji: "📇", desc: "명함 정리만 몇백 장" },
+    { id: "ex13", name: "권나윤", rarity: "common", role: "영업", emoji: "💳", desc: "결제 안내는 눈 감고도" },
+    { id: "ex14", name: "황준서", rarity: "common", role: "서비스", emoji: "🚪", desc: "손님맞이 인사는 내 담당" },
+    // ---------- U (고급) 12명 ----------
+    { id: "ex15", name: "안유진", rarity: "uncommon", role: "영업", emoji: "🍀", desc: "운이 좋은 날엔 매출도 좋다" },
+    { id: "ex16", name: "송재현", rarity: "uncommon", role: "서비스", emoji: "🍸", desc: "칵테일 셰이킹 연습 중" },
+    { id: "ex17", name: "전소민", rarity: "uncommon", role: "이벤트", emoji: "🎁", desc: "선물 포장은 늘 야무지게" },
+    { id: "ex18", name: "홍지안", rarity: "uncommon", role: "인맥", emoji: "📸", desc: "단골 손님 얼굴은 다 기억해요" },
+    { id: "ex19", name: "고은채", rarity: "uncommon", role: "영업", emoji: "📈", desc: "목표 매출은 꼭 채운다" },
+    { id: "ex20", name: "문승우", rarity: "uncommon", role: "서비스", emoji: "🧺", desc: "정리 담당, 손이 빨라요" },
+    { id: "ex21", name: "양하늘", rarity: "uncommon", role: "이벤트", emoji: "🌟", desc: "깜짝 공연 준비 중" },
+    { id: "ex22", name: "손예린", rarity: "uncommon", role: "인맥", emoji: "💌", desc: "단골 손님께 손편지도 써요" },
+    { id: "ex23", name: "배준혁", rarity: "uncommon", role: "영업", emoji: "🏷️", desc: "할인 타이밍은 나한테 맡겨요" },
+    { id: "ex24", name: "백서아", rarity: "uncommon", role: "서비스", emoji: "🧴", desc: "위생관리 하나는 확실하게" },
+    { id: "ex25", name: "허진우", rarity: "uncommon", role: "이벤트", emoji: "🎉", desc: "생일 손님한텐 늘 서프라이즈" },
+    { id: "ex26", name: "유리안", rarity: "uncommon", role: "인맥", emoji: "🗂️", desc: "단골 리스트를 손수 관리해요" },
+    // ---------- R (희귀) 8명 ----------
+    { id: "ex27", name: "남궁민", rarity: "rare", role: "영업", emoji: "💰", desc: "숫자 감각 하나는 타고났다" },
+    { id: "ex28", name: "심다혜", rarity: "rare", role: "서비스", emoji: "🍹", desc: "칵테일 레시피 30종 완주" },
+    { id: "ex29", name: "노태양", rarity: "rare", role: "이벤트", emoji: "🔥", desc: "무대 체질, 분위기 메이커" },
+    { id: "ex30", name: "하유빈", rarity: "rare", role: "인맥", emoji: "🤝", desc: "협력업체 사장님들도 다 친구" },
+    { id: "ex31", name: "곽서진", rarity: "rare", role: "영업", emoji: "📊", desc: "매출 그래프를 매일 체크한다" },
+    { id: "ex32", name: "성지원", rarity: "rare", role: "서비스", emoji: "🧹", desc: "청결은 타협 없다" },
+    { id: "ex33", name: "차은호", rarity: "rare", role: "이벤트", emoji: "🎶", desc: "선곡 센스가 남다르다" },
+    { id: "ex34", name: "주아영", rarity: "rare", role: "인맥", emoji: "📞", desc: "단골 예약 전화는 항상 웃으며" },
+    // ---------- SR (영웅) — 랜덤 4명 + 실명 5명 ----------
+    { id: "ex35", name: "우진서", rarity: "epic", role: "영업", emoji: "💼", desc: "이달의 매출왕 단골손님" },
+    { id: "ex36", name: "구현정", rarity: "epic", role: "서비스", emoji: "🍾", desc: "고급 손님 응대는 나한테" },
+    { id: "ex37", name: "민서율", rarity: "epic", role: "이벤트", emoji: "🎇", desc: "대형 이벤트 기획 전문" },
+    { id: "ex38", name: "강태오", rarity: "epic", role: "인맥", emoji: "🕴️", desc: "인맥으로 대형 예약을 따온다" },
+    { id: "yujin", name: "최유진", rarity: "epic", role: "이벤트", emoji: "🎶", desc: "분위기 메이커, 테이블이 늘 시끌시끌" },
+    { id: "taewoong", name: "김태웅", rarity: "epic", role: "영업", emoji: "🔥", desc: "패기 하나는 최고참 못지않다" },
+    { id: "yeonju", name: "조연주", rarity: "epic", role: "영업", emoji: "😊", desc: "웃는 얼굴로 재방문율을 끌어올린다" },
+    { id: "jiseok", name: "강지석", rarity: "epic", role: "서비스", emoji: "📋", desc: "성실함으로 승부하는 신입" },
+    { id: "jihyung", name: "이지형", rarity: "epic", role: "인맥", emoji: "🗺️", desc: "동네 상권은 이미 다 꿰고 있다" },
+    // ---------- SSR (전설) — 랜덤 2명 + 실명 5명 ----------
+    { id: "ex39", name: "윤도현", rarity: "legendary", role: "영업", emoji: "💎", desc: "매출을 두 배로 만드는 손" },
+    { id: "ex40", name: "임하람", rarity: "legendary", role: "인맥", emoji: "🌐", desc: "전국구 인맥왕" },
     { id: "minhyuk", name: "강민혁", rarity: "legendary", role: "영업", emoji: "💼", desc: "이 바닥에서 모르면 간첩인 전설의 영업통" },
     { id: "taegyu", name: "정태규", rarity: "legendary", role: "인맥", emoji: "🤝", desc: "그의 명함첩엔 없는 사람이 없다" },
+    { id: "hyeseo", name: "김혜서", rarity: "legendary", role: "서비스", emoji: "🍹", desc: "손님 취향을 한 번에 기억하는 감각파" },
+    { id: "seongmin", name: "손성민", rarity: "legendary", role: "이벤트", emoji: "🎉", desc: "판을 키우는 이벤트 기획의 달인" },
+    { id: "hyeyeon", name: "윤혜연", rarity: "legendary", role: "서비스", emoji: "🧾", desc: "디테일 하나 놓치지 않는 꼼꼼함" },
     // 신화 등급 — 가챠로는 절대 안 나오고 상점(D.shop.operators)에서만 구매 가능.
     // 구매하는 순간 이 자리에 실제 존재가 추가되고, 그 이후로는 가챠에도 낮은 확률로 등장하기 시작한다.
-    { id: "chairman", name: "왕회장", rarity: "mythic", role: "영업", emoji: "👑", desc: "전설의 투자자, 그가 오면 매출이 요동친다", shopOnly: true },
+    { id: "hyunmo", name: "구현모", rarity: "mythic", role: "영업", emoji: "👑", desc: "전설의 투자자, 그가 오면 매출이 요동친다", shopOnly: true },
   ],
 
   // ---------- 배치(운영) — 동시에 몇 명까지 "일하게" 할지 + 조합 시너지 ----------
@@ -260,7 +308,7 @@ const GAME_DATA = {
       { id: "hireStaff", name: "직원 채용", desc: "직원 {n}명 고용", targets: [2, 3, 5], reward: { chipSeconds: 260, diamonds: 6 } },
       { id: "upgradeFixture", name: "시설 정비", desc: "매장 시설 {n}회 업그레이드", targets: [2, 4, 6], reward: { chipSeconds: 280, diamonds: 5 } },
       { id: "upgradeDecor", name: "분위기 꾸미기", desc: "장식품 {n}회 업그레이드", targets: [2, 3, 5], reward: { chipSeconds: 260, diamonds: 5 } },
-      { id: "gacha", name: "딜러 스카우트", desc: "딜러 가챠 {n}회", targets: [1, 2, 3], reward: { chipSeconds: 360, diamonds: 10 } },
+      { id: "gacha", name: "운영진 스카우트", desc: "운영진 가챠 {n}회", targets: [1, 2, 3], reward: { chipSeconds: 360, diamonds: 10 } },
       { id: "gift", name: "선물 수령", desc: "사장님 선물 {n}회 받기", targets: [2, 3, 4], reward: { chipSeconds: 200, diamonds: 8 } },
       { id: "boost", name: "영업 스퍼트", desc: "부스트 {n}회 사용", targets: [1, 2, 3], reward: { chipSeconds: 320, diamonds: 6 } },
       { id: "expand", name: "매장 확장", desc: "매장 {n}회 확장", targets: [1, 1, 2], reward: { chipSeconds: 400, diamonds: 12 } },
@@ -285,13 +333,13 @@ const GAME_DATA = {
     { id: "t8", title: "재고 확보", desc: "냉장고를 설치하세요", goal: { kind: "state", stat: "fixtures.fridge", target: 1 }, reward: { chipSeconds: 320, diamonds: 12 } },
     { id: "t9", title: "영업 스퍼트", desc: "⚡ 부스트를 1회 사용하세요", hint: "응원 부스트는 무료예요", goal: { kind: "count", action: "boost", target: 1 }, reward: { chipSeconds: 340, diamonds: 15 } },
     { id: "t10", title: "다이아 금고", desc: "다이아 금고를 설치하세요", hint: "다이아 적립 속도가 빨라져요", goal: { kind: "state", stat: "fixtures.vault", target: 1 }, reward: { chipSeconds: 360, diamonds: 20 } },
-    { id: "t11", title: "첫 딜러 스카우트", desc: "딜러 가챠를 1회 뽑으세요", hint: "직원 탭 → 딜러 스카우트", goal: { kind: "count", action: "gacha", target: 1 }, reward: { chipSeconds: 400, diamonds: 15 } },
+    { id: "t11", title: "첫 운영진 스카우트", desc: "운영진 가챠를 1회 뽑으세요", hint: "운영진 탭 → 운영진 스카우트", goal: { kind: "count", action: "gacha", target: 1 }, reward: { chipSeconds: 400, diamonds: 15 } },
     { id: "t12", title: "출석 체크", desc: "📅 출석 보상을 받으세요", goal: { kind: "count", action: "attendance", target: 1 }, reward: { chipSeconds: 420, diamonds: 15 } },
     { id: "t13", title: "분위기 잡기", desc: "장식품을 1개 설치하세요", hint: "인테리어 탭 → 장식품", goal: { kind: "state", stat: "decorTotal", target: 1 }, reward: { chipSeconds: 450, diamonds: 15 } },
     { id: "t14", title: "사장님은 바빠", desc: "자동 업그레이드를 켜보세요", hint: "화면 아래 '자동' 버튼", goal: { kind: "count", action: "autoUpgrade", target: 1 }, reward: { chipSeconds: 500, diamonds: 18 } },
-    { id: "t15", title: "딜러 도감", desc: "딜러를 3종 모으세요", hint: "📖 도감 탭에서 확인해요", goal: { kind: "state", stat: "dealerCount", target: 3 }, reward: { chipSeconds: 560, diamonds: 25 } },
+    { id: "t15", title: "운영진 도감", desc: "운영진을 3명 모으세요", hint: "📖 도감 탭에서 확인해요", goal: { kind: "state", stat: "dealerCount", target: 3 }, reward: { chipSeconds: 560, diamonds: 25 } },
     { id: "t16", title: "본격 리모델링", desc: "테이블 리모델링 Lv.10 달성", hint: "x10 일괄 강화를 써보세요", goal: { kind: "state", stat: "tableLevel", target: 10 }, reward: { chipSeconds: 640, diamonds: 25 } },
-    { id: "t17", title: "에이스 딜러", desc: "딜러 1명을 ★2로 승급하세요", hint: "중복으로 뽑은 조각으로 승급해요", goal: { kind: "state", stat: "maxStar", target: 2 }, reward: { chipSeconds: 720, diamonds: 30 } },
+    { id: "t17", title: "에이스 운영진", desc: "운영진 1명을 ★2로 승급하세요", hint: "중복으로 뽑은 조각으로 승급해요", goal: { kind: "state", stat: "maxStar", target: 2 }, reward: { chipSeconds: 720, diamonds: 30 } },
     { id: "t18", title: "매장 분위기 변신", desc: "인테리어 테마를 1개 구매하세요", goal: { kind: "state", stat: "themeCount", target: 2 }, reward: { chipSeconds: 820, diamonds: 35 } },
     { id: "t19", title: "대박 홀덤펍", desc: "테이블을 10개까지 늘리세요", goal: { kind: "state", stat: "tables", target: 10 }, reward: { chipSeconds: 950, diamonds: 40 } },
     { id: "t20", title: "브랜드 리뉴얼", desc: "프레스티지를 1회 진행하세요", hint: "영구 수익 배율을 얻어요", goal: { kind: "state", stat: "prestigePoints", target: 1 }, reward: { chipSeconds: 1200, diamonds: 60 } },
@@ -312,7 +360,7 @@ const GAME_DATA = {
       { id: "upgradeDecor", title: "인테리어 손질", desc: "장식품 {n}회 강화", base: 4, growth: 1.23, max: 15 },
       { id: "expand", title: "매장 확장", desc: "매장 {n}회 확장", base: 1, growth: 1.14, max: 1 },
       { id: "gift", title: "선물 수령", desc: "사장님 선물 {n}회 받기", base: 1, growth: 1.1, max: 2 },
-      { id: "gacha", title: "딜러 스카우트", desc: "딜러 가챠 {n}회", base: 1, growth: 1.12, max: 5 },
+      { id: "gacha", title: "운영진 스카우트", desc: "운영진 가챠 {n}회", base: 1, growth: 1.12, max: 5 },
       { id: "boost", title: "영업 스퍼트", desc: "부스트 {n}회 사용", base: 1, growth: 1.1, max: 2 },
       // 그냥 가만히 둬도 달성되는 퀘스트 — 방치형답게 하나는 섞어둔다
       { id: "earn", title: "매출 올리기", desc: "칩 {n} 벌기", incomeSeconds: 150, growth: 1.07, maxSeconds: 600 },
@@ -374,6 +422,8 @@ const GAME_DATA = {
   level: {
     base: 300,
     growth: 1.6,
+    diamondRewardBase: 5, // 레벨업 1회당 지급 다이아 = base + level*perLevel
+    diamondRewardPerLevel: 2,
     titles: [
       { min: 1, name: "펍 알바" },
       { min: 5, name: "펍 매니저" },
@@ -437,7 +487,7 @@ const GAME_DATA = {
     // 상점에서만 살 수 있는 신화 등급 운영진 — dealerRoster 안의 shopOnly:true 항목과 id로 연결된다.
     // 구매하면 즉시 보유하게 되고, 이후로는 이 운영진이 가챠(mythicRarity) 확률로도 등장하기 시작한다.
     operators: [
-      { id: "chairman", rosterId: "chairman", name: "왕회장 영입", emoji: "👑", desc: "신화 등급 '왕회장' 즉시 영입 + 이후 가챠에도 등장", amountKRW: 29900, priceLabel: "₩29,900" },
+      { id: "hyunmo", rosterId: "hyunmo", name: "구현모 영입", emoji: "👑", desc: "신화 등급 '구현모' 즉시 영입 + 이후 가챠에도 등장", amountKRW: 29900, priceLabel: "₩29,900" },
     ],
     // 광고 제거 — 구매하면 리워드 광고 버튼이 전부 "무료로 즉시 받기"로 바뀐다(js/ads.js 참고).
     removeAds: {

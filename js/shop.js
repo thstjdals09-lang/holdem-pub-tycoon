@@ -1,11 +1,13 @@
 // 상점 결제 — PortOne(아임포트) V2 브라우저 SDK 사용.
-// data.js의 payment.storeId/channelKey가 비어 있는 동안은 "결제 준비중"으로 막아둔다
-// (아직 PG 가맹점 가입 전 — 가입 후 그 두 값만 채우면 실 결제로 바로 전환됨).
 //
-// ⚠️ 중요: 지금은 서버(Cloud Function 등 검증 백엔드)가 없어서, 결제 성공 응답을 클라이언트가
-// 그대로 신뢰해 재화를 지급한다. 즉 마음만 먹으면 브라우저 콘솔에서 재화를 위조할 수 있는 상태.
-// 실제로 돈을 받기 시작하기 전에는 반드시 서버 측에서 PortOne 결제 검증(paymentId로 조회) 후
-// 재화를 지급하도록 바꿔야 한다(Firebase면 Cloud Functions로 처리하는 게 자연스러움).
+// 🧪 테스트 모드: data.js의 payment.storeId/channelKey가 비어 있는 동안(=PG 가맹점 가입 전)은
+// 결제창을 띄우는 대신 즉시 성공 처리해서 무료로 지급한다 — 전체 기능을 테스트해볼 수 있게 하기 위한
+// 임시 조치(사용자 요청). storeId/channelKey를 채우면 이 분기는 자동으로 꺼지고 실제 결제로 전환된다.
+// 실서비스 오픈 전에는 반드시 이 테스트 지급 분기를 지우거나 최소한 관리자만 쓰게 막아야 한다.
+//
+// ⚠️ 중요: 실 결제로 전환된 뒤에도, 지금은 서버(Cloud Function 등 검증 백엔드)가 없어서 결제 성공
+// 응답을 클라이언트가 그대로 신뢰해 재화를 지급한다. 실제로 돈을 받기 시작하기 전에는 반드시 서버
+// 측에서 PortOne 결제 검증(paymentId로 조회) 후 재화를 지급하도록 바꿔야 한다.
 import { auth, db, doc, setDoc, serverTimestamp } from "./firebase-init.js";
 
 function paymentReady() {
@@ -15,7 +17,8 @@ function paymentReady() {
 
 async function checkout(item) {
   if (!paymentReady()) {
-    return { ok: false, notReady: true, error: "결제 연동 준비 중이에요. 오픈되면 알려드릴게요!" };
+    console.warn(`[Shop] TEST MODE: granting "${item.name}" without real payment (PG not configured yet)`);
+    return { ok: true, test: true };
   }
   const p = GAME_DATA.payment;
   const paymentId = `hpt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;

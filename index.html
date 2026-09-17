@@ -67,14 +67,14 @@
       <button class="add-currency-btn tab-btn" id="shop-plus-btn" data-tab="shop" data-title="상점" title="다이아 충전" aria-label="상점">＋</button>
     </div>
     <div class="boost-strip" id="boost-strip"></div>
-  </div>
 
-  <!-- 우측 사이드 레일: 리텐션 기능 버튼 -->
-  <div class="side-rail" id="side-rail">
-    <button class="rail-btn" id="gift-btn" data-label="선물">🎁<span class="dot" id="gift-dot"></span></button>
-    <button class="rail-btn" id="attendance-btn" data-label="출석">📅<span class="dot" id="attendance-dot"></span></button>
-    <button class="rail-btn" id="mission-btn" data-label="미션">📋<span class="dot" id="mission-dot"></span></button>
-    <button class="rail-btn" id="boost-btn" data-label="부스트">⚡<span class="dot" id="boost-dot"></span></button>
+    <!-- 우측 사이드 레일: 리텐션 기능 버튼 — 재화/부스트 표시와 같은 열에 두어 부스트가 늘어나도 겹치지 않게 -->
+    <div class="side-rail" id="side-rail">
+      <button class="rail-btn" id="gift-btn" data-label="선물">🎁<span class="dot" id="gift-dot"></span></button>
+      <button class="rail-btn" id="attendance-btn" data-label="출석">📅<span class="dot" id="attendance-dot"></span></button>
+      <button class="rail-btn" id="mission-btn" data-label="미션">📋<span class="dot" id="mission-dot"></span></button>
+      <button class="rail-btn" id="boost-btn" data-label="부스트">⚡<span class="dot" id="boost-dot"></span></button>
+    </div>
   </div>
 
   <!-- 좌측 하단 안내 -->
@@ -122,6 +122,9 @@
     </button>
     <button class="tab-btn" data-tab="prestige" data-title="브랜드 리뉴얼">
       <span class="nav-icon">✨</span><span class="nav-label">리뉴얼</span>
+    </button>
+    <button class="tab-btn" data-tab="shop" data-title="상점">
+      <span class="nav-icon">💎</span><span class="nav-label">상점</span>
     </button>
   </nav>
 </div>
@@ -300,6 +303,14 @@
     <h2>사장님 선물</h2>
     <p id="event-text">잠시 후 다시 확인해주세요!</p>
     <button id="event-claim-btn" class="btn btn-primary btn-wide">받기</button>
+  </div>
+</div>
+
+<div id="profile-modal" class="modal hidden">
+  <div class="modal-box wide-modal">
+    <button class="context-popup-close" id="profile-close" aria-label="닫기">✕</button>
+    <div class="modal-emoji">🧑‍💼</div>
+    <div id="profile-detail"></div>
   </div>
 </div>
 

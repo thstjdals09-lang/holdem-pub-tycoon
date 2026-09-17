@@ -48,6 +48,11 @@
     gachaPulls: keep.gachaPulls ?? 0,
     gachaTickets: keep.gachaTickets ?? 0,
 
+    // 닉네임 — 기본값은 로그인 아이디, 프로필에서 자유롭게 변경 가능
+    nickname: keep.nickname ?? null,
+    // 프로필 레벨업 보상을 이미 지급한 최고 레벨(중복 지급 방지). 프레스티지해도 유지.
+    profileRewardedLevel: keep.profileRewardedLevel ?? 1,
+
     theme: keep.theme ?? "classic",
     ownedThemes: keep.ownedThemes ?? ["classic"],
     themeLevels: keep.themeLevels ?? {},
@@ -123,6 +128,8 @@
     s.gachaLevel = saved.gachaLevel ?? 1;
     s.gachaPulls = saved.gachaPulls ?? 0;
     s.gachaTickets = saved.gachaTickets ?? 0;
+    s.nickname = saved.nickname ?? null;
+    s.profileRewardedLevel = saved.profileRewardedLevel ?? 1;
     s.missions = { ...base.missions, ...saved.missions };
     s.tutorial = { ...base.tutorial, ...saved.tutorial };
     s.tutorial.counts = s.tutorial.counts || {};
@@ -410,6 +417,22 @@
     return { level, progress, title, toNext: Math.max(0, next - x) };
   }
 
+  // 프로필 레벨이 오를 때마다 다이아를 지급한다(이미 지급한 레벨은 다시 지급 안 함)
+  function checkProfileLevelReward() {
+    const level = levelInfo().level;
+    if (level <= state.profileRewardedLevel) return;
+    let totalDia = 0;
+    for (let lv = state.profileRewardedLevel + 1; lv <= level; lv++) {
+      totalDia += D.level.diamondRewardBase + lv * D.level.diamondRewardPerLevel;
+    }
+    state.profileRewardedLevel = level;
+    addDiamonds(totalDia);
+    toast(`🆙 레벨 ${level} 달성! 💎${totalDia} 지급`);
+    burst(0xffd24a);
+  }
+
+  const displayName = () => state.nickname || (window.Account ? window.Account.getCurrentUsername() : null) || "사장님";
+
   // ============================================================
   // 표시용 포맷
   // ============================================================
@@ -432,7 +455,8 @@
     }
     return n.toExponential(2);
   }
-  const formatChips = (n) => `${formatNumber(n)}`;
+  // 화폐 단위는 BB(빅블라인드) — 홀덤 테마에 맞춰 칩 대신 이 단위를 씀
+  const formatChips = (n) => `${formatNumber(n)} BB`;
   function formatRate(n) {
     if (n < 100) return (Math.round(n * 10) / 10).toFixed(1);
     return formatNumber(n);
@@ -704,6 +728,11 @@
   function activateBoost(id) {
     const def = D.boosts[id];
     if (!def) return;
+    // 이미 적용 중인 부스트는 재구매/재발동 불가(만료될 때까지 기다려야 함)
+    if (boostIsActive(id)) {
+      toast(`${def.emoji} 이미 적용 중이에요 · ${formatDuration(boostActiveUntil(id) - Date.now())} 남음`);
+      return;
+    }
     if (id === "free") {
       if (!freeBoostReady()) {
         toast(`⚡ ${formatDuration(state.boosts.freeReadyAt - Date.now())} 후에 다시 쓸 수 있어요`);
@@ -1085,6 +1114,8 @@
       gachaLevel: state.gachaLevel,
       gachaPulls: state.gachaPulls,
       gachaTickets: state.gachaTickets,
+      nickname: state.nickname,
+      profileRewardedLevel: state.profileRewardedLevel,
       permanentUpgrades: state.permanentUpgrades,
       ads: state.ads,
       celebrity: state.celebrity,
@@ -1162,8 +1193,8 @@
   // 렌더링
   // ============================================================
   function renderHUD() {
-    $("chips-value").textContent = formatNumber(state.chips);
-    $("income-value").textContent = `${formatRate(incomePerSecond())}/초`;
+    $("chips-value").textContent = `${formatNumber(state.chips)} BB`;
+    $("income-value").textContent = `${formatRate(incomePerSecond())}BB/초`;
     $("diamonds-value").textContent = formatNumber(state.diamonds);
     $("diamond-rate").textContent = `${(diamondPerSecond() * 60).toFixed(1)}/분`;
     $("prestige-mult").textContent = `x${prestigeMultiplier().toFixed(2)}`;
@@ -1194,6 +1225,7 @@
     if (t) {
       return {
         kind: "tutorial",
+        key: t.def.goal.stat || t.def.goal.action,
         icon: t.done ? "🎉" : "📜",
         title: t.def.title,
         step: `${t.step + 1}/${D.tutorial.length}`,
@@ -1207,6 +1239,7 @@
     const r = repeatState();
     return {
       kind: "repeat",
+      key: r.def.id,
       icon: r.done ? "🎉" : "🔁",
       title: r.def.title,
       step: `반복 #${r.round + 1}`,
@@ -1231,6 +1264,37 @@
     const btn = $("quest-claim");
     btn.disabled = !q.done;
     btn.textContent = q.done ? "받기" : `${formatNumber(q.cur)}/${formatNumber(q.target)}`;
+  }
+
+  // 퀘스트 배지(받기 버튼 제외)를 탭하면 그 목표를 수행할 수 있는 곳으로 바로 이동시킨다
+  const QUEST_TAB_MAP = {
+    tables: "tables", buyTable: "tables",
+    tableLevel: "tables", upgradeTable: "tables",
+    "store.expansions": "store", expand: "store",
+    "fixtures.bar": "store", "fixtures.fridge": "store", "fixtures.vault": "store", upgradeFixture: "store",
+    "staff.bartender": "staff", "staff.server": "staff", "staff.marketer": "staff", hireStaff: "staff",
+    dealerCount: "staff", gacha: "staff",
+    decorTotal: "decor", upgradeDecor: "decor", themeCount: "decor",
+    prestigePoints: "prestige",
+    maxStar: "codex",
+    earn: "store",
+  };
+  const TAB_TITLES = { store: "매장", tables: "테이블", staff: "운영진 & 가챠", codex: "운영진 도감", decor: "인테리어", prestige: "브랜드 리뉴얼" };
+  function goToQuest() {
+    const q = currentQuest();
+    if (q.done) return; // 받을 수 있으면 배지 탭보다 '받기' 버튼을 누르게 유도(배너 자체 탭은 이동만 함)
+    if (q.key === "gift") return openGift();
+    if (q.key === "boost") {
+      renderBoostModal();
+      return $("boost-modal").classList.remove("hidden");
+    }
+    if (q.key === "attendance") {
+      renderAttendanceModal();
+      return $("attendance-modal").classList.remove("hidden");
+    }
+    if (q.key === "autoUpgrade") return openSheet("settings", "설정");
+    const tab = QUEST_TAB_MAP[q.key];
+    if (tab) openSheet(tab, TAB_TITLES[tab] || tab);
   }
 
   function claimQuest() {
@@ -1298,7 +1362,7 @@
     const capacity = tableCapacity();
     $("table-count").textContent = state.tables;
     $("table-capacity").textContent = capacity;
-    $("table-per-income").textContent = formatRate(perTableIncome());
+    $("table-per-income").textContent = `${formatRate(perTableIncome())}BB`;
     $("table-level-chip").textContent = `Lv.${state.tableLevel}`;
 
     const buyBtn = $("buy-table-btn");
@@ -1494,6 +1558,48 @@
     renderAccountInfo();
   }
 
+  // ============================================================
+  // 프로필 (닉네임 + 매장 현황 요약)
+  // ============================================================
+  function renderProfileModal() {
+    const li = levelInfo();
+    const box = $("profile-detail");
+    box.innerHTML = `
+      <div class="profile-nickname-row">
+        <b id="profile-nickname-text">${displayName()}</b>
+        <button class="btn" id="profile-nickname-edit">닉네임 변경</button>
+      </div>
+      <h3>Lv.${li.level} ${li.title}</h3>
+      <div class="xp-bar" style="margin:0 4px 10px"><i style="width:${(li.progress * 100).toFixed(1)}%"></i></div>
+      <p class="muted" style="margin-top:-6px">다음 레벨까지 💰${formatChips(li.toNext)}</p>
+      <div class="dealer-stat-row">
+        <div class="dealer-stat">초당 수익<b>${formatRate(incomePerSecond())}BB</b></div>
+        <div class="dealer-stat">보유 BB<b>${formatNumber(state.chips)}</b></div>
+        <div class="dealer-stat">다이아<b>💎${formatNumber(state.diamonds)}</b></div>
+        <div class="dealer-stat">누적 수익<b>${formatNumber(state.lifetimeEarned)}</b></div>
+        <div class="dealer-stat">테이블<b>${state.tables}/${tableCapacity()}</b></div>
+        <div class="dealer-stat">방문객<b>👣${formatNumber(visitorsPerHour())}/h</b></div>
+        <div class="dealer-stat">운영진<b>${ownedDealerIds().length}명 보유</b></div>
+        <div class="dealer-stat">배치<b>${deployedIds().length}/${D.deployment.maxDeployed}명</b></div>
+        <div class="dealer-stat">가챠 레벨<b>Lv.${state.gachaLevel}</b></div>
+        <div class="dealer-stat">프레스티지<b>x${prestigeMultiplier().toFixed(2)}</b></div>
+      </div>
+    `;
+    $("profile-nickname-edit").addEventListener("click", () => {
+      const next = window.prompt("새 닉네임을 입력해주세요 (2~12자)", state.nickname || displayName());
+      if (!next) return;
+      const trimmed = next.trim();
+      if (trimmed.length < 2 || trimmed.length > 12) {
+        toast("닉네임은 2~12자로 입력해주세요");
+        return;
+      }
+      state.nickname = trimmed;
+      toast(`닉네임을 "${trimmed}"(으)로 변경했어요`);
+      renderProfileModal();
+      saveGame();
+    });
+  }
+
   function renderAccountInfo() {
     const box = $("account-info");
     if (!box) return;
@@ -1636,21 +1742,23 @@
     const bonusMult = firstPurchase ? D.shop.firstPurchaseBonusMult : 1;
     state.purchases.firstPurchaseDone = true;
     state.purchases.totalSpentKRW += item.amountKRW;
+    // 결제 미연동 상태라 테스트로 무료 지급된 경우, 나중에 헷갈리지 않도록 토스트에 표시해준다
+    const testPrefix = result.test ? "🧪(테스트 지급) " : "";
 
     if (item.kind === "starter") {
       state.purchases.starterBought = true;
       addDiamonds(item.diamonds * bonusMult);
       addChips(chipSecondsToChips(item.chipSeconds));
-      toast(`🎉 창업 지원팩! 💎${item.diamonds * bonusMult} 지급${firstPurchase ? " (첫 구매 2배!)" : ""}`);
+      toast(`${testPrefix}🎉 창업 지원팩! 💎${item.diamonds * bonusMult} 지급${firstPurchase ? " (첫 구매 2배!)" : ""}`);
     } else if (item.kind === "vip") {
       const now = Date.now();
       const base = Math.max(now, state.purchases.vipUntil);
       state.purchases.vipUntil = base + item.durationDays * 24 * 60 * 60 * 1000;
       addDiamonds(item.instantDiamonds * bonusMult);
-      toast(`👑 월 정기권 시작! 💎${item.instantDiamonds * bonusMult} 지급`);
+      toast(`${testPrefix}👑 월 정기권 시작! 💎${item.instantDiamonds * bonusMult} 지급`);
     } else if (item.kind === "removeAds") {
       state.purchases.adsRemoved = true;
-      toast("🚫 광고 제거 완료! 이제 무료 보상은 광고 없이 바로 받아요");
+      toast(`${testPrefix}🚫 광고 제거 완료! 이제 무료 보상은 광고 없이 바로 받아요`);
     } else if (item.kind === "operator") {
       const unlocked = state.purchases.unlockedMythic || (state.purchases.unlockedMythic = []);
       if (!unlocked.includes(item.rosterId)) unlocked.push(item.rosterId);
@@ -1659,10 +1767,10 @@
         autoDeployIfRoom(item.rosterId);
       }
       sceneDirty = true;
-      toast(`👑 ${item.name.replace(" 영입", "")} 영입 완료! 이제 가챠에도 등장해요`);
+      toast(`${testPrefix}👑 ${item.name.replace(" 영입", "")} 영입 완료! 이제 가챠에도 등장해요`);
     } else {
       addDiamonds(item.diamonds * bonusMult);
-      toast(`💎 다이아 +${item.diamonds * bonusMult} 충전 완료${firstPurchase ? " (첫 구매 2배!)" : ""}`);
+      toast(`${testPrefix}💎 다이아 +${item.diamonds * bonusMult} 충전 완료${firstPurchase ? " (첫 구매 2배!)" : ""}`);
     }
 
     burst(0x7fd4ff);
@@ -1698,13 +1806,17 @@
   }
 
   async function watchAdFor(kind) {
+    let testGrant = false;
     if (!state.purchases.adsRemoved) {
       const res = await window.Ads.requestRewardedAd();
       if (!res.ok) {
         toast(res.notReady ? "🛠 " + res.error : "❌ " + res.error);
         return;
       }
+      testGrant = Boolean(res.test);
     }
+    // 광고 SDK 미연동 상태라 테스트로 바로 지급된 경우, 나중에 헷갈리지 않도록 토스트에 표시해준다
+    const testPrefix = testGrant ? "🧪(테스트 지급) " : "";
     if (kind === "dailyFreePull") {
       state.ads.lastFreePullDate = todayKey();
       const results = [pullOne(null)];
@@ -1716,7 +1828,7 @@
       const d = D.ads.upgradeBoost;
       state.ads.boostUntil = Date.now() + d.durationMs;
       state.ads.boostCooldownUntil = Date.now() + d.cooldownMs;
-      toast(`⚡ ${Math.round(d.durationMs / 60000)}분간 자동 업그레이드 ${d.mult}배 가속!`);
+      toast(`${testPrefix}⚡ ${Math.round(d.durationMs / 60000)}분간 자동 업그레이드 ${d.mult}배 가속!`);
     }
     renderAdButtons();
     refresh();
@@ -1836,31 +1948,32 @@
       },
       {
         def: D.boosts.rush,
-        state: boostIsActive("rush") ? `발동 중 · ${formatDuration(boostActiveUntil("rush") - now)}` : `💎${D.boosts.rush.costDiamonds}`,
-        can: state.diamonds >= D.boosts.rush.costDiamonds,
-        label: `💎${D.boosts.rush.costDiamonds}`,
+        state: boostIsActive("rush") ? `적용중 · ${formatDuration(boostActiveUntil("rush") - now)} 남음` : `💎${D.boosts.rush.costDiamonds}`,
+        can: !boostIsActive("rush") && state.diamonds >= D.boosts.rush.costDiamonds,
+        label: boostIsActive("rush") ? "적용중" : `💎${D.boosts.rush.costDiamonds}`,
       },
       {
         def: D.boosts.golden,
         state: boostIsActive("golden")
-          ? `발동 중 · ${formatDuration(boostActiveUntil("golden") - now)}`
+          ? `적용중 · ${formatDuration(boostActiveUntil("golden") - now)} 남음`
           : `다음 황금시간까지 ${formatDuration((state.boosts.goldenNextAt || now) - now)}`,
         can: false,
-        label: "자동 발동",
+        label: boostIsActive("golden") ? "적용중" : "자동 발동",
       },
     ];
     $("boost-list").innerHTML = items
-      .map(
-        (it) => `
-        <div class="boost-item ${boostIsActive(it.def.id) ? "active" : ""}">
+      .map((it) => {
+        const active = boostIsActive(it.def.id);
+        return `
+        <div class="boost-item ${active ? "active" : ""}">
           <div class="item-icon">${it.def.emoji}</div>
           <div class="item-info">
-            <div class="item-title">${it.def.name} <span class="lvl-chip">x${it.def.mult}</span></div>
+            <div class="item-title">${it.def.name} <span class="lvl-chip">x${it.def.mult}</span>${active ? '<span class="shop-tag">적용중</span>' : ""}</div>
             <div class="item-desc">${it.def.desc}<br/><b>${it.state}</b></div>
           </div>
-          <button class="btn btn-buy" data-boost="${it.def.id}" ${it.can ? "" : "disabled"}>${it.label}</button>
-        </div>`
-      )
+          <button class="btn ${active ? "btn-owned" : "btn-buy"}" data-boost="${it.def.id}" ${it.can ? "" : "disabled"}>${it.label}</button>
+        </div>`;
+      })
       .join("");
     $("boost-list")
       .querySelectorAll("[data-boost]")
@@ -1936,7 +2049,7 @@
       const cost = bulkCost(D.table.baseCost, D.table.costGrowth, state.tables - 1, n);
       openContextPopup({
         title: "🃏 새 테이블 추가",
-        bodyHtml: `빈 자리에 새 홀덤 테이블을 놓을까요?<br/>테이블당 수익 <b>${formatRate(perTableIncome())}/초</b>`,
+        bodyHtml: `빈 자리에 새 홀덤 테이블을 놓을까요?<br/>테이블당 수익 <b>${formatRate(perTableIncome())}BB/초</b>`,
         actionLabel: `테이블 x${n} 추가 (💰${formatChips(cost)})`,
         actionDisabled: state.chips < cost,
         onAction: () => buyTable(),
@@ -1946,7 +2059,7 @@
       const cost = bulkCost(D.tableUpgrade.baseCost, D.tableUpgrade.costGrowth, state.tableLevel, n);
       openContextPopup({
         title: "🃏 테이블 강화",
-        bodyHtml: `이 테이블은 <b>${formatRate(perTableIncome())}/초</b>를 벌고 있어요.<br/>리모델링 레벨 <b>Lv.${state.tableLevel}</b> (상한 없음)`,
+        bodyHtml: `이 테이블은 <b>${formatRate(perTableIncome())}BB/초</b>를 벌고 있어요.<br/>리모델링 레벨 <b>Lv.${state.tableLevel}</b> (상한 없음)`,
         actionLabel: `전체 강화 x${n} (💰${formatChips(cost)})`,
         actionDisabled: state.chips < cost,
         onAction: () => upgradeTable(),
@@ -2096,6 +2209,7 @@
     });
     tickGoldenHour();
     tickCelebrity();
+    checkProfileLevelReward();
     ensureDailyState();
     autoUpgradeTick();
 
@@ -2154,11 +2268,15 @@
       $("boost-modal").classList.remove("hidden");
     });
     $("profile-btn").addEventListener("click", () => {
-      const li = levelInfo();
-      toast(`Lv.${li.level} ${li.title} · 다음 레벨까지 💰${formatChips(li.toNext)}`);
+      renderProfileModal();
+      $("profile-modal").classList.remove("hidden");
     });
     $("prestige-badge").addEventListener("click", () => openSheet("prestige", "브랜드 리뉴얼"));
-    $("quest-claim").addEventListener("click", claimQuest);
+    $("quest-claim").addEventListener("click", (e) => {
+      e.stopPropagation();
+      claimQuest();
+    });
+    $("quest-banner").addEventListener("click", goToQuest);
 
     // 모달 닫기
     const closers = [
@@ -2169,6 +2287,7 @@
       ["mission-close", "mission-modal"],
       ["boost-close", "boost-modal"],
       ["dealer-close", "dealer-modal"],
+      ["profile-close", "profile-modal"],
     ];
     closers.forEach(([btnId, modalId]) => $(btnId).addEventListener("click", () => $(modalId).classList.add("hidden")));
     document.querySelectorAll(".modal").forEach((m) =>
