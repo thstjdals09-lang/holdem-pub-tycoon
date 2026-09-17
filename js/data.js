@@ -100,6 +100,19 @@ const GAME_DATA = {
     { id: "chandelier", name: "샹들리에", emoji: "💡", desc: "+5% 수익", cost: 3000, bonus: 0.05 },
     { id: "vip", name: "VIP룸", emoji: "✨", desc: "+8% 수익", cost: 8000, bonus: 0.08 },
   ],
+  // 매장 전체 분위기(바닥/벽/테이블 색)를 바꾸는 테마. 실제 색상은 scene3d.js에 정의.
+  themes: [
+    { id: "classic", name: "클래식", emoji: "🍺", desc: "아늑한 기본 홀덤펍 인테리어", cost: 0 },
+    { id: "princess", name: "공주풍", emoji: "👑", desc: "파스텔 핑크의 우아한 공주풍 매장", cost: 4000 },
+    { id: "european", name: "유럽풍", emoji: "🏛️", desc: "고풍스러운 유럽 클래식 인테리어", cost: 9000 },
+    { id: "neon", name: "네온 라운지", emoji: "🌃", desc: "화려한 밤의 네온 라운지 스타일", cost: 18000 },
+  ],
+  gift: {
+    cooldownMs: 5 * 60 * 1000, // 5분마다 선물 상자 리필
+    chipMinutes: 1, // 선물 칩 = 현재 초당 수익 x 60초
+    diamondMin: 3,
+    diamondMax: 8,
+  },
   prestige: {
     baseRequirement: 100000, // 명성 포인트 1점을 얻기 위한 기준 누적 수익
     pointBonus: 0.1, // 프레스티지 포인트 1당 +10% 영구 수익

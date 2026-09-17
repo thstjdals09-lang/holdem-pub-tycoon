@@ -2,6 +2,14 @@
 (() => {
   const D = GAME_DATA;
 
+  // 인테리어 상점 카드용 미리보기 색상 (실제 3D 색상은 scene3d.js THEMES와 맞춰둠)
+  const THEME_SWATCH_COLORS = {
+    classic: "linear-gradient(135deg, #f3c988, #ffd3e6)",
+    princess: "linear-gradient(135deg, #ffd9ec, #ffb3d9)",
+    european: "linear-gradient(135deg, #c9a876, #7a5a3f)",
+    neon: "linear-gradient(135deg, #2a1a3a, #ff2fd0)",
+  };
+
   const defaultState = (overrides = {}) => ({
     chips: 20,
     totalEarned: 0,
@@ -13,6 +21,9 @@
     staff: Object.fromEntries(D.staff.map((s) => [s.id, 0])),
     dealers: overrides.dealers ?? [],
     decor: Object.fromEntries(D.decor.map((d) => [d.id, false])),
+    theme: overrides.theme ?? "classic",
+    ownedThemes: overrides.ownedThemes ?? ["classic"],
+    giftReadyAt: overrides.giftReadyAt ?? Date.now(),
     prestige: overrides.prestige ?? { points: 0 },
     settings: { showTableIncome: true },
   });
@@ -41,6 +52,7 @@
       staff: { ...base.staff, ...restSavedStaff },
       decor: { ...base.decor, ...saved.decor },
       settings: { ...base.settings, ...saved.settings },
+      ownedThemes: Array.isArray(saved.ownedThemes) ? saved.ownedThemes : base.ownedThemes,
       dealers,
     };
   };
@@ -188,6 +200,45 @@
     toast(`${def.emoji} ${def.name} 설치 완료!`);
   };
 
+  const themeDef = (id) => D.themes.find((t) => t.id === id);
+  const buyTheme = (id) => {
+    const def = themeDef(id);
+    if (!def || state.ownedThemes.includes(id) || state.chips < def.cost) return;
+    state.chips -= def.cost;
+    state.ownedThemes.push(id);
+    state.theme = id;
+    dirty = true;
+    render();
+    toast(`${def.emoji} ${def.name} 테마 구매 완료!`);
+  };
+  const equipTheme = (id) => {
+    if (!state.ownedThemes.includes(id) || state.theme === id) return;
+    state.theme = id;
+    dirty = true;
+    render();
+    const def = themeDef(id);
+    toast(`${def.emoji} ${def.name} 테마 적용!`);
+  };
+
+  const isGiftReady = () => Date.now() >= state.giftReadyAt;
+  const openGift = () => {
+    if (!isGiftReady()) {
+      const remainMs = state.giftReadyAt - Date.now();
+      const mins = Math.ceil(remainMs / 60000);
+      toast(`🎁 다음 선물까지 ${mins}분 남았어요`);
+      return;
+    }
+    const chipGain = Math.max(10, incomePerSecond() * 60 * D.gift.chipMinutes);
+    const diaGain = D.gift.diamondMin + Math.floor(Math.random() * (D.gift.diamondMax - D.gift.diamondMin + 1));
+    addChips(chipGain);
+    addDiamonds(diaGain);
+    state.giftReadyAt = Date.now() + D.gift.cooldownMs;
+    render();
+    document.getElementById("event-text").textContent = `칩 ${formatChips(chipGain)}과 다이아 ${diaGain}개를 받았어요!`;
+    document.getElementById("event-modal").classList.remove("hidden");
+    if (window.PubScene3D) window.PubScene3D.chipBurst();
+  };
+
   const weightedRandomRarity = () => {
     const total = D.gacha.rarities.reduce((sum, r) => sum + r.weight, 0);
     let roll = Math.random() * total;
@@ -219,6 +270,9 @@
       prestige: { points: gain },
       diamonds: state.diamonds + diamondReward,
       dealers: state.dealers,
+      theme: state.theme,
+      ownedThemes: state.ownedThemes,
+      giftReadyAt: state.giftReadyAt,
     });
     dirty = true;
     render();
@@ -348,6 +402,7 @@
       showTableIncome: state.settings.showTableIncome,
       seatsMin: D.table.seatsMin,
       seatsMax: D.table.seatsMax,
+      theme: state.theme,
     });
   }
 
@@ -356,6 +411,7 @@
     document.getElementById("diamonds-value").textContent = formatNumber(state.diamonds);
     document.getElementById("income-value").textContent = `${formatRate(incomePerSecond())} / 초`;
     document.getElementById("prestige-badge").textContent = `✨ x${prestigeMultiplier().toFixed(2)}`;
+    document.getElementById("event-dot").classList.toggle("show", isGiftReady());
   }
 
   function renderTablesTab() {
@@ -445,6 +501,31 @@
   }
 
   function renderDecorTab() {
+    const themeWrap = document.getElementById("theme-list");
+    themeWrap.innerHTML = "";
+    D.themes.forEach((t) => {
+      const owned = state.ownedThemes.includes(t.id);
+      const equipped = state.theme === t.id;
+      const card = document.createElement("div");
+      card.className = "theme-card" + (equipped ? " equipped" : "");
+      card.innerHTML = `
+        <div class="theme-swatch" style="background:${THEME_SWATCH_COLORS[t.id] || "#ccc"}"></div>
+        <div class="theme-name">${t.emoji} ${t.name}</div>
+        <div class="theme-cost">${owned ? (equipped ? "적용중" : "보유중") : formatChips(t.cost)}</div>
+        ${
+          equipped
+            ? `<button class="btn btn-owned" disabled>적용중 ✅</button>`
+            : owned
+            ? `<button class="btn btn-buy">적용하기</button>`
+            : `<button class="btn btn-buy" ${state.chips < t.cost ? "disabled" : ""}>구매</button>`
+        }
+      `;
+      if (!equipped) {
+        card.querySelector("button").addEventListener("click", () => (owned ? equipTheme(t.id) : buyTheme(t.id)));
+      }
+      themeWrap.appendChild(card);
+    });
+
     const wrap = document.getElementById("decor-list");
     wrap.innerHTML = "";
     D.decor.forEach((d) => {
@@ -498,16 +579,32 @@
     }
   }
 
-  // ---------- 탭 전환 ----------
+  // ---------- 탭 전환 / 하단 시트 ----------
+  function openSheet(tabName, titleText) {
+    document.querySelectorAll(".tab-btn").forEach((b) => b.classList.toggle("active", b.dataset.tab === tabName));
+    document.querySelectorAll(".tab-panel").forEach((p) => p.classList.toggle("active", p.id === `tab-${tabName}`));
+    document.getElementById("sheet-title").textContent = titleText;
+    document.getElementById("sheet-panel").classList.add("open");
+    document.getElementById("sheet-backdrop").classList.add("open");
+  }
+  function closeSheet() {
+    document.getElementById("sheet-panel").classList.remove("open");
+    document.getElementById("sheet-backdrop").classList.remove("open");
+  }
   function setupTabs() {
     document.querySelectorAll(".tab-btn").forEach((btn) => {
       btn.addEventListener("click", () => {
-        document.querySelectorAll(".tab-btn").forEach((b) => b.classList.remove("active"));
-        document.querySelectorAll(".tab-panel").forEach((p) => p.classList.remove("active"));
-        btn.classList.add("active");
-        document.getElementById(`tab-${btn.dataset.tab}`).classList.add("active");
+        const isOpen = document.getElementById("sheet-panel").classList.contains("open");
+        const isSame = btn.classList.contains("active");
+        if (isOpen && isSame) {
+          closeSheet();
+        } else {
+          openSheet(btn.dataset.tab, btn.dataset.title || btn.dataset.tab);
+        }
       });
     });
+    document.getElementById("sheet-close-btn").addEventListener("click", closeSheet);
+    document.getElementById("sheet-backdrop").addEventListener("click", closeSheet);
   }
 
   // ---------- 설정 탭 ----------
@@ -598,6 +695,10 @@
     });
     document.getElementById("gacha-close").addEventListener("click", () => {
       document.getElementById("gacha-modal").classList.add("hidden");
+    });
+    document.getElementById("event-btn").addEventListener("click", openGift);
+    document.getElementById("event-claim-btn").addEventListener("click", () => {
+      document.getElementById("event-modal").classList.add("hidden");
     });
     document.getElementById("context-popup-close").addEventListener("click", closeContextPopup);
     document.getElementById("context-popup").addEventListener("click", (e) => {
