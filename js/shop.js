@@ -12,7 +12,26 @@ import { auth, db, doc, setDoc, serverTimestamp } from "./firebase-init.js";
 
 function paymentReady() {
   const p = GAME_DATA.payment;
-  return Boolean(p.storeId && p.channelKey && window.PortOne);
+  return Boolean(p.storeId && p.channelKey);
+}
+
+// PortOne SDK(약 240KB)는 페이지 로드 때 받지 않고, 실제 결제를 처음 시도할 때만 불러온다.
+let portOneLoading = null;
+function loadPortOne() {
+  if (window.PortOne) return Promise.resolve(window.PortOne);
+  if (!portOneLoading) {
+    portOneLoading = new Promise((resolve, reject) => {
+      const s = document.createElement("script");
+      s.src = "https://cdn.portone.io/v2/browser-sdk.js";
+      s.onload = () => resolve(window.PortOne);
+      s.onerror = () => {
+        portOneLoading = null;
+        reject(new Error("PortOne SDK load failed"));
+      };
+      document.head.appendChild(s);
+    });
+  }
+  return portOneLoading;
 }
 
 async function checkout(item) {
@@ -24,7 +43,8 @@ async function checkout(item) {
   const paymentId = `hpt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   let response;
   try {
-    response = await window.PortOne.requestPayment({
+    const PortOne = await loadPortOne();
+    response = await PortOne.requestPayment({
       storeId: p.storeId,
       channelKey: p.channelKey,
       paymentId,

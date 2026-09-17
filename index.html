@@ -14,7 +14,7 @@
 <script type="importmap">
 {
   "imports": {
-    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.min.js",
     "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
   }
 }
@@ -185,6 +185,12 @@
             <div class="item-desc">보유 <b id="dealer-count">0</b>종 · 배치 수익 <b id="dealer-bonus-total">+0%</b></div>
           </div>
         </div>
+        <div class="gacha-level-row">
+          <span class="gacha-level-label">뽑기 레벨</span>
+          <span class="gacha-level-bar"><i id="gacha-level-fill"></i></span>
+          <span class="gacha-level-next" id="gacha-level-next">0/20회</span>
+        </div>
+        <div class="gacha-level-rates" id="gacha-level-rates"></div>
         <div class="rarity-chip-row" id="dealer-breakdown"></div>
         <div class="gacha-btn-row">
           <button class="btn btn-buy gacha-pull-btn" id="gacha-pull-btn">1회 뽑기<small><span id="gacha-cost">80</span>💎</small></button>
@@ -367,7 +373,6 @@
 <script src="js/data.js" defer></script>
 <script src="js/portraits.js" defer></script>
 <script src="js/ads.js" defer></script>
-<script src="https://cdn.portone.io/v2/browser-sdk.js" defer></script>
 <script type="module" src="js/account.js"></script>
 <script type="module" src="js/backend.js"></script>
 <script type="module" src="js/shop.js"></script>

@@ -229,7 +229,8 @@
   const ownedDealerIds = () => Object.keys(state.dealers).filter((id) => rosterDef(id));
 
   // ---------- 배치(운영) ----------
-  const deployedIds = () => (state.deployedIds || []).filter((id) => state.dealers[id]);
+  // 로스터에서 사라진 id(예전 이름 변경 등)가 세이브에 남아 있어도 매장 렌더가 깨지지 않게 로스터에 있는 것만 인정
+  const deployedIds = () => (state.deployedIds || []).filter((id) => state.dealers[id] && rosterDef(id));
   const isDeployed = (id) => deployedIds().includes(id);
   const deployedBonusSum = () => deployedIds().reduce((sum, id) => sum + dealerBonus(id), 0);
 
@@ -1411,6 +1412,13 @@
     $("gacha-pull-btn").disabled = state.diamonds < D.gacha.costDiamonds;
     $("gacha-multi-btn").disabled = state.diamonds < D.gacha.multiCost;
     $("gacha-level-chip").textContent = `Lv.${state.gachaLevel}`;
+    // 뽑기 레벨 경험치 바: 현재 레벨 안에서 몇 회 뽑았는지 / 레벨업에 필요한 횟수
+    const gachaMaxed = state.gachaLevel >= D.gacha.maxLevel;
+    const pullsIntoLevel = state.gachaPulls - (state.gachaLevel - 1) * D.gacha.pullsPerLevel;
+    $("gacha-level-fill").style.width = `${gachaMaxed ? 100 : Math.min(100, (pullsIntoLevel / D.gacha.pullsPerLevel) * 100)}%`;
+    $("gacha-level-next").textContent = gachaMaxed ? "MAX" : `${pullsIntoLevel}/${D.gacha.pullsPerLevel}회`;
+    const rates = gachaRarityPercents();
+    $("gacha-level-rates").textContent = `현재 확률 · SSR ${rates.legendary.toFixed(1)}% · SR ${rates.epic.toFixed(1)}% · R ${rates.rare.toFixed(1)}% · U ${rates.uncommon.toFixed(1)}%`;
     $("gacha-ticket-count").textContent = `${state.gachaTickets || 0}장`;
     $("gacha-ticket-btn").disabled = (state.gachaTickets || 0) <= 0;
     $("dealer-count").textContent = ownedDealerIds().length;

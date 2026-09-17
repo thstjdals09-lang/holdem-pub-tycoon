@@ -1418,7 +1418,7 @@ export function update(snapshot) {
     const stool = buildBarStool();
     stool.position.set(sx, 0, sz);
     groups.fixtures.add(stool);
-    spots.push({ id: `bar`, type: "bar", x: sx, z: sz, rot: Math.PI, seated: true, sitY: 0.24, duration: [12, 24], ignore: "bar" });
+    spots.push({ id: `bar${i}`, type: "bar", x: sx, z: sz, rot: Math.PI, seated: true, sitY: 0.24, duration: [12, 24], ignore: "bar" });
   }
 
   // 냉장고
@@ -1574,9 +1574,30 @@ export function update(snapshot) {
   obstacleList.push({ id: "cash", x: vaultX, z: zWall + 0.4, rx: 1.4, rz: 0.9 });
   obstacles = obstacleList;
 
+  // 업그레이드/구매 등으로 매장을 다시 그려도 손님은 지우지 않는다 — 같은 id의 새 자리로 옮겨 붙이고,
+  // 자리가 없어졌으면(좌석 수 변경 등) 자연스럽게 걸어 나가게 한다.
   activitySpots = spots.map((s) => ({ ...s, taken: false }));
-  clearGroup(groups.customers);
-  customers = [];
+  const spotById = new Map(activitySpots.map((s) => [s.id, s]));
+  customers.forEach((c) => {
+    if (c.phase === "leave") return;
+    const next = spotById.get(c.spot.id);
+    if (!next || next.taken) {
+      if (c.phase === "act") endActivity(c);
+      c.phase = "leave";
+      c.target = c.entryPos;
+      return;
+    }
+    next.taken = true;
+    const moved = Math.abs(next.x - c.spot.x) > 0.01 || Math.abs(next.z - c.spot.z) > 0.01;
+    c.spot = next;
+    c.target = new THREE.Vector3(next.x, 0, next.z);
+    if (c.phase === "act" && moved) {
+      // 매장 크기가 바뀌어 자리 좌표가 움직였으면 앉아 있던 손님도 같이 옮기고 소품을 다시 놓는다
+      endActivity(c);
+      c.mesh.position.set(next.x, 0, next.z);
+      startActivity(c);
+    }
+  });
 
   const note = document.getElementById("floor-note");
   if (note) {

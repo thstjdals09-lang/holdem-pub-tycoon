@@ -12,6 +12,8 @@ import {
   deleteUser,
   onAuthStateChanged,
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
+// Firestore는 Lite판을 쓴다(정식판 440KB → Lite 118KB). 우리는 문서 읽기/쓰기/삭제만 하고
+// 실시간 구독(onSnapshot)이나 오프라인 캐시는 안 쓰기 때문에 기능 차이가 없다(오프라인 대비는 backend.js의 localStorage가 담당).
 import {
   getFirestore,
   doc,
@@ -19,7 +21,7 @@ import {
   setDoc,
   deleteDoc,
   serverTimestamp,
-} from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+} from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-lite.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyBfjtsVhLb99meZGNWX5zV3wIiQPP-oyhU",
