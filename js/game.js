@@ -26,6 +26,7 @@
   // 상태
   // ============================================================
   const defaultState = (keep = {}) => ({
+    dataResetVersion: D.dataResetVersion,
     chips: 20,
     totalEarned: 0, // 이번 회차 누적 (프레스티지 기준)
     lifetimeEarned: keep.lifetimeEarned ?? 0, // 전체 누적 (프로필 레벨 기준)
@@ -61,13 +62,13 @@
     prestige: keep.prestige ?? { points: 0 },
 
     settings: { showTableIncome: true, autoAssign: true },
-    ui: { buyQty: 1, autoUpgrade: false, codexFilter: "all" },
+    ui: { buyQty: 1, codexFilter: "all" },
 
     // 영구 업그레이드 레벨 — 리뉴얼해도 절대 초기화되지 않는다(다이아 전용)
     permanentUpgrades: keep.permanentUpgrades ?? Object.fromEntries(D.permanentUpgrades.map((p) => [p.id, 0])),
 
     // 광고(리워드) 관련 상태 — 계정 단위로 유지
-    ads: keep.ads ?? { lastFreePullDate: null, boostUntil: 0, boostCooldownUntil: 0 },
+    ads: keep.ads ?? { lastFreePullDate: null, boostCooldownUntil: 0 },
 
     // 유명인 방문 이벤트 타이머
     celebrity: keep.celebrity ?? { nextAt: Date.now() + 8 * 60 * 1000, active: null, activeUntil: 0 },
@@ -96,13 +97,14 @@
   let sceneDirty = true;
   let activeTab = "store";
   let sheetOpen = false;
-  let lastAutoAt = 0;
   let lastLiveRenderAt = 0;
   // 도감을 연 순간의 NEW 목록. 탭을 여는 즉시 알림 점은 끄되, 배지는 보는 동안 유지한다.
   let codexNewSnapshot = [];
 
   // 칩 보유량에 따라 버튼 활성/비활성이 바뀌는 탭만 주기적으로 다시 그린다.
   const LIVE_TABS = new Set(["store", "tables", "staff", "decor", "prestige"]);
+  // x1/x10/x100/MAX 배수 선택이 의미 있는(칩으로 구매·강화하는) 탭 — 시트 안 배수 줄은 이 탭들에서만 보인다
+  const QTY_TABS = new Set(["store", "tables", "staff", "decor"]);
   const LIVE_RENDER_MS = 500;
 
   // 저장된 데이터에 새 필드가 없어도 기본값으로 채우고, 옛 세이브 형식을 마이그레이션한다.
@@ -232,8 +234,6 @@
   // 로스터에서 사라진 id(예전 이름 변경 등)가 세이브에 남아 있어도 매장 렌더가 깨지지 않게 로스터에 있는 것만 인정
   const deployedIds = () => (state.deployedIds || []).filter((id) => state.dealers[id] && rosterDef(id));
   const isDeployed = (id) => deployedIds().includes(id);
-  const deployedBonusSum = () => deployedIds().reduce((sum, id) => sum + dealerBonus(id), 0);
-
   // 배치된 인원끼리 서로 다른 역할(role)을 고루 갖추면 시너지, 정원(10명)을 꽉 채우면 추가 보너스
   function deploymentSynergyMultiplier() {
     const ids = deployedIds();
@@ -243,7 +243,39 @@
     if (ids.length >= D.deployment.maxDeployed) mult *= 1 + D.deployment.fullSquadBonus;
     return mult;
   }
-  const deploymentBonusTotal = () => deployedBonusSum() * deploymentSynergyMultiplier();
+
+  // ---------- 운영진 효과: 장착효과(배치 시) + 보유효과(보유만 해도) ----------
+  // 보유효과 종류는 id로 고정(같은 사람은 항상 같은 효과)
+  function ownedEffectType(dealerId) {
+    let h = 0;
+    for (let i = 0; i < dealerId.length; i++) h = (h * 31 + dealerId.charCodeAt(i)) >>> 0;
+    const types = D.dealerEffects.ownedTypes;
+    return types[h % types.length];
+  }
+  function equipEffect(dealerId) {
+    const def = rosterDef(dealerId);
+    const type = D.dealerEffects.equipByRole[def.role] || "income";
+    return { type, value: dealerBonus(dealerId) * D.dealerEffects.typeScale[type] };
+  }
+  function ownedEffect(dealerId) {
+    const type = ownedEffectType(dealerId);
+    return { type, value: dealerBonus(dealerId) * D.dealerEffects.ownedScale * D.dealerEffects.typeScale[type] };
+  }
+  // 종류별 합계 — 장착효과에는 배치 시너지가 곱해지고, 보유효과는 보유한 전원 합산
+  function dealerEffectTotal(type) {
+    const synergy = deploymentSynergyMultiplier();
+    let total = 0;
+    deployedIds().forEach((id) => {
+      const e = equipEffect(id);
+      if (e.type === type) total += e.value * synergy;
+    });
+    ownedDealerIds().forEach((id) => {
+      const e = ownedEffect(id);
+      if (e.type === type) total += e.value;
+    });
+    return total;
+  }
+  const effectLabel = (e) => `${D.dealerEffects.emojis[e.type]} ${D.dealerEffects.labels[e.type]} +${(e.value * 100).toFixed(1)}%`;
 
   function toggleDeploy(dealerId) {
     const list = state.deployedIds || (state.deployedIds = []);
@@ -305,7 +337,7 @@
     D.staff.forEach((s) => {
       if (s.effect.type === "incomeMult") mult += s.effect.value * state.staff[s.id];
     });
-    mult += deploymentBonusTotal();
+    mult += dealerEffectTotal("income");
     D.decor.forEach((d) => {
       mult += d.bonusPerLevel * (state.decor[d.id] || 0);
     });
@@ -329,7 +361,7 @@
     const marketerLevel = state.staff.marketer || 0;
     const marketerMult = 1 + (marketerStaff?.effect.value ?? 0) * marketerLevel;
     const base = c.baseVisitorsPerHour + state.tables * c.visitorsPerTable;
-    return Math.round(base * marketerMult);
+    return Math.round(base * marketerMult * (1 + dealerEffectTotal("visitor")));
   }
   function customerFlowMultiplier() {
     const c = D.customerFlow;
@@ -357,7 +389,6 @@
     }
     state.diamonds -= cost;
     state.permanentUpgrades[id] = permanentLevel(id) + 1;
-    toast(`🏆 ${def.name} Lv.${state.permanentUpgrades[id]}!`);
     burst(0xffd24a);
     renderShopTab();
     refresh();
@@ -368,7 +399,7 @@
     D.fixtures.forEach((f) => {
       if (f.incomePerLevel) income += f.incomePerLevel * state.fixtures[f.id];
     });
-    return income;
+    return income * (1 + dealerEffectTotal("fixture"));
   }
 
   const perTableIncome = () =>
@@ -381,6 +412,7 @@
       D.diamond.baseRatePerTableSecond *
       state.tables *
       (1 + vaultLevel * D.diamond.vaultBonusPerLevel) *
+      (1 + dealerEffectTotal("diamond")) *
       prestigeMultiplier()
     );
   };
@@ -391,6 +423,7 @@
       if (s.effect.type === "offline") eff += s.effect.value * state.staff[s.id];
     });
     eff += permanentBonus("offlineCore");
+    eff += dealerEffectTotal("offline");
     return Math.min(D.offline.maxEfficiency, eff);
   }
 
@@ -545,12 +578,21 @@
     if (changed) refreshDots();
   }
 
+  // 매장 크기(테이블 최대 24칸)에 상한이 있어서, 이미 최대치면 달성할 수 없는 미션은 뽑지 않는다
+  const tablesLeftToMax = () => Math.max(0, D.store.maxShownSlots - state.tables);
+  function missionPossible(id) {
+    if (id === "expand") return !isStoreMaxed();
+    if (id === "buyTable") return tablesLeftToMax() > 0;
+    return true;
+  }
+  const capMissionTarget = (id, target) => (id === "buyTable" ? Math.min(target, tablesLeftToMax()) : target);
+
   function rollMissions() {
-    const pool = [...D.missions.pool];
+    const pool = D.missions.pool.filter((p) => missionPossible(p.id));
     const list = [];
     for (let i = 0; i < D.missions.slots && pool.length; i++) {
       const def = pool.splice(Math.floor(Math.random() * pool.length), 1)[0];
-      const target = def.targets[Math.min(i, def.targets.length - 1)];
+      const target = capMissionTarget(def.id, def.targets[Math.min(i, def.targets.length - 1)]);
       list.push({ id: def.id, target, progress: 0, claimed: false });
     }
     state.missions = { date: todayKey(), list, allClaimed: false };
@@ -558,7 +600,9 @@
 
   function ensureDailyState() {
     const key = todayKey();
-    if (state.missions.date !== key) rollMissions();
+    // 날짜가 바뀌었거나, 예전 세이브에 지금은 없어진 미션(선물 받기 등)이 남아 있으면 새로 뽑는다
+    const staleMission = state.missions.list.some((m) => !D.missions.pool.find((p) => p.id === m.id));
+    if (state.missions.date !== key || staleMission) rollMissions();
     if (vipActive() && state.purchases.vipLastDailyDate !== key) {
       state.purchases.vipLastDailyDate = key;
       addDiamonds(D.shop.vip.dailyDiamonds);
@@ -598,6 +642,7 @@
       case "staff.server": return state.staff.server || 0;
       case "staff.marketer": return state.staff.marketer || 0;
       case "dealerCount": return ownedDealerIds().length;
+      case "deployedCount": return deployedIds().length;
       case "decorTotal": return D.decor.reduce((sum, d) => sum + (state.decor[d.id] || 0), 0);
       case "themeCount": return state.ownedThemes.length;
       case "prestigePoints": return state.prestige.points;
@@ -644,7 +689,7 @@
   const repeatDef = (id) => D.repeatQuests.pool.find((p) => p.id === id);
 
   function rollRepeatQuest() {
-    const pool = D.repeatQuests.pool;
+    const pool = D.repeatQuests.pool.filter((p) => missionPossible(p.id));
     const prev = state.repeat.quest && state.repeat.quest.id;
     // 같은 퀘스트가 연달아 나오지 않게 한 번 걸러준다
     const candidates = pool.filter((p) => p.id !== prev);
@@ -655,7 +700,7 @@
     const target =
       def.id === "earn"
         ? Math.max(200, Math.ceil(incomePerSecond() * Math.min(def.maxSeconds || Infinity, def.incomeSeconds * Math.pow(def.growth, round))))
-        : Math.max(1, Math.min(def.max || Infinity, Math.ceil(def.base * Math.pow(def.growth, round))));
+        : Math.max(1, capMissionTarget(def.id, Math.min(def.max || Infinity, Math.ceil(def.base * Math.pow(def.growth, round)))));
     state.repeat.quest = { id: def.id, target, progress: 0, startEarned: state.totalEarned };
   }
 
@@ -671,7 +716,10 @@
   }
 
   function repeatState() {
-    if (!state.repeat.quest || !repeatDef(state.repeat.quest.id)) rollRepeatQuest();
+    // 예전 세이브의 없어진 퀘스트(매장 확장 등)나, 매장이 최대라 더는 진행할 수 없게 된 퀘스트는 새로 뽑는다
+    const q0 = state.repeat.quest;
+    const stuck = q0 && !missionPossible(q0.id) && q0.progress < q0.target;
+    if (!q0 || !repeatDef(q0.id) || stuck) rollRepeatQuest();
     const q = state.repeat.quest;
     const def = repeatDef(q.id);
     // "칩 벌기"는 별도 카운터 없이 누적 수익 차이로 판정한다
@@ -817,7 +865,6 @@
     state.tables += n;
     sceneDirty = true;
     trackMission("buyTable", n);
-    toast(`🃏 테이블 ${n > 1 ? `${n}개 ` : ""}오픈! (총 ${state.tables})`);
     burst();
     refresh();
     return n;
@@ -832,7 +879,6 @@
     state.tableLevel += n;
     sceneDirty = true;
     trackMission("upgradeTable", n);
-    toast(`📈 리모델링 Lv.${state.tableLevel}!`);
     refresh();
     return n;
   }
@@ -850,7 +896,6 @@
     state.store.expansions += n;
     sceneDirty = true;
     trackMission("expand", n);
-    toast(`🏗 매장 확장! 슬롯 +${D.store.capacityPerExpansion * n}`);
     refresh();
     return n;
   }
@@ -866,7 +911,6 @@
     state.fixtures[id] += n;
     sceneDirty = true;
     trackMission("upgradeFixture", n);
-    toast(`${def.emoji} ${def.name} Lv.${state.fixtures[id]}`);
     refresh();
     return n;
   }
@@ -882,7 +926,6 @@
     state.staff[id] += n;
     sceneDirty = true;
     trackMission("hireStaff", n);
-    toast(`${def.emoji} ${def.name} 고용! (총 ${state.staff[id]}명)`);
     refresh();
     return n;
   }
@@ -898,7 +941,6 @@
     state.decor[id] = owned + n;
     sceneDirty = true;
     trackMission("upgradeDecor", n);
-    toast(`${def.emoji} ${def.name} Lv.${state.decor[id]}`);
     refresh();
     return n;
   }
@@ -930,7 +972,6 @@
     state.chips -= cost;
     state.themeLevels[id] = owned + n;
     sceneDirty = true;
-    toast(`${themeDef(id).emoji} 인테리어 등급 Lv.${state.themeLevels[id]}`);
     refresh();
     return n;
   }
@@ -942,8 +983,9 @@
       toast(`🎁 다음 선물까지 ${formatDuration(state.giftReadyAt - Date.now())}`);
       return;
     }
-    const chipGain = chipSecondsToChips(D.gift.chipSeconds);
-    const diaGain = D.gift.diamondMin + Math.floor(Math.random() * (D.gift.diamondMax - D.gift.diamondMin + 1));
+    const giftMult = 1 + dealerEffectTotal("gift"); // 운영진 "선물 보상" 효과
+    const chipGain = chipSecondsToChips(D.gift.chipSeconds) * giftMult;
+    const diaGain = Math.round((D.gift.diamondMin + Math.floor(Math.random() * (D.gift.diamondMax - D.gift.diamondMin + 1))) * giftMult);
     addChips(chipGain);
     addDiamonds(diaGain);
     state.giftReadyAt = Date.now() + D.gift.cooldownMs;
@@ -1033,29 +1075,37 @@
         </div>`
       )
       .join("");
+    box.classList.toggle("many", results.length >= 10);
+    box.scrollTop = 0;
     $("gacha-modal").classList.remove("hidden");
   }
 
-  function pullGacha(count) {
-    const multi = count > 1;
-    const cost = multi ? D.gacha.multiCost : D.gacha.costDiamonds;
-    if (state.diamonds < cost) {
+  const rarityRank = (id) => (id === "mythic" ? D.gacha.rarities.length : D.gacha.rarities.findIndex((r) => r.id === id));
+
+  // 무료 뽑기권이 count장 이상이면 그 버튼은 뽑기권으로(무료), 아니면 다이아로 뽑는다
+  const canPullFree = (opt) => (state.gachaTickets || 0) >= opt.count;
+
+  function pullGacha(opt) {
+    const free = canPullFree(opt);
+    if (free) {
+      state.gachaTickets -= opt.count;
+    } else if (state.diamonds < opt.costDiamonds) {
       toast("💎 다이아가 부족해요");
       return;
+    } else {
+      state.diamonds -= opt.costDiamonds;
     }
-    state.diamonds -= cost;
-    const rarityRank = (id) => {
-      const idx = D.gacha.rarities.findIndex((r) => r.id === id);
-      return id === "mythic" ? D.gacha.rarities.length : idx;
-    };
     const guaranteeRank = rarityRank(D.gacha.multiGuarantee);
     const results = [];
-    for (let i = 0; i < count; i++) {
-      // 10연차는 마지막 한 장을 희귀 이상으로 확정(그 전까지 이미 희귀 이상이 나왔으면 확정 불필요)
-      const guarantee = multi && i === count - 1 && !results.some((r) => rarityRank(r.rarity.id) >= guaranteeRank);
+    for (let i = 0; i < opt.count; i++) {
+      // 10장 단위마다 마지막 한 장은 희귀 이상 확정(그 10장 안에서 이미 희귀 이상이 나왔으면 확정 불필요)
+      const blockStart = i - (i % 10);
+      const lastOfBlock = i % 10 === 9;
+      const blockHasRare = results.slice(blockStart).some((r) => rarityRank(r.rarity.id) >= guaranteeRank);
+      const guarantee = opt.count >= 10 && lastOfBlock && !blockHasRare;
       results.push(pullOne(guarantee ? D.gacha.multiGuarantee : null));
     }
-    trackMission("gacha", count);
+    trackMission("gacha", opt.count);
     sceneDirty = true;
     showGachaResults(results);
     const best = results.reduce((a, b) => (rarityRank(b.rarity.id) > rarityRank(a.rarity.id) ? b : a));
@@ -1063,19 +1113,33 @@
     refresh();
   }
 
-  // 무료 뽑기권(반복 퀘스트 보상)으로 1회 뽑기 — 다이아 소모 없음, 가챠 레벨 진행에는 그대로 반영됨
-  function pullWithTicket() {
-    if ((state.gachaTickets || 0) <= 0) {
-      toast("🎫 무료 뽑기권이 없어요 (반복 퀘스트로 받을 수 있어요)");
-      return;
-    }
-    state.gachaTickets -= 1;
-    const results = [pullOne(null)];
-    trackMission("gacha", 1);
-    sceneDirty = true;
-    showGachaResults(results);
-    burst(results[0].rarity.color);
-    refresh();
+  // 뽑기 버튼은 운영진 탭이 0.5초마다 다시 그려질 때도 누른 탭이 씹히지 않게 한 번만 만들고 내용만 갱신한다
+  function setupPullButtons() {
+    const row = $("gacha-pull-row");
+    row.innerHTML = "";
+    D.gacha.pullOptions.forEach((opt, i) => {
+      const btn = document.createElement("button");
+      btn.className = "btn btn-buy gacha-pull-btn";
+      btn.dataset.pull = i;
+      btn.addEventListener("click", () => pullGacha(opt));
+      row.appendChild(btn);
+    });
+  }
+  function renderPullButtons() {
+    $("gacha-pull-row")
+      .querySelectorAll("[data-pull]")
+      .forEach((btn) => {
+        const opt = D.gacha.pullOptions[Number(btn.dataset.pull)];
+        const free = canPullFree(opt);
+        const extra = opt.count >= 10 ? ` · R확정${opt.count > 10 ? ` ${opt.count / 10}장` : ""}` : "";
+        const html = free
+          ? `🎫 무료 ${opt.count}회<small>뽑기권 ${opt.count}장${extra}</small>`
+          : `${opt.label}<small>${formatNumber(opt.costDiamonds)}💎${extra}</small>`;
+        if (btn.innerHTML !== html) btn.innerHTML = html;
+        btn.classList.toggle("gacha-free", free);
+        btn.classList.toggle("gacha-multi", !free && opt.count >= 10);
+        btn.disabled = !free && state.diamonds < opt.costDiamonds;
+      });
   }
 
   // ---------- 운영진 승급 ----------
@@ -1086,18 +1150,82 @@
     const curve = D.dealerStar.shardsPerStarByRarity[def.rarity] || D.dealerStar.shardsPerStarByRarity.common;
     return curve[owned.star - 1];
   }
-  function starUp(dealerId) {
-    const owned = state.dealers[dealerId];
+  const canStarUp = (dealerId) => {
     const need = starUpCost(dealerId);
-    if (!owned || need === null || owned.shards < need) return;
-    owned.shards -= need;
+    return need !== null && state.dealers[dealerId].shards >= need;
+  };
+  function starUp(dealerId) {
+    if (!canStarUp(dealerId)) return;
+    const owned = state.dealers[dealerId];
+    owned.shards -= starUpCost(dealerId);
     owned.star += 1;
     sceneDirty = true;
-    const def = rosterDef(dealerId);
-    toast(`⭐ ${def.name} ★${owned.star} 승급!`);
-    burst(rarityDef(def.rarity).color);
+    burst(rarityDef(rosterDef(dealerId).rarity).color);
     renderDealerModal(dealerId);
     refresh();
+  }
+
+  // 도감 일괄 승급: 조각이 충분한 운영진을 전부, 올릴 수 있는 만큼 끝까지 승급
+  function starUpAll() {
+    let stars = 0;
+    const people = new Set();
+    ownedDealerIds().forEach((id) => {
+      while (canStarUp(id)) {
+        const owned = state.dealers[id];
+        owned.shards -= starUpCost(id);
+        owned.star += 1;
+        stars += 1;
+        people.add(id);
+      }
+    });
+    if (!stars) {
+      toast("⭐ 지금 승급할 수 있는 운영진이 없어요");
+      return;
+    }
+    sceneDirty = true;
+    burst(0xffc83c);
+    toast(`⭐ ${people.size}명 승급 완료 (별 +${stars})`);
+    refresh();
+  }
+
+  // 빠른 배치: 역할별 최강 1명씩(시너지) + 나머지는 전투력 순으로 채운 조합과, 그냥 전투력 상위 10명 조합 중
+  // 장착효과 합 × 시너지가 더 큰 쪽을 고른다
+  function quickDeploy() {
+    const owned = ownedDealerIds().sort((a, b) => dealerBonus(b) - dealerBonus(a));
+    if (!owned.length) {
+      toast("🧑‍💼 배치할 운영진이 없어요. 먼저 스카우트해보세요");
+      return;
+    }
+    const max = D.deployment.maxDeployed;
+    const score = (ids) => {
+      const roles = new Set(ids.map((id) => rosterDef(id).role));
+      let mult = 1 + roles.size * D.deployment.synergyPerRole;
+      if (ids.length >= max) mult *= 1 + D.deployment.fullSquadBonus;
+      return ids.reduce((s, id) => s + dealerBonus(id), 0) * mult;
+    };
+    const topOnly = owned.slice(0, max);
+    const bestPerRole = [];
+    Object.keys(D.dealerEffects.equipByRole).forEach((role) => {
+      const best = owned.find((id) => rosterDef(id).role === role);
+      if (best) bestPerRole.push(best);
+    });
+    const diverse = [...bestPerRole, ...owned.filter((id) => !bestPerRole.includes(id))].slice(0, max);
+    state.deployedIds = score(diverse) >= score(topOnly) ? diverse : topOnly;
+    sceneDirty = true;
+    toast(`⚡ 빠른 배치 완료 · ${state.deployedIds.length}명 · 시너지 +${Math.round((deploymentSynergyMultiplier() - 1) * 100)}%`);
+    refresh();
+  }
+
+  // ★ 표시: 5칸 — ★1~5는 은색 별이 차오르고, ★6부터는 왼쪽부터 금색으로 바뀐다(★10 = 금별 5개)
+  function starsHtml(star) {
+    const slots = 5;
+    const gold = Math.max(0, star - slots);
+    let html = "";
+    for (let i = 0; i < slots; i++) {
+      const cls = i < gold ? "star-gold" : i < Math.min(star, slots) ? "star-silver" : "star-empty";
+      html += `<i class="${cls}">${cls === "star-empty" ? "☆" : "★"}</i>`;
+    }
+    return `<span class="stars">${html}</span>`;
   }
 
   // ---------- 프레스티지 / 초기화 ----------
@@ -1147,48 +1275,6 @@
     refresh();
   }
 
-  // ============================================================
-  // 자동 업그레이드 — 살 수 있는 것 중 가장 싼 것부터
-  // ============================================================
-  function autoUpgradeTick() {
-    if (!state.ui.autoUpgrade) return;
-    const now = Date.now();
-    if (now - lastAutoAt < D.autoUpgrade.intervalMs) return;
-    lastAutoAt = now;
-
-    // 광고로 받은 "업그레이드 가속" 중이면 한 틱에 더 많이 처리한다
-    const boosted = state.ads.boostUntil > now;
-    const perTick = D.autoUpgrade.maxPerTick * (boosted ? D.ads.upgradeBoost.mult : 1);
-    for (let i = 0; i < perTick; i++) {
-      const options = [];
-      if (state.tables < tableCapacity()) {
-        options.push({ cost: costFor(D.table.baseCost, D.table.costGrowth, state.tables - 1), run: () => buyTable(1) });
-      }
-      options.push({
-        cost: costFor(D.tableUpgrade.baseCost, D.tableUpgrade.costGrowth, state.tableLevel),
-        run: () => upgradeTable(1),
-      });
-      if (!isStoreMaxed()) {
-        options.push({
-          cost: costFor(D.store.expansionBaseCost, D.store.expansionCostGrowth, state.store.expansions),
-          run: () => expandStore(1),
-        });
-      }
-      D.fixtures.forEach((f) => {
-        options.push({ cost: costFor(f.baseCost, f.costGrowth, state.fixtures[f.id]), run: () => upgradeFixture(f.id, 1) });
-      });
-      D.staff.forEach((s) => {
-        options.push({ cost: costFor(s.baseCost, s.costGrowth, state.staff[s.id]), run: () => hireStaff(s.id, 1) });
-      });
-      D.decor.forEach((d) => {
-        options.push({ cost: costFor(d.baseCost, d.costGrowth, state.decor[d.id] || 0), run: () => upgradeDecor(d.id, 1) });
-      });
-
-      const affordable = options.filter((o) => o.cost <= state.chips).sort((a, b) => a.cost - b.cost);
-      if (!affordable.length) return;
-      affordable[0].run();
-    }
-  }
 
   // ============================================================
   // 렌더링
@@ -1293,7 +1379,7 @@
       renderAttendanceModal();
       return $("attendance-modal").classList.remove("hidden");
     }
-    if (q.key === "autoUpgrade") return openSheet("settings", "설정");
+    if (q.key === "deployedCount") return openSheet("codex", "운영진 도감");
     const tab = QUEST_TAB_MAP[q.key];
     if (tab) openSheet(tab, TAB_TITLES[tab] || tab);
   }
@@ -1407,10 +1493,7 @@
       wrap.appendChild(card);
     });
 
-    $("gacha-cost").textContent = formatNumber(D.gacha.costDiamonds);
-    $("gacha-multi-cost").textContent = formatNumber(D.gacha.multiCost);
-    $("gacha-pull-btn").disabled = state.diamonds < D.gacha.costDiamonds;
-    $("gacha-multi-btn").disabled = state.diamonds < D.gacha.multiCost;
+    renderPullButtons();
     $("gacha-level-chip").textContent = `Lv.${state.gachaLevel}`;
     // 뽑기 레벨 경험치 바: 현재 레벨 안에서 몇 회 뽑았는지 / 레벨업에 필요한 횟수
     const gachaMaxed = state.gachaLevel >= D.gacha.maxLevel;
@@ -1419,10 +1502,9 @@
     $("gacha-level-next").textContent = gachaMaxed ? "MAX" : `${pullsIntoLevel}/${D.gacha.pullsPerLevel}회`;
     const rates = gachaRarityPercents();
     $("gacha-level-rates").textContent = `현재 확률 · SSR ${rates.legendary.toFixed(1)}% · SR ${rates.epic.toFixed(1)}% · R ${rates.rare.toFixed(1)}% · U ${rates.uncommon.toFixed(1)}%`;
-    $("gacha-ticket-count").textContent = `${state.gachaTickets || 0}장`;
-    $("gacha-ticket-btn").disabled = (state.gachaTickets || 0) <= 0;
+    $("gacha-ticket-count").textContent = formatNumber(state.gachaTickets || 0);
     $("dealer-count").textContent = ownedDealerIds().length;
-    $("dealer-bonus-total").textContent = `+${Math.round(deploymentBonusTotal() * 100)}%`;
+    $("dealer-bonus-total").textContent = `+${Math.round(dealerEffectTotal("income") * 100)}%`;
     const shownRarities = mythicUnlocked() ? [...D.gacha.rarities, D.gacha.mythicRarity] : D.gacha.rarities;
     $("dealer-breakdown").innerHTML = shownRarities
       .map((r) => {
@@ -1447,6 +1529,10 @@
     $("codex-owned").textContent = owned;
     $("codex-total").textContent = total;
     $("codex-fill").style.width = `${((owned / total) * 100).toFixed(1)}%`;
+    const readyCount = ownedDealerIds().filter((id) => canStarUp(id)).length;
+    $("codex-starup-all").innerHTML = `⭐ 일괄 승급${readyCount ? ` <b>${readyCount}</b>` : ""}`;
+    $("codex-starup-all").disabled = readyCount === 0;
+    $("codex-deploy-summary").textContent = `배치 ${deployedIds().length}/${D.deployment.maxDeployed} · 시너지 +${Math.round((deploymentSynergyMultiplier() - 1) * 100)}%`;
 
     const filters = [{ id: "all", name: "전체" }, ...D.gacha.rarities.map((r) => ({ id: r.id, name: r.short }))];
     $("codex-filter").innerHTML = filters
@@ -1470,10 +1556,11 @@
         const own = state.dealers[d.id];
         const r = rarityDef(d.rarity) || D.gacha.mythicRarity;
         const isNew = codexNewSnapshot.includes(d.id);
-        const stars = own ? "★".repeat(own.star) + "☆".repeat(D.dealerStar.maxStar - own.star) : "";
+        const stars = own ? starsHtml(own.star) : "";
         const need = own ? starUpCost(d.id) : null;
         const shardPct = own && need ? Math.min(100, (own.shards / need) * 100) : own ? 100 : 0;
         const deployed = own && isDeployed(d.id);
+        const upReady = own && canStarUp(d.id);
         return `
           <div class="codex-card ${own ? "" : "locked"}" data-dealer="${d.id}" style="--rc:${r.color}">
             <span class="codex-rank">${r.short}</span>
@@ -1482,7 +1569,7 @@
             ${own ? "" : '<span class="codex-lock">🔒</span>'}
             <div class="codex-name">${own ? d.name : "???"}</div>
             <div class="codex-stars">${stars}</div>
-            ${own ? `<div class="shard-bar"><i style="width:${shardPct}%"></i></div>` : ""}
+            ${own ? `<div class="shard-bar ${upReady ? "ready" : ""}"><i style="width:${shardPct}%"></i></div>` : ""}
             ${own ? `<button class="deploy-toggle ${deployed ? "on" : ""}" data-deploy="${d.id}">${deployed ? "배치중" : "배치"}</button>` : ""}
           </div>`;
       })
@@ -1801,16 +1888,16 @@
     freeBtn.disabled = freeUsedToday;
     freeBtn.textContent = freeUsedToday ? "오늘 이미 받음" : removed ? "🎁 무료 뽑기 (광고 없이)" : "🎬 광고보고 무료뽑기";
 
-    const boostActive = state.ads.boostUntil > now;
+    const boostActive = boostIsActive("adBoost");
     const boostCooling = state.ads.boostCooldownUntil > now;
     boostBtn.disabled = boostActive || boostCooling;
     boostBtn.textContent = boostActive
-      ? `⚡ 가속 중 (${formatDuration(state.ads.boostUntil - now)})`
+      ? `🎬 수익 2배 적용중 (${formatDuration(boostActiveUntil("adBoost") - now)})`
       : boostCooling
       ? `대기 ${formatDuration(state.ads.boostCooldownUntil - now)}`
       : removed
-      ? "⚡ 업그레이드 가속 (광고 없이)"
-      : "🎬 광고보고 가속";
+      ? "💰 수익 2배 5분 (광고 없이)"
+      : "🎬 광고보고 수익 2배";
   }
 
   async function watchAdFor(kind) {
@@ -1832,11 +1919,12 @@
       sceneDirty = true;
       showGachaResults(results);
       burst(results[0].rarity.color);
-    } else if (kind === "upgradeBoost") {
-      const d = D.ads.upgradeBoost;
-      state.ads.boostUntil = Date.now() + d.durationMs;
-      state.ads.boostCooldownUntil = Date.now() + d.cooldownMs;
-      toast(`${testPrefix}⚡ ${Math.round(d.durationMs / 60000)}분간 자동 업그레이드 ${d.mult}배 가속!`);
+    } else if (kind === "incomeBoost") {
+      const b = D.boosts.adBoost;
+      state.boosts.active.adBoost = Date.now() + b.durationMs;
+      state.ads.boostCooldownUntil = Date.now() + D.ads.incomeBoost.cooldownMs;
+      sceneDirty = true;
+      toast(`${testPrefix}🎬 ${Math.round(b.durationMs / 60000)}분간 수익 ${b.mult}배!`);
     }
     renderAdButtons();
     refresh();
@@ -1997,11 +2085,23 @@
     const r = rarityDef(def.rarity);
     const own = state.dealers[dealerId];
     const box = $("dealer-detail");
+    // 미보유여도 어떤 효과를 가진 운영진인지는 보여준다(★1 기준 수치)
+    const E = D.dealerEffects;
+    const equipType = E.equipByRole[def.role] || "income";
+    const ownedType = ownedEffectType(dealerId);
+    const equip = own ? equipEffect(dealerId) : { type: equipType, value: r.bonus * E.typeScale[equipType] };
+    const owned = own ? ownedEffect(dealerId) : { type: ownedType, value: r.bonus * E.ownedScale * E.typeScale[ownedType] };
+    const effectsHtml = `
+      <div class="dealer-effects">
+        <div class="dealer-effect"><span class="dealer-effect-tag">보유효과</span>${effectLabel(owned)}<small>보유만 해도 적용</small></div>
+        <div class="dealer-effect equip ${own && isDeployed(dealerId) ? "active" : ""}"><span class="dealer-effect-tag">장착효과</span>${effectLabel(equip)}<small>배치 중일 때 적용 · 역할 ${def.role}</small></div>
+      </div>`;
     if (!own) {
       box.innerHTML = `
         <img src="${DealerPortraits.url(def.id, def.rarity)}" alt="" style="filter:brightness(.35) grayscale(1)" />
         <h3>??? <span style="color:${r.color}">${r.short}</span></h3>
-        <p class="dealer-quote">아직 만나지 못한 운영진이에요.<br/>가챠로 영입해보세요!</p>`;
+        <p class="dealer-quote">아직 만나지 못한 운영진이에요.<br/>가챠로 영입해보세요!</p>
+        ${effectsHtml}`;
       return;
     }
     const need = starUpCost(dealerId);
@@ -2012,10 +2112,10 @@
       <p class="dealer-quote">"${def.desc}"</p>
       <div class="dealer-stat-row">
         <div class="dealer-stat">등급<b style="color:${r.color}">${r.name}</b></div>
-        <div class="dealer-stat">승급<b>${"★".repeat(own.star)}${"☆".repeat(D.dealerStar.maxStar - own.star)}</b></div>
-        <div class="dealer-stat">수익 보너스<b>+${(dealerBonus(dealerId) * 100).toFixed(1)}%</b></div>
+        <div class="dealer-stat">승급<b>${starsHtml(own.star)}</b></div>
+        <div class="dealer-stat">별<b>★${own.star} / ${D.dealerStar.maxStar}</b></div>
       </div>
-      <p class="muted" style="margin:-4px 0 8px">💡 이 보너스는 "배치"돼 있을 때만 실제로 적용돼요(동시 배치 최대 ${D.deployment.maxDeployed}명).</p>
+      ${effectsHtml}
       <button class="deploy-toggle ${isDeployed(dealerId) ? "on" : ""}" id="dealer-modal-deploy-btn" style="width:100%;margin-bottom:8px;padding:8px 0;font-size:12px">${isDeployed(dealerId) ? "✅ 배치 중 (탭하면 해제)" : "🧑‍💼 배치하기"}</button>
       ${
         need === null
@@ -2097,6 +2197,7 @@
     document.querySelectorAll(".tab-btn").forEach((b) => b.classList.toggle("active", b.dataset.tab === tabName));
     document.querySelectorAll(".tab-panel").forEach((p) => p.classList.toggle("active", p.id === `tab-${tabName}`));
     $("sheet-title").textContent = titleText;
+    $("sheet-qty-row").hidden = !QTY_TABS.has(tabName);
     $("sheet-panel").classList.add("open");
     $("sheet-panel").setAttribute("aria-hidden", "false");
     $("sheet-backdrop").classList.add("open");
@@ -2145,20 +2246,6 @@
         refresh();
       })
     );
-
-    const auto = $("auto-toggle");
-    const syncAuto = () => {
-      auto.classList.toggle("on", state.ui.autoUpgrade);
-      auto.querySelector(".auto-text").innerHTML = `자동 <b>${state.ui.autoUpgrade ? "ON" : "OFF"}</b>`;
-    };
-    auto.addEventListener("click", () => {
-      state.ui.autoUpgrade = !state.ui.autoUpgrade;
-      syncAuto();
-      if (state.ui.autoUpgrade) trackMission("autoUpgrade");
-      toast(state.ui.autoUpgrade ? "🤖 자동 업그레이드 ON" : "🤖 자동 업그레이드 OFF");
-      refresh();
-    });
-    syncAuto();
   }
 
   // ============================================================
@@ -2170,6 +2257,15 @@
     const res = await GameBackend.loadState();
     if (!(res.ok && res.state)) return;
     const loaded = res.state;
+    // 패치로 전 계정 데이터를 초기화해야 할 때 D.dataResetVersion을 올린다 — 그보다 낮은 버전의 세이브는
+    // 버리고 새로 시작하며, 다음 자동 저장 때 클라우드도 새 데이터로 덮어써진다(로그인 계정은 유지).
+    if ((loaded.dataResetVersion || 0) < D.dataResetVersion) {
+      state = defaultState();
+      ensureDailyState();
+      await GameBackend.saveState(state);
+      setTimeout(() => toast("🔄 업데이트로 게임 데이터가 초기화됐어요. 새로 시작해요!"), 800);
+      return;
+    }
     state = mergeWithDefaults(loaded);
     const savedAt = loaded.savedAt || Date.now();
     const elapsedSec = Math.max(0, Math.min((Date.now() - savedAt) / 1000, D.offline.maxSeconds));
@@ -2219,7 +2315,6 @@
     tickCelebrity();
     checkProfileLevelReward();
     ensureDailyState();
-    autoUpgradeTick();
 
     renderHUD();
     refreshDots();
@@ -2255,11 +2350,11 @@
     $("upgrade-table-btn").addEventListener("click", () => upgradeTable());
     $("expand-store-btn").addEventListener("click", () => expandStore());
     $("prestige-btn").addEventListener("click", doPrestige);
-    $("gacha-pull-btn").addEventListener("click", () => pullGacha(1));
-    $("gacha-multi-btn").addEventListener("click", () => pullGacha(D.gacha.multiCount));
-    $("gacha-ticket-btn").addEventListener("click", pullWithTicket);
+    setupPullButtons();
+    $("codex-starup-all").addEventListener("click", starUpAll);
+    $("codex-quick-deploy").addEventListener("click", quickDeploy);
     $("ad-free-pull-btn").addEventListener("click", () => watchAdFor("dailyFreePull"));
-    $("ad-upgrade-boost-btn").addEventListener("click", () => watchAdFor("upgradeBoost"));
+    $("ad-upgrade-boost-btn").addEventListener("click", () => watchAdFor("incomeBoost"));
 
     // 사이드 레일
     $("gift-btn").addEventListener("click", openGift);

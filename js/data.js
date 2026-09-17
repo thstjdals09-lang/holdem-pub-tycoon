@@ -4,6 +4,10 @@
 //     (장식품/인테리어 테마도 레벨 개념을 가진다)
 //  2) 보상은 가능한 한 "현재 초당 수익 x N초"(chipSeconds)로 표현해 초반/후반 체감을 맞춘다.
 const GAME_DATA = {
+  // 전 계정 데이터 강제 초기화용 버전. 이 값보다 낮은 버전으로 저장된 세이브는 다음 접속 때 버려지고 새로 시작한다.
+  // 1: 2026-09-17 뽑기 1/10/30회·10성·운영진 효과 패치 때 사용자 요청으로 전체 초기화
+  dataResetVersion: 1,
+
   store: {
     baseCapacity: 6, // 매장 기본 테이블 슬롯 수
     capacityPerExpansion: 4, // 확장 1회당 늘어나는 슬롯 수
@@ -102,10 +106,13 @@ const GAME_DATA = {
   // 가챠에는 "가챠 레벨"(1~10)이 있다 — 뽑을수록(pullsPerLevel회마다) 레벨이 올라가고,
   // 레벨이 높을수록 SSR/SR/R 확률이 커진다(levelTable, %). U는 항상 20% 고정, N(일반)은 나머지 전부.
   gacha: {
-    costDiamonds: 80,
-    multiCount: 10,
-    multiCost: 720, // 10연차는 1회분 할인
-    multiGuarantee: "rare", // 10연차는 희귀 이상 1장 확정
+    // 뽑기 버튼 3종. 무료 뽑기권이 count장 이상 있으면 그 버튼은 다이아 대신 뽑기권 count장을 쓰는 "무료 뽑기"로 바뀐다.
+    pullOptions: [
+      { count: 1, costDiamonds: 80, label: "1회 뽑기" },
+      { count: 10, costDiamonds: 720, label: "10회 뽑기" }, // 1회분 할인
+      { count: 30, costDiamonds: 2040, label: "30회 뽑기" }, // 약 15% 할인
+    ],
+    multiGuarantee: "rare", // 10장마다 희귀 이상 1장 확정(10회=1장, 30회=3장)
     pullsPerLevel: 20, // 누적 20회 뽑을 때마다 가챠 레벨 +1
     maxLevel: 10,
     rarities: [
@@ -133,17 +140,18 @@ const GAME_DATA = {
     ],
   },
   dealerStar: {
-    maxStar: 5,
-    bonusPerStar: 0.25, // ★1당 해당 운영진 기본 보너스의 +25%
+    maxStar: 10,
+    bonusPerStar: 0.25, // ★1당 해당 운영진 기본 보너스의 +25% (★10이면 기본의 3.25배)
     // 등급별로 다른 승급 곡선 — 낮은 등급일수록 가챠에서 훨씬 자주 나오므로
     // 별을 올리는 데 필요한 조각 수도 그만큼 크게 잡는다(그렇지 않으면 하위 등급이 너무 쉽게 만성됨).
+    // 배열의 n번째 값 = ★(n+1) → ★(n+2)로 올릴 때 필요한 조각 (★1→★2 ... ★9→★10, 총 9단계)
     shardsPerStarByRarity: {
-      common: [6, 12, 24, 40, 64],
-      uncommon: [5, 10, 20, 34, 55],
-      rare: [4, 8, 16, 28, 45],
-      epic: [3, 5, 10, 17, 28],
-      legendary: [2, 3, 6, 10, 16],
-      mythic: [1, 2, 3, 5, 8],
+      common: [6, 12, 24, 40, 64, 96, 140, 200, 280],
+      uncommon: [5, 10, 20, 34, 55, 82, 120, 170, 240],
+      rare: [4, 8, 16, 28, 45, 68, 100, 140, 195],
+      epic: [3, 5, 10, 17, 28, 42, 62, 88, 120],
+      legendary: [2, 3, 6, 10, 16, 24, 35, 50, 70],
+      mythic: [1, 2, 3, 5, 8, 12, 17, 24, 33],
     },
   },
   // 이름 붙은 운영진 로스터 — 도감 탭에서 개별로 확인/승급, "운영" 탭에서 배치(최대 10명)한다.
@@ -213,6 +221,26 @@ const GAME_DATA = {
     { id: "hyunmo", name: "구현모", rarity: "mythic", role: "영업", emoji: "👑", desc: "전설의 투자자, 그가 오면 매출이 요동친다", shopOnly: true },
   ],
 
+  // ---------- 운영진 효과: 보유효과(뽑기만 해도) + 장착효과(배치했을 때) ----------
+  // 수치 = 등급 기본값(gacha.rarities[].bonus) × 별 배율(1 + (★-1)×bonusPerStar) × 종류별 배율(typeScale)
+  // 장착효과 종류는 역할(role)로 정해지고, 보유효과 종류는 운영진 id로 6종 중 하나가 고정으로 정해진다.
+  // 종류별 배율은 "수익으로 환산했을 때 대략 비슷한 가치"가 되도록 맞췄다(방문객은 로그형이라 약하게 먹히므로 크게 등).
+  dealerEffects: {
+    equipByRole: { 영업: "income", 서비스: "fixture", 이벤트: "diamond", 인맥: "visitor" },
+    ownedTypes: ["income", "fixture", "diamond", "visitor", "offline", "gift"],
+    ownedScale: 0.15, // 보유효과는 장착효과의 15% 크기
+    typeScale: { income: 1, fixture: 2, diamond: 2, visitor: 2, offline: 0.5, gift: 3 },
+    labels: {
+      income: "전체 수익",
+      fixture: "바·시설 수익",
+      diamond: "다이아 적립",
+      visitor: "방문객",
+      offline: "오프라인 효율",
+      gift: "선물 보상",
+    },
+    emojis: { income: "💰", fixture: "🍸", diamond: "💎", visitor: "👣", offline: "🌙", gift: "🎁" },
+  },
+
   // ---------- 배치(운영) — 동시에 몇 명까지 "일하게" 할지 + 조합 시너지 ----------
   deployment: {
     maxDeployed: 10,
@@ -235,7 +263,7 @@ const GAME_DATA = {
   ads: {
     network: "", // TODO: 애드센스/애드몹 등 실제 광고 SDK 연동 후 채우기
     dailyFreePull: { id: "dailyFreePull", label: "무료 1회 뽑기", desc: "광고 시청하고 운영진 가챠 1회 무료로 뽑기", cooldownMs: 24 * 60 * 60 * 1000 },
-    upgradeBoost: { id: "upgradeBoost", label: "업그레이드 가속", desc: "광고 시청 시 5분간 자동 업그레이드 속도 3배", durationMs: 5 * 60 * 1000, mult: 3, cooldownMs: 20 * 60 * 1000 },
+    incomeBoost: { id: "incomeBoost", label: "수익 2배", desc: "광고 시청 시 5분간 수익 2배(boosts.adBoost)", cooldownMs: 20 * 60 * 1000 },
   },
 
   // ---------- 유명인 방문 특수 이벤트 ----------
@@ -309,7 +337,6 @@ const GAME_DATA = {
       { id: "upgradeFixture", name: "시설 정비", desc: "매장 시설 {n}회 업그레이드", targets: [2, 4, 6], reward: { chipSeconds: 280, diamonds: 5 } },
       { id: "upgradeDecor", name: "분위기 꾸미기", desc: "장식품 {n}회 업그레이드", targets: [2, 3, 5], reward: { chipSeconds: 260, diamonds: 5 } },
       { id: "gacha", name: "운영진 스카우트", desc: "운영진 가챠 {n}회", targets: [1, 2, 3], reward: { chipSeconds: 360, diamonds: 10 } },
-      { id: "gift", name: "선물 수령", desc: "사장님 선물 {n}회 받기", targets: [2, 3, 4], reward: { chipSeconds: 200, diamonds: 8 } },
       { id: "boost", name: "영업 스퍼트", desc: "부스트 {n}회 사용", targets: [1, 2, 3], reward: { chipSeconds: 320, diamonds: 6 } },
       { id: "expand", name: "매장 확장", desc: "매장 {n}회 확장", targets: [1, 1, 2], reward: { chipSeconds: 400, diamonds: 12 } },
     ],
@@ -327,7 +354,7 @@ const GAME_DATA = {
     { id: "t2", title: "테이블 리모델링", desc: "테이블을 1회 강화하세요", hint: "테이블 탭에서 강화할 수 있어요", goal: { kind: "state", stat: "tableLevel", target: 1 }, reward: { chipSeconds: 150, diamonds: 5 } },
     { id: "t3", title: "바 카운터 오픈", desc: "바 카운터를 설치하세요", hint: "매장 탭 → 매장 시설", goal: { kind: "state", stat: "fixtures.bar", target: 1 }, reward: { chipSeconds: 180, diamonds: 8 } },
     { id: "t4", title: "첫 직원 채용", desc: "바텐더를 1명 고용하세요", hint: "직원 탭에서 고용해요", goal: { kind: "state", stat: "staff.bartender", target: 1 }, reward: { chipSeconds: 200, diamonds: 8 } },
-    { id: "t5", title: "사장님 선물", desc: "🎁 선물을 1회 받으세요", hint: "우측 레일의 선물 버튼", goal: { kind: "count", action: "gift", target: 1 }, reward: { chipSeconds: 220, diamonds: 10 } },
+    { id: "t5", title: "서빙 직원 채용", desc: "서빙 직원을 1명 고용하세요", hint: "운영진 탭 → 직원 고용", goal: { kind: "state", stat: "staff.server", target: 1 }, reward: { chipSeconds: 220, diamonds: 10 } },
     { id: "t6", title: "손님이 북적북적", desc: "테이블을 4개까지 늘리세요", goal: { kind: "state", stat: "tables", target: 4 }, reward: { chipSeconds: 260, diamonds: 10 } },
     { id: "t7", title: "매장 확장", desc: "매장을 1회 확장하세요", hint: "테이블 슬롯이 4칸 늘어나요", goal: { kind: "state", stat: "store.expansions", target: 1 }, reward: { chipSeconds: 300, diamonds: 12 } },
     { id: "t8", title: "재고 확보", desc: "냉장고를 설치하세요", goal: { kind: "state", stat: "fixtures.fridge", target: 1 }, reward: { chipSeconds: 320, diamonds: 12 } },
@@ -336,7 +363,7 @@ const GAME_DATA = {
     { id: "t11", title: "첫 운영진 스카우트", desc: "운영진 가챠를 1회 뽑으세요", hint: "운영진 탭 → 운영진 스카우트", goal: { kind: "count", action: "gacha", target: 1 }, reward: { chipSeconds: 400, diamonds: 15 } },
     { id: "t12", title: "출석 체크", desc: "📅 출석 보상을 받으세요", goal: { kind: "count", action: "attendance", target: 1 }, reward: { chipSeconds: 420, diamonds: 15 } },
     { id: "t13", title: "분위기 잡기", desc: "장식품을 1개 설치하세요", hint: "인테리어 탭 → 장식품", goal: { kind: "state", stat: "decorTotal", target: 1 }, reward: { chipSeconds: 450, diamonds: 15 } },
-    { id: "t14", title: "사장님은 바빠", desc: "자동 업그레이드를 켜보세요", hint: "화면 아래 '자동' 버튼", goal: { kind: "count", action: "autoUpgrade", target: 1 }, reward: { chipSeconds: 500, diamonds: 18 } },
+    { id: "t14", title: "운영진 배치", desc: "운영진을 1명 이상 배치하세요", hint: "도감 탭 → 배치 또는 빠른 배치", goal: { kind: "state", stat: "deployedCount", target: 1 }, reward: { chipSeconds: 500, diamonds: 18 } },
     { id: "t15", title: "운영진 도감", desc: "운영진을 3명 모으세요", hint: "📖 도감 탭에서 확인해요", goal: { kind: "state", stat: "dealerCount", target: 3 }, reward: { chipSeconds: 560, diamonds: 25 } },
     { id: "t16", title: "본격 리모델링", desc: "테이블 리모델링 Lv.10 달성", hint: "x10 일괄 강화를 써보세요", goal: { kind: "state", stat: "tableLevel", target: 10 }, reward: { chipSeconds: 640, diamonds: 25 } },
     { id: "t17", title: "에이스 운영진", desc: "운영진 1명을 ★2로 승급하세요", hint: "중복으로 뽑은 조각으로 승급해요", goal: { kind: "state", stat: "maxStar", target: 2 }, reward: { chipSeconds: 720, diamonds: 30 } },
@@ -358,8 +385,6 @@ const GAME_DATA = {
       { id: "upgradeFixture", title: "시설 정비", desc: "매장 시설 {n}회 업그레이드", base: 5, growth: 1.24, max: 20 },
       { id: "hireStaff", title: "직원 충원", desc: "직원 {n}명 고용", base: 4, growth: 1.22, max: 15 },
       { id: "upgradeDecor", title: "인테리어 손질", desc: "장식품 {n}회 강화", base: 4, growth: 1.23, max: 15 },
-      { id: "expand", title: "매장 확장", desc: "매장 {n}회 확장", base: 1, growth: 1.14, max: 1 },
-      { id: "gift", title: "선물 수령", desc: "사장님 선물 {n}회 받기", base: 1, growth: 1.1, max: 2 },
       { id: "gacha", title: "운영진 스카우트", desc: "운영진 가챠 {n}회", base: 1, growth: 1.12, max: 5 },
       { id: "boost", title: "영업 스퍼트", desc: "부스트 {n}회 사용", base: 1, growth: 1.1, max: 2 },
       // 그냥 가만히 둬도 달성되는 퀘스트 — 방치형답게 하나는 섞어둔다
@@ -409,14 +434,19 @@ const GAME_DATA = {
       minIntervalMs: 18 * 60 * 1000,
       maxIntervalMs: 40 * 60 * 1000,
     },
+    // 광고 시청(또는 광고 제거 구매자)으로 받는 수익 부스트 — D.ads.incomeBoost가 발동시킨다
+    adBoost: {
+      id: "adBoost",
+      name: "광고 부스트",
+      emoji: "🎬",
+      desc: "광고 보고 5분간 수익 2배",
+      mult: 2,
+      durationMs: 5 * 60 * 1000,
+    },
   },
 
   // ---------- 조작 편의 ----------
   buyQuantities: [1, 10, 100, "MAX"],
-  autoUpgrade: {
-    intervalMs: 900, // 자동 업그레이드 판정 주기
-    maxPerTick: 3, // 한 번에 최대 구매 횟수 (연출이 밀리지 않게)
-  },
 
   // 프로필 레벨: 프레스티지를 해도 사라지지 않는 누적 수익 기반
   level: {

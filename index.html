@@ -94,13 +94,6 @@
       </div>
       <button class="btn btn-buy quest-claim" id="quest-claim" disabled>받기</button>
     </div>
-
-    <div class="control-bar">
-      <div class="qty-group" id="qty-group" role="group" aria-label="일괄 구매 배수"></div>
-      <button class="auto-toggle" id="auto-toggle">
-        <span class="auto-led"></span><span class="auto-text">자동 <b>OFF</b></span>
-      </button>
-    </div>
   </div>
 
   <!-- 하단 네비게이션 -->
@@ -136,6 +129,11 @@
     <span class="sheet-grip"></span>
     <span class="sheet-title" id="sheet-title">매장</span>
     <button class="sheet-close" id="sheet-close-btn" aria-label="닫기">✕</button>
+  </div>
+  <!-- 일괄 구매 배수(x1/x10/x100/MAX) — 구매·강화가 있는 탭에서만 보인다 -->
+  <div class="sheet-qty-row" id="sheet-qty-row" hidden>
+    <span class="sheet-qty-label">한 번에</span>
+    <div class="qty-group" id="qty-group" role="group" aria-label="일괄 구매 배수"></div>
   </div>
   <div class="sheet-body" id="sheet-body">
 
@@ -182,8 +180,9 @@
           <div class="item-icon">🎰</div>
           <div class="item-info">
             <div class="item-title">운영진 스카우트 <span class="lvl-chip" id="gacha-level-chip">Lv.1</span></div>
-            <div class="item-desc">보유 <b id="dealer-count">0</b>종 · 배치 수익 <b id="dealer-bonus-total">+0%</b></div>
+            <div class="item-desc">보유 <b id="dealer-count">0</b>종 · 운영진 수익 <b id="dealer-bonus-total">+0%</b></div>
           </div>
+          <div class="gacha-ticket-count" title="무료 뽑기권">🎫 <b id="gacha-ticket-count">0</b></div>
         </div>
         <div class="gacha-level-row">
           <span class="gacha-level-label">뽑기 레벨</span>
@@ -192,11 +191,8 @@
         </div>
         <div class="gacha-level-rates" id="gacha-level-rates"></div>
         <div class="rarity-chip-row" id="dealer-breakdown"></div>
-        <div class="gacha-btn-row">
-          <button class="btn btn-buy gacha-pull-btn" id="gacha-pull-btn">1회 뽑기<small><span id="gacha-cost">80</span>💎</small></button>
-          <button class="btn btn-buy gacha-pull-btn gacha-multi" id="gacha-multi-btn">10연차<small><span id="gacha-multi-cost">720</span>💎 · R확정</small></button>
-        </div>
-        <button class="btn btn-owned btn-wide" id="gacha-ticket-btn">🎫 무료 뽑기권으로 뽑기<small id="gacha-ticket-count">0장</small></button>
+        <!-- 1회/10회/30회 — 뽑기권이 충분하면 그 버튼이 무료 뽑기로 바뀐다(game.js renderPullButtons) -->
+        <div class="gacha-btn-row gacha-btn-row-3" id="gacha-pull-row"></div>
         <p class="deploy-summary" id="deploy-summary"></p>
         <div class="gacha-btn-row">
           <button class="btn" id="ad-free-pull-btn">🎬 광고보고 무료뽑기</button>
@@ -214,6 +210,11 @@
           <span class="xp-bar codex-bar"><i id="codex-fill"></i></span>
         </div>
         <div class="codex-filter" id="codex-filter"></div>
+      </div>
+      <div class="codex-actions">
+        <button class="btn btn-buy" id="codex-starup-all">⭐ 일괄 승급</button>
+        <button class="btn btn-primary" id="codex-quick-deploy">⚡ 빠른 배치</button>
+        <span class="codex-deploy-summary" id="codex-deploy-summary"></span>
       </div>
       <div class="codex-grid" id="codex-grid"></div>
     </div>

@@ -1605,7 +1605,7 @@ export function update(snapshot) {
       note.textContent = `+${capacity - shownCapacity}개 슬롯 더 있음`;
       note.hidden = false;
     } else if (tables >= capacity) {
-      note.textContent = "매장이 가득 찼어요! 🏗 확장해보세요";
+      note.textContent = capacity >= maxShown ? "🎉 테이블을 최대로 채웠어요!" : "매장이 가득 찼어요! 🏗 확장해보세요";
       note.hidden = false;
     } else {
       note.hidden = true;
