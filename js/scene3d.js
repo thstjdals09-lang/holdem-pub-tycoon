@@ -306,7 +306,23 @@ let roomW = 0;
 let roomD = 0;
 const entrancePos = new THREE.Vector3(0, 0, 8); // 손님이 드나드는 출입문 앞 위치
 
-const ISO_OFFSET = new THREE.Vector3(14, 13.5, 14);
+// ============================================================
+// 납작한 인상(카이로소프트류 2D 경영 시뮬) 설정.
+//
+// 3D처럼 보이게 만드는 건 대체로 두 가지다 — (1) 드리운 그림자 (2) 면마다 달라지는 명암.
+// 도트 경영 시뮬은 둘 다 없다: 스프라이트마다 단색 면에 하드 엣지, 그림자 없음, 위에서 내려다본다.
+// 지오메트리는 그대로 두고 이 두 축만 눌러서 같은 인상을 만든다.
+// ============================================================
+const FLAT_LOOK = {
+  shadows: false, // 드리운 그림자를 끈다 — 입체감의 8할
+  sunScale: 0.3,  // 방향광을 낮춰 면 대비를 줄이고
+  hemiScale: 1.5, // 반구광을 올려 전체를 고르게 밝힌다
+  fillScale: 0.4,
+};
+
+// 카메라 고도. (14, 13.5, 14)은 34.3°라 벽이 크게 보이고 바닥이 좁았다.
+// 더 위에서 내려다보면 바닥(타일)이 넓게 깔려 경영 시뮬 느낌이 난다.
+const ISO_OFFSET = new THREE.Vector3(13, 17.5, 13);
 const BASE_HALF_H = 9.5;
 const MIN_HALF_W = 6.4;
 let frustumHalfHeight = BASE_HALF_H;
@@ -319,7 +335,8 @@ function makeToonGradient() {
   canvas.width = 4;
   canvas.height = 1;
   const ctx = canvas.getContext("2d");
-  ["#6b6b78", "#a9a9b8", "#e2e2ea", "#ffffff"].forEach((c, i) => {
+  // 4단계였던 것을 2단계로. 단계가 많으면 곡면에 명암이 부드럽게 깔려 "3D 렌더" 티가 난다.
+  ["#d6d6de", "#ffffff", "#ffffff", "#ffffff"].forEach((c, i) => {
     ctx.fillStyle = c;
     ctx.fillRect(i, 0, 1, 1);
   });
@@ -2295,7 +2312,7 @@ export function init(containerEl) {
     renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     renderer.setSize(width, height);
-    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.enabled = FLAT_LOOK.shadows;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.domElement.style.touchAction = "none";
     container.appendChild(renderer.domElement);
@@ -2321,7 +2338,7 @@ export function init(containerEl) {
     const sun = new THREE.DirectionalLight(0xfff6e4, 1.0);
     sunLight = sun;
     sun.position.set(6, 14, 7);
-    sun.castShadow = true;
+    sun.castShadow = FLAT_LOOK.shadows;
     sun.shadow.mapSize.set(2048, 2048);
     sun.shadow.camera.left = -26;
     sun.shadow.camera.right = 26;
@@ -2462,11 +2479,11 @@ function applyTheme(themeId) {
   if (L && hemiLight) {
     hemiLight.color.setHex(L.hemiSky);
     hemiLight.groundColor.setHex(L.hemiGround);
-    hemiLight.intensity = L.hemiInt;
+    hemiLight.intensity = L.hemiInt * FLAT_LOOK.hemiScale;
     sunLight.color.setHex(L.sun);
-    sunLight.intensity = L.sunInt;
+    sunLight.intensity = L.sunInt * FLAT_LOOK.sunScale;
     fillLight.color.setHex(L.fill);
-    fillLight.intensity = L.fillInt;
+    fillLight.intensity = L.fillInt * FLAT_LOOK.fillScale;
   }
   backTrimMat.color.set(t.trim);
   wainscotMat.color.set(t.wainscot || PAL.wainscot);
