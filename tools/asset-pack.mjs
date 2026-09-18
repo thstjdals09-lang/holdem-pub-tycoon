@@ -68,7 +68,9 @@ function decodePng(buf) {
   }
   if (!ihdr) throw new Error("IHDR 없음");
   if (ihdr.interlace) throw new Error("인터레이스 PNG는 지원 안 함");
-  if (ihdr.bitDepth !== 8) throw new Error(`비트깊이 ${ihdr.bitDepth}는 지원 안 함`);
+  // 생성 모델이 가끔 16비트 PNG를 돌려준다. 채널당 2바이트이므로 상위 바이트만 취해 8비트로 낮춘다.
+  if (ihdr.bitDepth !== 8 && ihdr.bitDepth !== 16) throw new Error(`비트깊이 ${ihdr.bitDepth}는 지원 안 함`);
+  const bps = ihdr.bitDepth === 16 ? 2 : 1;
 
   const CHANNELS = { 0: 1, 2: 3, 3: 1, 4: 2, 6: 4 };
   const ch = CHANNELS[ihdr.colorType];
@@ -76,7 +78,7 @@ function decodePng(buf) {
 
   const raw = inflateSync(Buffer.concat(idat));
   const { width: w, height: h } = ihdr;
-  const stride = w * ch;
+  const stride = w * ch * bps;
   const lines = Buffer.alloc(h * stride);
 
   // 스캔라인 필터 해제
@@ -87,9 +89,10 @@ function decodePng(buf) {
     src += stride;
     const cur = y * stride;
     for (let x = 0; x < stride; x++) {
-      const a = x >= ch ? lines[cur + x - ch] : 0;
+      const bpp = ch * bps;
+      const a = x >= bpp ? lines[cur + x - bpp] : 0;
       const b = y > 0 ? lines[cur - stride + x] : 0;
-      const c = x >= ch && y > 0 ? lines[cur - stride + x - ch] : 0;
+      const c = x >= bpp && y > 0 ? lines[cur - stride + x - bpp] : 0;
       const v = raw[row + x];
       let out;
       switch (filter) {
@@ -112,15 +115,15 @@ function decodePng(buf) {
   // 무엇이 오든 RGBA로 통일
   const rgba = new Uint8ClampedArray(w * h * 4);
   for (let i = 0, n = w * h; i < n; i++) {
-    const s = i * ch, d = i * 4;
+    const s = i * ch * bps, d = i * 4;
     if (ihdr.colorType === 6) {
-      rgba[d] = lines[s]; rgba[d + 1] = lines[s + 1]; rgba[d + 2] = lines[s + 2]; rgba[d + 3] = lines[s + 3];
+      rgba[d] = lines[s]; rgba[d + 1] = lines[s + bps]; rgba[d + 2] = lines[s + bps * 2]; rgba[d + 3] = lines[s + bps * 3];
     } else if (ihdr.colorType === 2) {
-      rgba[d] = lines[s]; rgba[d + 1] = lines[s + 1]; rgba[d + 2] = lines[s + 2]; rgba[d + 3] = 255;
+      rgba[d] = lines[s]; rgba[d + 1] = lines[s + bps]; rgba[d + 2] = lines[s + bps * 2]; rgba[d + 3] = 255;
     } else if (ihdr.colorType === 0) {
       rgba[d] = rgba[d + 1] = rgba[d + 2] = lines[s]; rgba[d + 3] = 255;
     } else if (ihdr.colorType === 4) {
-      rgba[d] = rgba[d + 1] = rgba[d + 2] = lines[s]; rgba[d + 3] = lines[s + 1];
+      rgba[d] = rgba[d + 1] = rgba[d + 2] = lines[s]; rgba[d + 3] = lines[s + bps];
     } else if (ihdr.colorType === 3) {
       const p = lines[s] * 3;
       rgba[d] = palette[p]; rgba[d + 1] = palette[p + 1]; rgba[d + 2] = palette[p + 2];
@@ -270,6 +273,86 @@ function keyOutBackground(img, { tolerance = 30, feather = 2, mode = "white", br
   return img;
 }
 
+/**
+ * 크로마키 — 마젠타(#FF00FF) 배경을 지운다.
+ * 도트 에셋은 생성 모델이 알파를 못 내주므로 단색 마젠타 위에 그리게 하고 여기서 뺀다.
+ * 흰/회색 배경과 달리 마젠타는 그림 안에 거의 안 쓰이는 색이라 오검출이 없다.
+ * 접지 그림자(어두운 마젠타)도 같은 색상(hue)이라 함께 지워진다 — 게임에서는 그림자를 따로 그린다.
+ */
+function keyChroma(img, { hueTol = 26, satMin = 0.35 } = {}) {
+  const { width: w, height: h, data } = img;
+  for (let i = 0, n = w * h; i < n; i++) {
+    const o = i * 4;
+    const r = data[o] / 255, g = data[o + 1] / 255, b = data[o + 2] / 255;
+    const mx = Math.max(r, g, b), mn = Math.min(r, g, b);
+    const d = mx - mn;
+    if (d < 0.001) continue;
+    const sat = mx === 0 ? 0 : d / mx;
+    if (sat < satMin) continue;
+    let hue;
+    if (mx === r) hue = 60 * (((g - b) / d) % 6);
+    else if (mx === g) hue = 60 * ((b - r) / d + 2);
+    else hue = 60 * ((r - g) / d + 4);
+    if (hue < 0) hue += 360;
+    // 마젠타 = 300도
+    const diff = Math.min(Math.abs(hue - 300), 360 - Math.abs(hue - 300));
+    if (diff <= hueTol) data[o + 3] = 0;
+  }
+  // 경계에 남은 마젠타 테두리(프린지)를 한 겹 깎는다
+  const alpha = new Uint8Array(w * h);
+  for (let i = 0; i < w * h; i++) alpha[i] = data[i * 4 + 3] > 0 ? 1 : 0;
+  for (let y = 1; y < h - 1; y++) {
+    for (let x = 1; x < w - 1; x++) {
+      const i = y * w + x;
+      if (!alpha[i]) continue;
+      const edge = !alpha[i - 1] || !alpha[i + 1] || !alpha[i - w] || !alpha[i + w];
+      if (!edge) continue;
+      const o = i * 4;
+      const r = data[o], g = data[o + 1], b = data[o + 2];
+      if (r > 120 && b > 120 && g < Math.min(r, b) * 0.75) data[o + 3] = 0;
+    }
+  }
+  return img;
+}
+
+/**
+ * 알파 블리드 — 투명 픽셀의 RGB를 이웃한 불투명 색으로 물들인다.
+ * 크로마키를 하면 투명 픽셀에 마젠타 RGB가 그대로 남는다. 알파를 존중하는 엔진에선 문제없지만
+ *  (1) 알파를 무시하는 뷰어에서 배경이 마젠타로 보이고
+ *  (2) 확대/축소 때 보간이 켜져 있으면 가장자리에 마젠타 테두리가 번진다.
+ * 가장자리 색을 바깥으로 퍼뜨리고, 그래도 안 닿은 곳은 완전히 0으로 비운다.
+ */
+function bleedAlpha(img, passes = 2) {
+  const { width: w, height: h, data } = img;
+  for (let pass = 0; pass < passes; pass++) {
+    const src = Uint8ClampedArray.from(data);
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const i = (y * w + x) * 4;
+        if (src[i + 3] !== 0) continue;
+        let r = 0, g = 0, b = 0, n = 0;
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const nx = x + dx, ny = y + dy;
+          if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+          const j = (ny * w + nx) * 4;
+          if (src[j + 3] === 0) continue;
+          r += src[j]; g += src[j + 1]; b += src[j + 2]; n++;
+        }
+        if (!n) continue;
+        data[i] = r / n; data[i + 1] = g / n; data[i + 2] = b / n; // 알파는 0 그대로
+      }
+    }
+  }
+  // 블리드가 안 닿은 투명 영역은 완전히 비운다 (마젠타 잔상 제거)
+  for (let i = 0; i < w * h; i++) {
+    const o = i * 4;
+    if (data[o + 3] !== 0) continue;
+    const r = data[o], g = data[o + 1], b = data[o + 2];
+    if (r > 120 && b > 120 && g < Math.min(r, b) * 0.8) { data[o] = 0; data[o + 1] = 0; data[o + 2] = 0; }
+  }
+  return img;
+}
+
 /** 알파가 있는 영역에 딱 맞게 자르고, 짧은 변 기준 비율만큼 여백을 준다. */
 function trim(img, { marginRatio = 0.04, square = true } = {}) {
   const { width: w, height: h, data } = img;
@@ -392,6 +475,43 @@ const JOBS = [
   { group: "theme", raw: "theme-neon.png",     out: "theme/neon",     key: false, sizes: [256] },
   { group: "theme", raw: "theme-japanese.png", out: "theme/japanese", key: false, sizes: [256] },
 ];
+
+// ---- 도트 에셋 일괄 모드 ----
+// node tools/asset-pack.mjs --pixel <원본폴더> <출력폴더> [최대변]
+// 마젠타 배경을 빼고 잘라낸 뒤 파일명을 그대로 유지해 저장한다.
+const pixIdx = process.argv.indexOf("--pixel");
+if (pixIdx > -1) {
+  const srcDir = process.argv[pixIdx + 1];
+  const outDir = process.argv[pixIdx + 2];
+  const maxSide = Number(process.argv[pixIdx + 3] || 0);
+  if (!srcDir || !outDir) {
+    console.error("사용법: --pixel <원본폴더> <출력폴더> [최대변]");
+    process.exit(1);
+  }
+  mkdirSync(outDir, { recursive: true });
+  const files = readdirSync(srcDir).filter((f) => f.toLowerCase().endsWith(".png"));
+  let ok = 0;
+  for (const f of files) {
+    try {
+      let img = decodePng(readFileSync(join(srcDir, f)));
+      img = keyChroma(img);
+      img = trim(img, { marginRatio: 0.04, square: false });
+      img = bleedAlpha(img, 2);
+      if (maxSide && Math.max(img.width, img.height) > maxSide) {
+        const k = maxSide / Math.max(img.width, img.height);
+        img = resize(img, Math.max(1, Math.round(img.width * k)), Math.max(1, Math.round(img.height * k)));
+      }
+      const dst = join(outDir, f);
+      writeFileSync(dst, encodePng(img));
+      console.log(`  ✓ ${f}  ${img.width}x${img.height}  ${(readFileSync(dst).length / 1024).toFixed(0)}KB`);
+      ok++;
+    } catch (e) {
+      console.error(`  ✗ ${f}: ${e.message}`);
+    }
+  }
+  console.log(`\n도트 에셋 ${ok}/${files.length}개 처리`);
+  process.exit(0);
+}
 
 const onlyIdx = process.argv.indexOf("--only");
 const only = onlyIdx > -1 ? process.argv[onlyIdx + 1] : null;
