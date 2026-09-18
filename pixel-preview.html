@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>홀덤펍 키우기 — 도트 매장 프리뷰</title>
+<link href="https://fonts.googleapis.com/css2?family=Jua&family=Gowun+Dodum&display=swap" rel="stylesheet" />
+<style>
+  :root { --ink:#3a2a30; --soft:#7a6258; --line:rgba(209,60,104,.16); }
+  * { box-sizing: border-box; }
+  body {
+    margin:0; padding:0 0 60px;
+    font-family:"Gowun Dodum",system-ui,sans-serif; color:var(--ink);
+    background:#fff7f1;
+  }
+  header { padding:26px 18px 14px; text-align:center; }
+  h1 { font-family:"Jua",sans-serif; font-size:22px; margin:0; }
+  header p { margin:8px 0 0; font-size:13px; color:var(--soft); }
+  main { max-width:1180px; margin:0 auto; padding:0 14px; }
+
+  .bar { display:flex; gap:8px; flex-wrap:wrap; justify-content:center; margin:16px 0 8px; }
+  .chip {
+    font-family:"Jua",sans-serif; font-size:13px; padding:7px 14px; border-radius:999px;
+    border:1px solid var(--line); background:#fff; color:var(--soft); cursor:pointer;
+  }
+  .chip.on { background:linear-gradient(180deg,#ff8fab,#ff5c8a); color:#fff; border-color:transparent; }
+
+  section { margin:26px 0 0; }
+  h2 { font-family:"Jua",sans-serif; font-size:17px; margin:0 0 3px; }
+  .hint { margin:0 0 10px; font-size:12px; color:var(--soft); }
+  .card {
+    background:#fff; border:1px solid var(--line); border-radius:16px; padding:14px;
+    overflow-x:auto;
+  }
+  canvas { display:block; image-rendering:pixelated; margin:0 auto; }
+  .req { font-size:12px; color:var(--soft); margin-top:8px; text-align:center; }
+  .req b { color:#ff5c8a; }
+  footer { text-align:center; margin-top:34px; font-size:12px; color:var(--soft); }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>도트 매장 프리뷰</h1>
+  <p>증축 단계 · 테마별 — 1층과 2층이 한 화면에 같이 보인다</p>
+</header>
+
+<main>
+  <div class="bar" id="themebar"></div>
+  <div class="bar" id="scalebar"></div>
+  <div id="stages"></div>
+</main>
+
+<footer>holdem-pub-tycoon · pixel-preview.html</footer>
+
+<script src="js/pixel/pixel-art.js?v=1"></script>
+<script src="js/pixel/pixel-sprites.js?v=1"></script>
+<script src="js/pixel/pixel-map.js?v=1"></script>
+<script src="js/pixel/pixel-scene.js?v=1"></script>
+<script>
+  const $ = (id) => document.getElementById(id);
+  let themeId = "classic";
+  let scale = 2;
+
+  // 단계마다 "이 시점에 있을 법한" 콘텐츠를 켠다 —
+  // 테이블만 늘어나는 게 아니라 바·트로피·오락 요소가 단계마다 붙는 걸 보여주기 위함
+  const STAGE_CONTENT = [
+    { tables: 1, bar: false, trophyStand: false, jukebox: false },
+    { tables: 2, bar: true,  trophyStand: false, jukebox: false },
+    { tables: 4, bar: true,  trophyStand: true,  jukebox: false },
+    { tables: 6, bar: true,  trophyStand: true,  jukebox: true },
+    { tables: 9, bar: true,  trophyStand: true,  jukebox: true },
+  ];
+
+  function renderAll() {
+    const host = $("stages");
+    host.innerHTML = "";
+    PixelMap.STAGES.forEach((st, i) => {
+      const sec = document.createElement("section");
+      const c = STAGE_CONTENT[i];
+      const floors = st.floors.length;
+      sec.innerHTML =
+        `<h2>${i + 1}. ${st.name}</h2>` +
+        `<p class="hint">${st.desc} · ${floors}개 층 · 테이블 ${c.tables}` +
+        (c.bar ? " · 바" : "") + (c.trophyStand ? " · 트로피 거치대" : "") + (c.jukebox ? " · 주크박스" : "") + `</p>` +
+        `<div class="card"><canvas id="cv${i}"></canvas>` +
+        (st.next ? `<div class="req">다음 단계 해금: <b>${st.next.label}</b></div>` : `<div class="req">최종 단계</div>`) +
+        `</div>`;
+      host.appendChild(sec);
+      PixelScene.render($("cv" + i), { stageIndex: i, themeId, scale, ...c });
+    });
+  }
+
+  function chips(hostId, items, get, set) {
+    const host = $(hostId);
+    host.innerHTML = "";
+    for (const it of items) {
+      const b = document.createElement("button");
+      b.className = "chip" + (get() === it.id ? " on" : "");
+      b.textContent = it.label;
+      b.onclick = () => { set(it.id); chips(hostId, items, get, set); renderAll(); };
+      host.appendChild(b);
+    }
+  }
+
+  chips("themebar",
+    Object.entries(PixelMap.THEMES).map(([id, t]) => ({ id, label: t.name })),
+    () => themeId, (v) => (themeId = v));
+  chips("scalebar",
+    [{ id: 1, label: "×1" }, { id: 2, label: "×2" }, { id: 3, label: "×3" }],
+    () => scale, (v) => (scale = v));
+
+  renderAll();
+</script>
+</body>
+</html>
