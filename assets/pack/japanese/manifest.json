@@ -1,32 +1,32 @@
 {
  "table_6": {
-  "w": 53,
+  "w": 52,
   "h": 40,
   "axis": "gy"
  },
  "table_8": {
-  "w": 64,
+  "w": 63,
   "h": 45,
   "axis": "gy"
  },
  "chair": {
   "w": 16,
-  "h": 10,
+  "h": 9,
   "axis": "sym"
  },
  "dealer_chair": {
-  "w": 18,
-  "h": 26,
+  "w": 19,
+  "h": 25,
   "axis": "gy"
  },
  "stool": {
   "w": 13,
-  "h": 14,
+  "h": 13,
   "axis": "sym"
  },
  "sofa": {
   "w": 42,
-  "h": 32,
+  "h": 31,
   "axis": "gy"
  },
  "armchair": {
@@ -36,28 +36,28 @@
  },
  "lounge_table": {
   "w": 26,
-  "h": 24,
+  "h": 22,
   "axis": "sym"
  },
  "rug_rect": {
+  "w": 64,
+  "h": 35,
+  "axis": "gy"
+ },
+ "rug_round": {
   "w": 62,
   "h": 35,
   "axis": "sym"
  },
- "rug_round": {
-  "w": 59,
-  "h": 35,
-  "axis": "sym"
- },
  "side_table": {
-  "w": 19,
-  "h": 18,
-  "axis": "gy"
+  "w": 18,
+  "h": 21,
+  "axis": "gx"
  },
  "partition": {
   "w": 29,
-  "h": 28,
-  "axis": "sym"
+  "h": 31,
+  "axis": "gx"
  },
  "bar_straight": {
   "w": 43,

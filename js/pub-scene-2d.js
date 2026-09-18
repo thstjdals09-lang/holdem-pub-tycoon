@@ -297,7 +297,8 @@ const PubScene2D = (() => {
   ];
   const WHO = ["a", "b", "c"];
   const EMOTE = ["spade", "heart", "note"];
-  const SEAT_ANGLE = [-90, -30, 30, 90, 150, 210];
+  // 6등분하면 딜러 자리(-90)와 손님 자리가 겹친다. 손님은 5자리, -90은 딜러 몫.
+  const SEAT_ANGLE = [-30, 30, 90, 150, 210];
   // 좌석은 **화면 좌표 타원**으로 잡는다. 격자에서 원을 그리면 화면에서는 대각선으로
   // 늘어난 타원이 되어, 위쪽 자리가 테이블에 파묻히고 옆자리는 너무 멀어진다.
   // 테이블 그림이 화면에서 128×96 이므로 그보다 한 바퀴 큰 타원에 앉힌다.
@@ -333,24 +334,68 @@ const PubScene2D = (() => {
   function actorAt(n, t) {
     let gx = n.gx, gy = n.gy, hx = n.hx || 0, hy = n.hy || 1;
     if (n.walk) {
-      const ph = Math.sin(t * n.walk.speed + (n.seed % 7));
+      const ph = Math.sin(t * n.walk.speed + ((hash(n.seed) % 628) / 100));
       const k = (ph + 1) / 2;
       gx = n.walk.from[0] + (n.walk.to[0] - n.walk.from[0]) * k;
       gy = n.walk.from[1] + (n.walk.to[1] - n.walk.from[1]) * k;
-      const fwd = Math.cos(t * n.walk.speed + (n.seed % 7)) > 0 ? 1 : -1;
+      const fwd = Math.cos(t * n.walk.speed + ((hash(n.seed) % 628) / 100)) > 0 ? 1 : -1;
       hx = (n.walk.to[0] - n.walk.from[0]) * fwd;
       hy = (n.walk.to[1] - n.walk.from[1]) * fwd;
     }
     const f = facing(hx, hy);
+    let bob = 0;
     let sprite;
-    if (n.mode === "staff") sprite = n.sprite;
+    if (n.mode === "staff") {
+      // 직원도 움직여야 한다 — 딜러는 딜/대기를 번갈아, 걷는 직원은 한 픽셀 흔들린다
+      sprite = n.anim ? n.anim[Math.floor(t / (n.animMs || 900) + n.seed) % n.anim.length] : n.sprite;
+      if (n.walk) bob = Math.floor(t / 220 + n.seed) % 2 ? -1 : 0;
+    }
     else if (n.mode === "walk") {
       const frame = Math.floor(t / 150 + n.seed) % 4;
       sprite = "a_walk_" + (f.back ? "b" : "f") + (frame + 1);
     } else {
       sprite = n.who + "_" + (n.mode === "sit" ? "sit" : "stand") + "_" + (f.back ? "b" : "f");
     }
-    return { gx, gy, sprite, flip: f.flip, bob: 0 };
+    return { gx, gy, sprite, flip: f.flip, bob };
+  }
+
+  /** 사람이 지나가면 안 되는 곳(테이블·바·소파). 반지름은 격자 칸 단위. */
+  function makeBlocks(slots, bar, booths, host) {
+    const b = [];
+    for (const t of slots) if (t.owned) b.push({ x: t.cx, y: t.cy, r: 2.7 });
+    if (bar) { for (let g = bar.cy - bar.len / 2; g <= bar.cy + bar.len / 2; g += 1) b.push({ x: 1.6, y: g, r: 2.0 }); }
+    for (const s2 of booths) b.push({ x: s2[0], y: s2[1], r: 1.7 });
+    if (host) b.push({ x: host.cx, y: host.cy, r: 1.2 });
+    return b;
+  }
+  const isBlocked = (b, x, y) => b.some((o) => (x - o.x) * (x - o.x) + (y - o.y) * (y - o.y) < o.r * o.r);
+  /** 방 안에서 막히지 않은 점 하나 */
+  function freeSpot(b, W, D, seed, taken) {
+    for (let i = 0; i < 60; i++) {
+      const x = 1.3 + (hash(seed + i * 7) % 1000) / 1000 * (W - 2.6);
+      const y = 1.3 + (hash(seed + i * 13 + 3) % 1000) / 1000 * (D - 2.6);
+      if (isBlocked(b, x, y)) continue;
+      // 이미 자리 잡은 사람과 너무 가까우면 다시 고른다 — 사람끼리 겹치던 원인
+      if (taken && taken.some((t) => (t[0] - x) ** 2 + (t[1] - y) ** 2 < 2.2 * 2.2)) continue;
+      return [x, y];
+    }
+    return [W / 2, D / 2];
+  }
+  /** 두 점을 잇는 직선이 아무것도 안 뚫는 경로. 못 찾으면 null. */
+  function freePath(b, W, D, seed, taken) {
+    for (let k = 0; k < 14; k++) {
+      const A = freeSpot(b, W, D, seed + k * 131, taken);
+      const B = freeSpot(b, W, D, seed + k * 197 + 41);
+      const d = Math.hypot(A[0] - B[0], A[1] - B[1]);
+      if (d < 3.5) continue;
+      let ok = true;
+      for (let i = 1; i < 12; i++) {
+        const t2 = i / 12;
+        if (isBlocked(b, A[0] + (B[0] - A[0]) * t2, A[1] + (B[1] - A[1]) * t2)) { ok = false; break; }
+      }
+      if (ok) return { from: A, to: B };
+    }
+    return null;
   }
 
   function buildLayout(s) {
@@ -394,6 +439,10 @@ const PubScene2D = (() => {
                : [[6.0, 11.2], [10.6, 11.4], [8.3, 9.2]];
     for (let i = 0; i < Math.min(boothN, spots.length); i++) booths.push(spots[i]);
 
+    // ── 입구 · 대회 데스크 (사람 배치가 이 자리를 피해야 해서 먼저 정한다) ──
+    const entrance = { gx: W, gy: Math.round(D * 0.78) };
+    const host = s.tournamentWins > 0 ? { cx: W - 1.1, cy: D - 1.6 } : null;
+
     // ── 사람 ──
     const people = [];
     const seatsPerTable = Math.max(2, Math.round((s.seatsMin + s.seatsMax) / 2) - 1);
@@ -402,8 +451,7 @@ const PubScene2D = (() => {
       // 딜러는 테이블 북쪽에 서서 손님 쪽(+gy)을 본다
       if (s.assignedDealers && s.assignedDealers[t.i]) {
         const [dgx, dgy] = seatAt(t.cx, t.cy, -90, 1.62);   // 딜러는 테이블 뒤로 한 걸음
-        people.push({ gx: dgx, gy: dgy, mode: "staff",
-                      sprite: hash(t.i) % 3 === 0 ? "pd_deal" : "pd_stand",
+        people.push({ gx: dgx, gy: dgy, mode: "staff", anim: ["pd_stand", "pd_deal"], animMs: 1100,
                       hx: 0, hy: 1, seed: t.i * 17 + 3 });
       }
       const filled = Math.max(1, Math.round(seatsPerTable * occ));
@@ -431,8 +479,8 @@ const PubScene2D = (() => {
     if (bar) {
       const bt = Math.min(2, (s.staff && s.staff.bartender) || 0);
       for (let i = 0; i < bt; i++) {
-        people.push({ gx: 0.85, gy: bar.cy - 1.2 + i * 2.4, mode: "staff", sprite: "sv_stand",
-                      hx: 1, hy: 0, seed: 770 + i });
+        people.push({ gx: 0.85, gy: bar.cy - 1.2 + i * 2.4, mode: "staff",
+                      anim: ["sv_stand", "sv_tray"], animMs: 1600, hx: 1, hy: 0, seed: 770 + i });
       }
       bar.stools.forEach((gy, i) => {
         if (hash(900 + i) % 5 === 0) return;              // 한두 자리는 비워 둔다
@@ -441,19 +489,27 @@ const PubScene2D = (() => {
       });
     }
     // 서버 — 홀을 가로지른다 (쟁반 든 그림은 한 장뿐이라 방향만 맞춘다)
+    const blocks = makeBlocks(slots, bar, booths, host);
+    const taken = [];          // 걸어다니는 사람들의 출발점 — 서로 떨어뜨린다
     const servers = Math.min(3, (s.staff && s.staff.server) || 0);
     for (let i = 0; i < servers; i++) {
-      const gy = 2.2 + i * 2.4;
-      people.push({ gx: 3.4, gy, mode: "staff", sprite: "sv_tray", seed: 700 + i * 11,
-                    walk: { from: [3.4, gy], to: [Math.min(W - 1.6, gy + 7.2), gy], speed: 0.00012 + i * 0.00003 } });
+      const seed = 700 + i * 11;
+      const path = freePath(blocks, W, D, seed, taken);
+      if (!path) continue;
+      taken.push(path.from);
+      people.push({ gx: path.from[0], gy: path.from[1], mode: "staff", sprite: "sv_tray", seed,
+                    walk: { ...path, speed: 0.00012 + i * 0.00003 } });
     }
     // 돌아다니는 손님 — 4프레임 보행 사이클, 진행 방향을 보고 걷는다
-    const walkers = Math.min(6, 2 + Math.round(occ * 3) + Math.max(0, owned - MAX_TABLES));
+    // 같은 그림의 사람이 여럿 걸으면 겹칠 때 특히 눈에 띈다 — 수를 줄이고 간격을 넓힌다
+    const walkers = Math.min(3, 1 + Math.round(occ * 2));
     for (let i = 0; i < walkers; i++) {
-      const gy = 1.4 + ((i * 2.7) % Math.max(2, D - 2.4));
       const seed = 400 + i * 23;
-      people.push({ gx: 3.0, gy, mode: "walk", who: "a", seed,
-                    walk: { from: [3.0, gy], to: [Math.min(W - 1.2, gy + 7.6), gy], speed: 0.00009 + i * 0.00002 } });
+      const path = freePath(blocks, W, D, seed, taken);
+      if (!path) continue;
+      taken.push(path.from);
+      people.push({ gx: path.from[0], gy: path.from[1], mode: "walk", who: "a", seed,
+                    walk: { ...path, speed: 0.00009 + i * 0.00002 } });
     }
 
     // ── 화분 · 소품 ──
@@ -488,8 +544,6 @@ const PubScene2D = (() => {
     for (let g = 1.6; g < Math.min(D - 0.4, 8.6); g += 2.4) sconceW.push(g);
 
     // ── 입구 · 대회 데스크 ──
-    const entrance = { gx: W, gy: Math.round(D * 0.78) };
-    const host = s.tournamentWins > 0 ? { cx: W - 1.1, cy: D - 1.6 } : null;
 
     // ── 바깥 ── 도심 블록: 좁은 보도 + 도로. 잔디는 두지 않는다.
     const out = [];

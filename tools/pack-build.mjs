@@ -139,6 +139,26 @@ for (const theme of THEMES) {
     made++;
   });
   console.log(`  ${theme}/cast     성분 ${String(n).padStart(2)} → 24개 (배율 ${k.toFixed(3)} 일괄)`);
+
+  // ── 뒷모습 시트 ──
+  // 앞 시트의 뒷모습 칸은 머리와 옷이 같은 색이라 28px에서 덩어리로 뭉갰다.
+  // 대비(머리 vs 옷)·목덜미 선·어깨 각을 넣어 다시 뽑은 것으로 덮어쓴다.
+  // 키 기준은 앞 시트와 같다 — 서 있는 칸을 28px로 맞추면 나머지가 따라온다.
+  const backFile = join(RAW, "back", theme + ".png");
+  if (existsSync(backFile)) {
+    const BACK = ["a_walk_b1", "a_walk_b2", "a_walk_b3", "a_walk_b4",
+                  "a_stand_b", "a_sit_b", "b_stand_b", "b_sit_b",
+                  "c_stand_b", "c_sit_b", "pd_stand_b", "sv_stand_b"];
+    const r = pieces(backFile, 4, 3);
+    const rb = r.boxes[4] || r.boxes[0];                      // a_stand_b 로 배율을 잡는다
+    const kb = ACTOR.stand / (rb.y1 - rb.y0 + 1);
+    BACK.forEach((name, i) => {
+      if (!r.boxes[i]) return;
+      const out = bake(r.img, r.boxes[i], { scale: kb });
+      if (WRITE) writeFileSync(join(actDir, name + ".png"), encodePng(out.w, out.h, out.data));
+    });
+    console.log(`  ${theme}/back     성분 ${String(r.n).padStart(2)} → 12개 (배율 ${kb.toFixed(3)})`);
+  }
   if (WRITE) writeFileSync(join(ROOT, "assets/pack", theme, "manifest.json"), JSON.stringify(manifest, null, 1));
 }
 
