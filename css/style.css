@@ -37,6 +37,31 @@
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 
+/* 버튼·카드를 연타해도 더블탭 확대(iOS는 viewport의 user-scalable=no를 무시한다)가 일어나지 않게 한다.
+   manipulation은 탭·스크롤은 그대로 두고 더블탭 줌만 끈다 — 연타가 씹히지 않는다. */
+button,
+input,
+select,
+textarea,
+label,
+.btn,
+.item-card,
+.codex-card,
+.squad-slot,
+.squad-preset,
+.subtab,
+.filter-chip,
+.tab-btn,
+.rail-btn,
+.qty-btn,
+.deploy-toggle,
+.theme-card,
+.boost-item,
+.mission-item,
+.quest-banner,
+.wallet-cell,
+.synergy-chip { touch-action: manipulation; }
+
 /* 스크롤 없는 전체화면 게임 뷰 */
 html, body {
   margin: 0;

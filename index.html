@@ -14,7 +14,7 @@
      올리지 않으면 index.html만 새로 받고 js/css는 브라우저 캐시의 옛 파일이 섞여서
      (예: 옛 game.js가 지금은 없는 요소를 건드려 게임이 멈추고 매장이 안 그려짐) 화면이 깨진다.
      js/account.js·backend.js·shop.js 안의 "./firebase-init.js?v=" 도 같은 숫자로 맞출 것. -->
-<link rel="stylesheet" href="css/style.css?v=9" />
+<link rel="stylesheet" href="css/style.css?v=10" />
 <script type="importmap">
 {
   "imports": {
@@ -318,6 +318,8 @@
         <h4>계정</h4>
         <div id="account-info"></div>
       </div>
+      <!-- 진행이 줄어든 저장이 감지됐을 때만 보이는 복구 상자 (game.js renderBackupBox) -->
+      <div class="settings-box" id="backup-box" hidden></div>
       <div class="settings-box">
         <h4>화면 표시</h4>
         <label class="toggle-row">
@@ -442,14 +444,14 @@
 
 <div id="toast-wrap"></div>
 
-<script src="js/data.js?v=9" defer></script>
-<script src="js/portraits.js?v=9" defer></script>
-<script src="js/ads.js?v=9" defer></script>
-<script type="module" src="js/account.js?v=9"></script>
-<script type="module" src="js/backend.js?v=9"></script>
-<script type="module" src="js/shop.js?v=9"></script>
-<script type="module" src="js/auth-gate.js?v=9"></script>
-<script type="module" src="js/scene3d.js?v=9"></script>
-<script src="js/game.js?v=9" defer></script>
+<script src="js/data.js?v=10" defer></script>
+<script src="js/portraits.js?v=10" defer></script>
+<script src="js/ads.js?v=10" defer></script>
+<script type="module" src="js/account.js?v=10"></script>
+<script type="module" src="js/backend.js?v=10"></script>
+<script type="module" src="js/shop.js?v=10"></script>
+<script type="module" src="js/auth-gate.js?v=10"></script>
+<script type="module" src="js/scene3d.js?v=10"></script>
+<script src="js/game.js?v=10" defer></script>
 </body>
 </html>

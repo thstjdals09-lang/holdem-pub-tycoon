@@ -2399,6 +2399,33 @@
     $("show-table-income-toggle").checked = state.settings.showTableIncome;
     $("auto-assign-toggle").checked = state.settings.autoAssign;
     renderAccountInfo();
+    renderBackupBox();
+  }
+
+  // 진행이 줄어든 저장이 감지되면 직전 상태가 백업된다 — 지금 진행보다 나을 때만 복구 버튼을 보여준다
+  function renderBackupBox() {
+    const box = $("backup-box");
+    if (!box) return;
+    const backup = GameBackend.getBackup ? GameBackend.getBackup() : null;
+    const better = backup && (backup.lifetimeEarned || 0) > (state.lifetimeEarned || 0);
+    box.hidden = !better;
+    if (!better) return;
+    setHtml(
+      box,
+      `<h4>🛟 백업 복구</h4>
+       <p class="muted">이 기기에 더 많이 진행된 저장본이 남아 있어요. 지금 진행(누적 💰${formatNumber(state.lifetimeEarned)})을
+       백업(누적 💰${formatNumber(backup.lifetimeEarned)})으로 되돌릴 수 있어요.</p>
+       <button class="btn btn-primary btn-wide" id="restore-backup-btn">백업으로 되돌리기</button>`
+    );
+    $("restore-backup-btn").addEventListener("click", async () => {
+      if (!window.confirm("백업 저장본으로 되돌릴까요? 지금 진행 상황은 사라집니다.")) return;
+      state = mergeWithDefaults(backup);
+      ensureDailyState();
+      sceneDirty = true;
+      await saveGame({ allowReset: true });
+      toast("🛟 백업으로 되돌렸어요");
+      refresh();
+    });
   }
 
   // ============================================================
@@ -3057,7 +3084,30 @@
   // ============================================================
   // 저장 / 오프라인
   // ============================================================
-  const saveGame = () => GameBackend.saveState(state);
+  // 저장이 계속 실패하면(네트워크 등) 한 번은 알려준다. 진행 자체는 이 기기 로컬에도 남는다.
+  let saveFailStreak = 0;
+  let saveWarned = false;
+  async function saveGame(options) {
+    const res = await GameBackend.saveState(state, options);
+    if (res && res.ok) {
+      saveFailStreak = 0;
+      return res;
+    }
+    // 불러오기가 어긋나 새 게임 상태로 덮어쓸 뻔한 경우 — 덮어쓰지 않고 새로고침을 안내한다
+    if (res && res.error && String(res.error).startsWith("fresh state")) {
+      if (!saveWarned) {
+        saveWarned = true;
+        toast("⚠️ 저장 데이터를 못 불러왔어요. 새로고침하면 진행이 돌아옵니다 (덮어쓰지 않았어요)");
+      }
+      return res;
+    }
+    saveFailStreak += 1;
+    if (saveFailStreak >= 3 && !saveWarned) {
+      saveWarned = true;
+      toast("⚠️ 클라우드 저장이 안 되고 있어요. 네트워크를 확인해주세요 (진행은 이 기기에 저장 중)");
+    }
+    return res;
+  }
 
   async function loadGameAndComputeOffline() {
     const res = await GameBackend.loadState();
@@ -3068,7 +3118,7 @@
     if ((loaded.dataResetVersion || 0) < D.dataResetVersion) {
       state = defaultState();
       ensureDailyState();
-      await GameBackend.saveState(state);
+      await GameBackend.saveState(state, { allowReset: true });
       setTimeout(() => toast("🔄 업데이트로 게임 데이터가 초기화됐어요. 새로 시작해요!"), 800);
       return;
     }
@@ -3275,12 +3325,33 @@
 
     lastTickAt = Date.now();
     setInterval(tick, D.tick.intervalMs);
-    setInterval(saveGame, D.tick.autosaveMs);
-    window.addEventListener("beforeunload", () => GameBackend.saveState(state));
+    setInterval(() => saveGame(), D.tick.autosaveMs);
+    // 모바일 사파리는 beforeunload가 안 뜨는 경우가 많아 pagehide에서도 저장한다
+    window.addEventListener("beforeunload", () => saveGame());
+    window.addEventListener("pagehide", () => saveGame());
     document.addEventListener("visibilitychange", () => {
       if (document.hidden) saveGame();
       else lastTickAt = Date.now();
     });
+
+    // 업그레이드 버튼을 연타하다 화면이 통째로 확대되는 문제 방지
+    // (iOS는 viewport의 user-scalable=no를 무시한다 — CSS touch-action + 여기서 제스처/더블탭 차단)
+    ["gesturestart", "gesturechange", "gestureend"].forEach((ev) =>
+      document.addEventListener(ev, (e) => e.preventDefault(), { passive: false })
+    );
+    // 버튼·카드는 CSS의 touch-action:manipulation이 더블탭 확대를 막는다(연타가 씹히면 안 되니 여기선 건드리지 않음).
+    // 그 바깥(빈 여백 등)에서만 더블탭을 막는다 — 옛 iOS는 touch-action을 무시하기 때문.
+    const TAPPABLE = "button, a, input, select, textarea, label, .btn, .item-card, .codex-card, .squad-slot, .subtab, .tab-btn";
+    let lastTouchEnd = 0;
+    document.addEventListener(
+      "touchend",
+      (e) => {
+        const now = Date.now();
+        if (now - lastTouchEnd <= 320 && !(e.target.closest && e.target.closest(TAPPABLE))) e.preventDefault();
+        lastTouchEnd = now;
+      },
+      { passive: false }
+    );
   }
 
   // 로그인 게이트(auth-gate.js)가 로그인 성공을 확인한 뒤에만 게임을 시작시킨다.
