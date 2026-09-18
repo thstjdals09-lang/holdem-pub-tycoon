@@ -132,7 +132,8 @@ if (handlers.pointerdown) {
       let hit = null;
       PubScene3D.onTap = (info) => { hit = info; };
       PubScene3D.onDiamondBubble = () => { hit = { type: "bubble" }; return 5; };
-      handlers.pointerdown({ clientX: x, clientY: y });
+      handlers.pointerdown({ clientX: x, clientY: y, pointerId: 1 });
+      if (handlers.pointerup) handlers.pointerup({ clientX: x, clientY: y, pointerId: 1 });
       if (hit) {
         const key = hit.type + (hit.type === "table" ? "#" + hit.index : hit.id ? ":" + hit.id : "");
         found[key] = (found[key] || 0) + 1;

@@ -32,54 +32,30 @@ const PubScene2D = (() => {
     WALL_H = 76 * S; WAIN = 22 * S; FRONT_H = 30 * S;
   }
 
-  // 에셋은 생성 시트 5장을 tools/sheet-cut.mjs 로 잘라 만든 것이다.
-  // 시트 하나 안에서 모델이 스스로 시점·광원·외곽선을 맞추므로 낱개로 뽑을 때보다 톤이 균일하다.
-  // 크기 기준: 사람 키 32px(서 있는 포즈 전부 동일), 타일 32×16, 6인 테이블 64px.
-  const ENV = "assets/pixel/out/env_k2/";
-  const ACT = "assets/pixel/out/actors_k/";
-  const SRC = {
-    // 홀
-    table: ENV + "401_table_6.png", table8: ENV + "402_table_8.png",
-    chair: ENV + "403_chair.png", dealerChair: ENV + "404_dealer_chair.png",
-    stool: ENV + "405_stool.png", sofa: ENV + "406_sofa.png",
-    armchair: ENV + "407_armchair.png", loungeTable: ENV + "408_lounge_table.png",
-    rug: ENV + "409_rug_rect.png", rugRound: ENV + "410_rug_round.png",
-    sideTable: ENV + "411_side_table.png", partition: ENV + "412_partition.png",
-    // 바
-    bar: ENV + "421_bar_straight.png", barCorner: ENV + "422_bar_corner.png",
-    backBar: ENV + "423_back_bar.png", beerTap: ENV + "424_beer_tap.png",
-    fridge: ENV + "425_fridge.png", sink: ENV + "426_sink.png",
-    cart: ENV + "427_cart.png", coffee: ENV + "428_coffee.png",
-    bottleCabinet: ENV + "429_bottle_cabinet.png", tray: ENV + "430_tray.png",
-    snack: ENV + "431_snack.png", safe: ENV + "432_safe.png",
-    // 장식·조명·벽
-    lamp: ENV + "441_pendant.png", chandelier: ENV + "442_chandelier.png",
-    sconceImg: ENV + "443_sconce.png", art: ENV + "444_art_large.png",
-    artSmall: ENV + "445_art_small.png", sign: ENV + "446_menu_board.png",
-    neon: ENV + "447_neon.png", dart: ENV + "448_dartboard.png",
-    jukebox: ENV + "449_jukebox.png", clock: ENV + "450_clock.png",
-    trophy: ENV + "451_trophy_case.png", plantBig: ENV + "452_palm.png",
-    // 입구·바깥
-    door: ENV + "461_door.png", doors: ENV + "461_door.png",
-    board: ENV + "462_board.png", stanchion: ENV + "463_stanchion.png",
-    coatRack: ENV + "464_coat_rack.png", hostDesk: ENV + "465_host_desk.png",
-    streetLamp: ENV + "466_street_lamp.png", tree: ENV + "467_tree.png",
-    bush: ENV + "468_bush.png", bench: ENV + "469_bench.png",
-    flowerBed: ENV + "470_flower_bed.png", planter: ENV + "470_flower_bed.png",
-    plantSmall: ENV + "470_flower_bed.png",
-    trashBin: ENV + "471_trash_bin.png", taxi: ENV + "472_taxi.png",
-  };
-  // 캐스트: 손님 24종(서 있는 12 + 앉은 12) + 직원 4역(딜러·바텐더·서빙·홍보) × 3포즈.
-  // 테마마다 같은 이름으로 다른 폴더에 들어 있어, 폴더만 바꾸면 복장이 통째로 갈린다.
-  const POSES = {};
-  for (let i = 1; i <= 12; i++) {
-    const n = "p" + String(i).padStart(2, "0");
-    POSES[n + "_stand"] = n + "_stand";
-    POSES[n + "_sit"] = n + "_sit";
-  }
-  for (const k of ["pd_stand", "pd_deal", "pd_chips", "bt_stand", "bt_pour", "bt_wipe",
-                   "sv_stand", "sv_tray1", "sv_tray2", "mk_stand", "mk_wave", "mk_flyer"]) POSES[k] = k;
-  for (const [k, v] of Object.entries(POSES)) SRC[k] = ACT + v + ".png";
+  // 에셋은 assets/pack/<테마>/ 한 곳에 모여 있고, 테마 5종이 같은 파일 이름을 쓴다.
+  // 크기 규칙은 tools/pack-spec.mjs 하나가 정한다:
+  //   가구 폭 = (발자국 가로칸 + 세로칸) × 16   (타일 32×16)
+  //   사람 키 = 28 (앉으면 20)
+  // 그래서 테마 전환은 폴더 이름만 바꾸면 되고, 배치 좌표는 테마와 무관하게 유지된다.
+  const PROPS = ["table_6", "table_8", "chair", "dealer_chair", "stool", "sofa", "armchair",
+    "lounge_table", "rug_rect", "rug_round", "side_table", "partition",
+    "bar_straight", "bar_corner", "back_bar", "beer_tap", "fridge", "sink", "cart", "coffee",
+    "bottle_cabinet", "tray", "snack", "safe",
+    "pendant", "chandelier", "sconce", "art_large", "art_small", "menu_board", "neon",
+    "dartboard", "jukebox", "clock", "trophy_case", "palm",
+    "door", "board", "stanchion", "coat_rack", "host_desk", "street_lamp", "tree", "bush",
+    "bench", "flower_bed", "trash_bin", "taxi"];
+  // 사람: 앞/뒤 2장을 좌우반전해 4방향을 만든다. 걷기는 4프레임 사이클.
+  const ACTORS = [
+    "a_walk_f1", "a_walk_f2", "a_walk_f3", "a_walk_f4",
+    "a_walk_b1", "a_walk_b2", "a_walk_b3", "a_walk_b4",
+    "a_stand_f", "a_sit_f", "a_stand_b", "a_sit_b",
+    "b_stand_f", "b_sit_f", "b_stand_b", "b_sit_b",
+    "c_stand_f", "c_sit_f", "c_stand_b", "c_sit_b",
+    "pd_stand", "pd_deal", "sv_stand", "sv_tray"];
+  const SRC = {};
+  for (const k of PROPS) SRC[k] = "props/" + k + ".png";
+  for (const k of ACTORS) SRC[k] = "actors/" + k + ".png";
 
   // 테마는 바닥·벽·러그 색만 바꾼다. 가구 도트 에셋은 색을 갈아입히면 명암 관계가
   // 깨지므로 건드리지 않는다 — 분위기는 큰 면(바닥/벽/러그/조명)으로 낸다.
@@ -122,34 +98,19 @@ const PubScene2D = (() => {
     gold: "#e8b44a", goldLo: "#a97c22",
   };
 
-  // 테마마다 같은 60칸(파일명까지 동일)을 다른 폴더에 들고 있다.
-  // 그래서 테마 전환 = "어느 폴더를 읽을지" 하나만 바꾸면 된다.
-  const THEME_SET = {
-    classic:  { env: "env_k2", act: "actors_k" },
-    princess: { env: "env_princess", act: "actors_princess" },
-    neon:     { env: "env_neon", act: "actors_neon" },
-    european: { env: "env_european", act: "actors_european" },
-    japanese: { env: "env_japanese", act: "actors_japanese" },
-  };
-  const SETS = {};          // 테마 이름 → { 키: Image }
-  const IMG = {};           // 기본(클래식) 세트 — 테마에 빠진 게 있으면 여기서 채운다
+  const SETS = {};          // 테마 → { 키: Image }
+  const IMG = {};           // 기본(클래식) — 테마에 빠진 게 있으면 여기서 채운다
   let loaded = false;
 
-  function pathFor(key, set) {
-    return SRC[key]
-      .replace("assets/pixel/out/env_k2/", "assets/pixel/out/" + set.env + "/")
-      .replace("assets/pixel/out/actors_k/", "assets/pixel/out/" + set.act + "/");
-  }
   function loadSet(name) {
     if (SETS[name]) return Promise.resolve(SETS[name]);
-    const set = THEME_SET[name] || THEME_SET.classic;
     const bank = {};
     SETS[name] = bank;
     return Promise.all(Object.keys(SRC).map((k) => new Promise((res) => {
       const im = new Image();
       im.onload = () => { bank[k] = im; res(); };
-      im.onerror = () => res();                       // 그 테마에 없으면 기본 세트로 떨어진다
-      im.src = pathFor(k, set);
+      im.onerror = () => res();
+      im.src = "assets/pack/" + name + "/" + SRC[k];
     }))).then(() => bank);
   }
   /** 현재 테마의 그림. 없으면 기본 세트. */
@@ -158,10 +119,7 @@ const PubScene2D = (() => {
     return (bank && bank[key]) || IMG[key] || null;
   }
   function loadAll() {
-    return loadSet("classic").then((bank) => {
-      Object.assign(IMG, bank);
-      loaded = true;
-    });
+    return loadSet("classic").then((bank) => { Object.assign(IMG, bank); loaded = true; });
   }
 
   // ---------------- 상태 ----------------
@@ -175,8 +133,16 @@ const PubScene2D = (() => {
   let raf = 0;
   const api = { onTap: null, onDiamondBubble: null };
 
-  const sx = (gx, gy) => OX + (gx - gy) * (TW / 2);
-  const sy = (gx, gy) => OY + (gx + gy) * (TH / 2);
+  // 카메라 — 손가락으로 끌면 화면이 따라 움직인다. 방이 화면보다 넓으므로 필수다.
+  let camX = 0, camY = 0;
+  const sx = (gx, gy) => OX + camX + (gx - gy) * (TW / 2);
+  const sy = (gx, gy) => OY + camY + (gx + gy) * (TH / 2);
+  function clampCam() {
+    const halfW = (ROOM.w + ROOM.d) * (TW / 4);
+    const halfH = (ROOM.w + ROOM.d) * (TH / 4);
+    camX = Math.max(-halfW, Math.min(halfW, camX));
+    camY = Math.max(-halfH * 0.8, Math.min(halfH * 0.8, camY));
+  }
 
   function hash(n) {
     n = (n ^ 61) ^ (n >>> 16);
@@ -203,6 +169,15 @@ const PubScene2D = (() => {
     }
     return { x: x0, y: y0, w, h };
   }
+  /** 바닥에 놓는 물건. 그림 폭이 (발자국 가로+세로)×16 이므로,
+   *  발자국의 남쪽 꼭짓점 = 중심에서 아래로 (폭/4) 만큼 내려간 지점이다.
+   *  이 규칙 하나로 모든 가구가 제 칸에 정확히 앉는다 — 물건마다 보정값을 주던 걸 없앴다. */
+  function blitProp(key, cx, cy, flip) {
+    const im = A(key);
+    if (!im) return null;
+    return blit(key, sx(cx, cy), sy(cx, cy) + (im.width * S) / 4, flip);
+  }
+
   /** 평면 그림을 아이소 벽 기울기에 눕힌다. dir +1 = 북쪽 벽(gy=0), -1 = 서쪽 벽(gx=0). */
   function blitWall(key, cx, cy, dir) {
     const im = A(key);
@@ -301,19 +276,63 @@ const PubScene2D = (() => {
     { w: 13, d: 13, t: [[4.5, 1.5], [8.0, 5.0], [11.0, 9.0]] },
     { w: 13, d: 13, t: [[4.5, 1.5], [8.0, 5.0], [11.0, 9.0]] },
   ];
-  const SEAT_ANGLE = [-90, -30, 30, 90, 150, 210];
-  const SEAT_R = 1.85, SIT_R = 1.45;
-  const ALL = (suffix) => Array.from({ length: 12 }, (_, i) => "p" + String(i + 1).padStart(2, "0") + suffix);
-  const SEATED = ALL("_sit");
-  const SEATED_BACK = ALL("_sit");
-  const STANDING = ALL("_stand");
-  const DEALING = ["pd_deal", "pd_stand", "pd_chips"];
-  // 걷는 프레임은 따로 없다 — 서 있는 그림에 1px 위아래 흔들림만 준다(actorAt의 bob).
-  const WALK = null;
-  const TRAY = ["sv_tray1", "sv_tray2"];
-  const BARTEND = ["bt_pour", "bt_wipe", "bt_stand"];
-  const PROMO = ["mk_wave", "mk_flyer", "mk_stand"];
+  const WHO = ["a", "b", "c"];
   const EMOTE = ["spade", "heart", "note"];
+  const SEAT_ANGLE = [-90, -30, 30, 90, 150, 210];
+  // 좌석은 **화면 좌표 타원**으로 잡는다. 격자에서 원을 그리면 화면에서는 대각선으로
+  // 늘어난 타원이 되어, 위쪽 자리가 테이블에 파묻히고 옆자리는 너무 멀어진다.
+  // 테이블 그림이 화면에서 128×96 이므로 그보다 한 바퀴 큰 타원에 앉힌다.
+  const SIT_K = 0.78;                  // 사람은 의자보다 조금 안쪽
+  /** 좌석 타원의 화면 반지름 — 테이블 그림에서 직접 뽑는다.
+   *  고정값으로 두면 테마마다 테이블 폭이 달라질 때 사람이 테이블 위에 올라간다. */
+  function seatRX() {
+    const im = A("table_6");
+    return (im ? (im.width * S) / 2 : 64) + 9 * S;
+  }
+  /** 테이블 중심에서 각도 deg, 반지름 배율 k 인 자리의 격자 좌표.
+   *  아이소에서는 화면 타원(가로:세로 = 2:1)이 곧 바닥의 원이다. */
+  function seatAt(cx, cy, deg, k) {
+    const a = (deg * Math.PI) / 180;
+    const rx = seatRX() * k;
+    const ox = rx * Math.cos(a), oy = (rx / 2) * Math.sin(a);
+    const diff = ox / (TW / 2), sum = oy / (TH / 2);
+    return [cx + (sum + diff) / 2, cy + (sum - diff) / 2];
+  }
+
+  // 앞/뒤 그림 두 장으로 아이소 4방향을 만든다.
+  //   +gx(오른쪽 아래) = 앞 그대로 / +gy(왼쪽 아래) = 앞 반전
+  //   -gx(왼쪽 위)    = 뒤 반전   / -gy(오른쪽 위) = 뒤 그대로
+  // 이래야 "뒤로 걷는" 것처럼 안 보인다 — 진행 방향과 몸이 같은 쪽을 본다.
+  function facing(hx, hy) {
+    if (Math.abs(hx) >= Math.abs(hy)) {
+      return hx >= 0 ? { back: false, flip: false } : { back: true, flip: true };
+    }
+    return hy >= 0 ? { back: false, flip: true } : { back: true, flip: false };
+  }
+
+  /** 사람 하나의 지금 그림과 방향. n.mode = sit | stand | walk | staff */
+  function actorAt(n, t) {
+    let gx = n.gx, gy = n.gy, hx = n.hx || 0, hy = n.hy || 1;
+    if (n.walk) {
+      const ph = Math.sin(t * n.walk.speed + (n.seed % 7));
+      const k = (ph + 1) / 2;
+      gx = n.walk.from[0] + (n.walk.to[0] - n.walk.from[0]) * k;
+      gy = n.walk.from[1] + (n.walk.to[1] - n.walk.from[1]) * k;
+      const fwd = Math.cos(t * n.walk.speed + (n.seed % 7)) > 0 ? 1 : -1;
+      hx = (n.walk.to[0] - n.walk.from[0]) * fwd;
+      hy = (n.walk.to[1] - n.walk.from[1]) * fwd;
+    }
+    const f = facing(hx, hy);
+    let sprite;
+    if (n.mode === "staff") sprite = n.sprite;
+    else if (n.mode === "walk") {
+      const frame = Math.floor(t / 150 + n.seed) % 4;
+      sprite = "a_walk_" + (f.back ? "b" : "f") + (frame + 1);
+    } else {
+      sprite = n.who + "_" + (n.mode === "sit" ? "sit" : "stand") + "_" + (f.back ? "b" : "f");
+    }
+    return { gx, gy, sprite, flip: f.flip, bob: 0 };
+  }
 
   function buildLayout(s) {
     const owned = Math.max(0, s.tables | 0);
@@ -361,62 +380,74 @@ const PubScene2D = (() => {
     const seatsPerTable = Math.max(2, Math.round((s.seatsMin + s.seatsMax) / 2) - 1);
     const occ = Math.max(0, Math.min(1, s.occupancy || 0));
     slots.filter((x) => x.owned).forEach((t) => {
+      // 딜러는 테이블 북쪽에 서서 손님 쪽(+gy)을 본다
       if (s.assignedDealers && s.assignedDealers[t.i]) {
-        people.push({ gx: t.cx, gy: t.cy - SIT_R - 0.35, sprite: pick(DEALING, t.i * 17 + 5), seed: t.i * 17 + 3 });
+        const [dgx, dgy] = seatAt(t.cx, t.cy, -90, 1.25);
+        people.push({ gx: dgx, gy: dgy, mode: "staff",
+                      sprite: hash(t.i) % 3 === 0 ? "pd_deal" : "pd_stand",
+                      hx: 0, hy: 1, seed: t.i * 17 + 3 });
       }
       const filled = Math.max(1, Math.round(seatsPerTable * occ));
-      for (let k = 1; k <= filled && k < SEAT_ANGLE.length; k++) {
-        const a = (SEAT_ANGLE[k] * Math.PI) / 180;
+      for (let k = 0; k < filled && k < SEAT_ANGLE.length; k++) {
+        const deg = SEAT_ANGLE[k];
+        const ang = (deg * Math.PI) / 180;
         const seed = t.i * 100 + k * 7;
-        const back = Math.sin(a) < -0.35;
+        const [sgx, sgy] = seatAt(t.cx, t.cy, deg, SIT_K);
+        // 앉은 사람은 반드시 테이블 쪽을 본다 — 이걸 안 하면 등지고 앉은 것처럼 보인다
         people.push({
-          gx: t.cx + Math.cos(a) * SIT_R, gy: t.cy + Math.sin(a) * SIT_R,
-          sprite: back ? pick(SEATED_BACK, seed) : pick(SEATED, seed),
-          flip: Math.cos(a) - Math.sin(a) < 0, seat: true, seed,
+          gx: sgx, gy: sgy,
+          hx: t.cx - sgx, hy: t.cy - sgy,
+          mode: "sit", who: pick(WHO, seed), seat: true, seed,
           emote: hash(seed) % 5 === 0 ? pick(EMOTE, seed + 1) : null,
         });
       }
+      // 구경꾼 — 테이블 오른쪽에 서서 테이블을 본다
       if (occ > 0.5) {
-        people.push({ gx: t.cx + SEAT_R + 0.7, gy: t.cy + 0.5, sprite: pick(STANDING, t.i * 31 + 3), seed: t.i * 31, flip: true });
+        const [wgx, wgy] = seatAt(t.cx, t.cy, 0, 1.5);
+        people.push({ gx: wgx, gy: wgy, mode: "stand",
+                      who: pick(WHO, t.i * 31), hx: t.cx - wgx, hy: t.cy - wgy, seed: t.i * 31 });
       }
     });
-    // 바텐더 · 바 손님
+    // 바텐더 — 카운터 안쪽에서 홀(+gx)을 본다 / 바 손님은 카운터 쪽을 본다
     if (bar) {
       const bt = Math.min(2, (s.staff && s.staff.bartender) || 0);
-      for (let i = 0; i < bt; i++) people.push({ gx: 0.95, gy: bar.cy - 1.2 + i * 2.4, sprite: pick(BARTEND, 770 + i), seed: 770 + i });
+      for (let i = 0; i < bt; i++) {
+        people.push({ gx: 0.85, gy: bar.cy - 1.2 + i * 2.4, mode: "staff", sprite: "sv_stand",
+                      hx: 1, hy: 0, seed: 770 + i });
+      }
       bar.stools.forEach((gy, i) => {
         if (hash(900 + i) % 5 === 0) return;              // 한두 자리는 비워 둔다
         const seed = 800 + i * 13;
-        people.push({ gx: 2.72, gy, sprite: pick(SEATED, seed), seed, seat: true });
+        people.push({ gx: 2.5, gy, mode: "sit", who: pick(WHO, seed), hx: -1, hy: 0, seat: true, seed });
       });
     }
-    // 서버 — 홀을 가로지른다
+    // 서버 — 홀을 가로지른다 (쟁반 든 그림은 한 장뿐이라 방향만 맞춘다)
     const servers = Math.min(3, (s.staff && s.staff.server) || 0);
     for (let i = 0; i < servers; i++) {
       const gy = 2.2 + i * 2.4;
-      people.push({ gx: 3.4, gy, cycle: TRAY, sprite: TRAY[0], seed: 700 + i * 11,
+      people.push({ gx: 3.4, gy, mode: "staff", sprite: "sv_tray", seed: 700 + i * 11,
                     walk: { from: [3.4, gy], to: [Math.min(W - 1.6, gy + 7.2), gy], speed: 0.00012 + i * 0.00003 } });
     }
-    // 돌아다니는 손님 — 보유 테이블이 많을수록 북적인다
+    // 돌아다니는 손님 — 4프레임 보행 사이클, 진행 방향을 보고 걷는다
     const walkers = Math.min(6, 2 + Math.round(occ * 3) + Math.max(0, owned - MAX_TABLES));
     for (let i = 0; i < walkers; i++) {
       const gy = 1.4 + ((i * 2.7) % Math.max(2, D - 2.4));
       const seed = 400 + i * 23;
-      people.push({ gx: 3.0, gy, sprite: pick(STANDING, seed), seed,
+      people.push({ gx: 3.0, gy, mode: "walk", who: "a", seed,
                     walk: { from: [3.0, gy], to: [Math.min(W - 1.2, gy + 7.6), gy], speed: 0.00009 + i * 0.00002 } });
     }
 
     // ── 화분 · 소품 ──
     const props = [];
     const P = (a, cx, cy, flip) => props.push({ a, cx, cy, flip });
-    P("plantBig", 7.0, 0.6); P("plantBig", 0.6, 0.6); P("plantBig", W - 0.6, D - 0.7);
+    P("palm", 7.0, 0.6); P("palm", 0.6, 0.6); P("palm", W - 0.6, D - 0.7);
     const plantLv = (s.decor && s.decor.plant) || 0;
     // 세 번째 값 = 좌우반전 여부 (세로줄에 놓는 것은 원본, 가로줄은 반전)
     const plantSpots = [[5.6, 0.6, true], [2.8, 0.6, true], [9.8, 3.4, false],
                         [7.4, D - 0.8, true], [2.6, 9.6, false], [11.4, 6.4, false]];
     for (let i = 0; i < Math.min(plantLv, plantSpots.length); i++) {
       const sp = plantSpots[i];
-      P("planter", sp[0], sp[1], sp[2]);
+      P("flower_bed", sp[0], sp[1], sp[2]);
     }
     // 냉장고는 바 끝에 붙인다(오른쪽 벽은 화면 밖이다)
     if ((s.fixtures && s.fixtures.fridge) > 0) props.push({ a: "fridge", cx: 1.3, cy: 6.9, fixture: "fridge" });
@@ -427,11 +458,11 @@ const PubScene2D = (() => {
     const artN = 1 + Math.min(2, (decor.neon || 0) + (decor.dart || 0));
     for (let i = 0; i < artN; i++) {
       const g = 5.2 + i * 1.7;
-      if (g < Math.min(W - 0.8, 8.2)) wallN.push({ g, a: i % 2 ? "art" : "sign" });
+      if (g < Math.min(W - 0.8, 8.2)) wallN.push({ g, a: i % 2 ? "art_large" : "menu_board" });
     }
     const wallW = [];
-    if (!bar) for (let i = 0; i < 2; i++) wallW.push({ g: 2.0 + i * 2.2, a: i % 2 ? "sign" : "art" });
-    else if (D >= 9) wallW.push({ g: Math.min(D - 1.2, 7.4), a: "art" });
+    if (!bar) for (let i = 0; i < 2; i++) wallW.push({ g: 2.0 + i * 2.2, a: i % 2 ? "menu_board" : "art_large" });
+    else if (D >= 9) wallW.push({ g: Math.min(D - 1.2, 7.4), a: "art_small" });
     // 벽등 — 뒷벽을 따라. 아늑함은 대부분 여기서 나온다.
     const sconceN = [], sconceW = [];
     for (let g = 1.6; g < Math.min(W - 0.4, 8.6); g += 2.4) sconceN.push(g);
@@ -446,11 +477,11 @@ const PubScene2D = (() => {
     const O = (a, cx, cy, flip) => out.push({ a, cx, cy, flip });
     const X = true;   // 가로(gx) 줄에는 좌우반전본 (에셋이 +gy 방향으로 그려져 있다)
     O("board", entrance.gx + 1.8, D + 1.4);
-    for (let g = 1.2; g < W + 1; g += 3.4) O("flowerBed", g, D + 2.4, X);
-    for (let g = 0.5; g < W; g += 4.6) O("streetLamp", g, D + 3.1);
+    for (let g = 1.2; g < W + 1; g += 3.4) O("flower_bed", g, D + 2.4, X);
+    for (let g = 0.5; g < W; g += 4.6) O("street_lamp", g, D + 3.1);
     O("bench", 2.4, D + 2.9, X); O("bench", W - 2.6, D + 2.9, X);
     for (let g = -1; g < W + 3; g += 3.0) O("tree", g, D + 11.4, X);
-    for (let g = 0; g < W + 2; g += 4.2) O("streetLamp", g, -5.0);
+    for (let g = 0; g < W + 2; g += 4.2) O("street_lamp", g, -5.0);
     for (let g = -1; g < W + 3; g += 2.8) O("tree", g, -11.4, X);
     for (let g = -1; g < W + 3; g += 3.6) O("bush", g + 1.2, -10.2);
     for (let g = -6; g < D + 8; g += 3.2) { O("tree", -11.4, g); O("tree", W + 11.4, g); }
@@ -458,19 +489,20 @@ const PubScene2D = (() => {
     // 홍보 직원 — 가게 앞에서 전단을 돌린다 (게임의 marketer 고용 수만큼)
     const marketers = Math.min(2, (s.staff && s.staff.marketer) || 0);
     for (let i = 0; i < marketers; i++) {
-      people.push({ gx: entrance.gx - 2.4 - i * 1.6, gy: D + 2.6, sprite: pick(PROMO, 880 + i), seed: 880 + i, flip: true });
+      people.push({ gx: entrance.gx - 2.4 - i * 1.6, gy: D + 2.6, mode: "staff", sprite: "sv_stand",
+                    hx: 0, hy: 1, seed: 880 + i });
     }
 
     // 문 앞 줄 · 보도 행인
     for (let i = 0; i < 3; i++) {
       const seed = 900 + i * 13;
       people.push({ gx: entrance.gx - 0.9 + (i % 2) * 1.6, gy: D + 1.3 + ((i / 2) | 0) * 1.2,
-                    sprite: pick(STANDING, seed), seed, flip: i % 2 === 0 });
+                    mode: "stand", who: pick(WHO, seed), hx: -1, hy: -1, seed });
     }
     for (let i = 0; i < 3; i++) {
       const seed = 950 + i * 29;
       const gy = D + 3.3 + (i % 2) * 1.1;
-      people.push({ gx: -2, gy, sprite: pick(STANDING, seed), seed,
+      people.push({ gx: -2, gy, mode: "walk", who: "a", seed,
                     walk: { from: [-2, gy], to: [W + 3, gy], speed: 0.00008 + i * 0.000015 } });
     }
 
@@ -605,7 +637,7 @@ const PubScene2D = (() => {
 
   /** 소파 — 에셋 벤치보다 덩치가 커서 라운지가 라운지답게 보인다. */
   function booth(cx, cy) {
-    if (A("sofa")) blit("sofa", sx(cx, cy), sy(cx, cy));
+    if (A("sofa")) blitProp("sofa", cx, cy);
     else isoBox(cx, cy, 1.9, 0.85, 8 * S, PAL.leather);       // 에셋이 없으면 박스로라도
     isoBox(cx + 1.45, cy + 0.35, 0.7, 0.7, 11 * S, PAL.wood); // 옆 탁자
   }
@@ -672,20 +704,6 @@ const PubScene2D = (() => {
     return { x: px - w / 2, y: py - h / 2, w, h };
   }
 
-  function actorAt(n, t) {
-    let gx = n.gx, gy = n.gy, bob = 0, sprite = n.sprite, flip = n.flip || false;
-    if (n.walk) {
-      const k = (Math.sin(t * n.walk.speed + (n.seed % 7)) + 1) / 2;
-      gx = n.walk.from[0] + (n.walk.to[0] - n.walk.from[0]) * k;
-      gy = n.walk.from[1] + (n.walk.to[1] - n.walk.from[1]) * k;
-      const forward = Math.cos(t * n.walk.speed + (n.seed % 7)) > 0;
-      const dx = (n.walk.to[0] - n.walk.from[0]) - (n.walk.to[1] - n.walk.from[1]);
-      flip = forward ? dx < 0 : dx > 0;
-      if (n.cycle) sprite = n.cycle[Math.floor(t / 240 + n.seed) % n.cycle.length];
-      else bob = Math.floor(t / 200 + n.seed) % 2 ? -1 : 0;
-    }
-    return { gx, gy, bob, sprite, flip };
-  }
 
   /** 초당 수익 라벨 — 게임이 준 숫자를 그대로 쓴다. */
   function compact(n) {
@@ -717,7 +735,7 @@ const PubScene2D = (() => {
     ctx.clearRect(0, 0, VW, VH);
 
     drawGround();
-    for (const o of L.outBack) blit(o.a, Math.round(sx(o.cx, o.cy)), Math.round(sy(o.cx, o.cy)), o.flip);
+    for (const o of L.outBack) blitProp(o.a, o.cx, o.cy, o.flip);
 
     drawBackWalls();
     marquee(Math.min(3.4, ROOM.w - 3), 1);
@@ -727,7 +745,7 @@ const PubScene2D = (() => {
     for (const g of L.sconceW) sconce(sx(0, g), sy(0, g) - WALL_H + 28 * S, -1);
 
     // 바닥 데칼 — 러그 · 레드카펫
-    for (const s of L.slots) if (s.owned) rug(s.cx, s.cy, 3.6, 3.6, T);
+    for (const s of L.slots) if (s.owned) blitProp("rug_rect", s.cx, s.cy);
     {
       const e = L.entrance;
       const strip = (mw, ext, col) => poly([
@@ -743,10 +761,10 @@ const PubScene2D = (() => {
 
     for (const o of L.outFront) {
       const px = Math.round(sx(o.cx, o.cy)), py = Math.round(sy(o.cx, o.cy));
-      add(o.cx + o.cy + 0.01, () => blit(o.a, px, py, o.flip));
+      add(o.cx + o.cy + 0.01, () => blitProp(o.a, o.cx, o.cy, o.flip));
     }
     if (L.bar) {
-      for (const gy of L.bar.shelves) add(0.35 + gy - 0.5, () => blit("backBar", sx(0.35, gy), sy(0.35, gy)));
+      for (const gy of L.bar.shelves) add(0.35 + gy - 0.5, () => blitProp("back_bar", 0.35, gy, true));
       // 카운터 에셋은 2칸짜리 모듈이라 길이만큼 이어 붙인다(테마마다 같은 자리에 다른 그림).
       {
         const n = Math.max(1, Math.round(L.bar.len / 2));
@@ -754,20 +772,19 @@ const PubScene2D = (() => {
         for (let i = 0; i < n; i++) {
           const gy = gy0 + i * 2;
           add(L.bar.cx + gy, () => {
-            const r = A("bar")
-              ? blit("bar", sx(L.bar.cx, gy), sy(L.bar.cx, gy) + 4 * S, true)
-              : barCounter(L.bar.cx, gy, 2);
+            const r = A("bar_straight") ? blitProp("bar_straight", L.bar.cx, gy, true)
+                                        : barCounter(L.bar.cx, gy, 2);
             if (r) hits.push({ x: r.x, y: r.y, w: r.w, h: r.h, info: { type: "fixture", id: "bar" } });
           });
         }
       }
-      for (const gy of L.bar.stools) add(2.7 + gy - 0.1, () => blit("stool", sx(2.7, gy), sy(2.7, gy)));
+      for (const gy of L.bar.stools) add(2.7 + gy - 0.1, () => blitProp("stool", 2.7, gy));
     }
     for (const b of L.booths) add(b[0] + b[1], () => booth(b[0], b[1]));
     for (const p of L.props) {
       const px = sx(p.cx, p.cy), py = sy(p.cx, p.cy);
       add(p.cx + p.cy, () => {
-        const r = blit(p.a, px, py, p.flip);
+        const r = blitProp(p.a, p.cx, p.cy, p.flip);
         if (r && p.fixture) hits.push({ x: r.x, y: r.y, w: r.w, h: r.h, info: { type: "fixture", id: p.fixture } });
       });
     }
@@ -782,11 +799,14 @@ const PubScene2D = (() => {
       }
       SEAT_ANGLE.forEach((deg) => {
         const a = (deg * Math.PI) / 180;
-        const gx = s.cx + Math.cos(a) * SEAT_R, gy = s.cy + Math.sin(a) * SEAT_R;
-        add(gx + gy - 0.05, () => blit("chair", sx(gx, gy), sy(gx, gy), Math.cos(a) < 0));
+        const [gx, gy] = seatAt(s.cx, s.cy, deg, 1);
+        // 의자는 앉은 사람보다 한쪽만 앞이다 — 가까운 쪽(아래)은 등받이가 사람을 가리고,
+        // 먼 쪽(위)은 사람 뒤에 놓인다. 그래야 "앉아 있다"로 보인다.
+        const near = Math.sin(a) > 0;
+        add(gx + gy + (near ? 0.12 : -0.12), () => blitProp("chair", gx, gy, Math.cos(a) < 0));
       });
       add(s.cx + s.cy, () => {
-        const r = blit("table", px, py + 16 * S);
+        const r = blitProp("table_6", s.cx, s.cy);
         if (r) hits.push({ x: r.x, y: r.y, w: r.w, h: r.h, info: { type: "table", index: s.i } });
       });
     }
@@ -800,7 +820,7 @@ const PubScene2D = (() => {
     if (L.host) {
       const px = sx(L.host.cx, L.host.cy), py = sy(L.host.cx, L.host.cy);
       add(L.host.cx + L.host.cy, () => {
-        const r = blit("board", px, py);
+        const r = blitProp("board", L.host.cx, L.host.cy);
         if (r) hits.push({ x: r.x, y: r.y, w: r.w, h: r.h, info: { type: "tournament" } });
       });
     }
@@ -824,7 +844,7 @@ const PubScene2D = (() => {
     frontWall(L, add);
     {
       const e = L.entrance;
-      add(e.gx + e.gy + 0.6, () => blit(A("doors") ? "doors" : "door", Math.round(sx(e.gx, e.gy)), Math.round(sy(e.gx, e.gy)) + 6 * S, true));
+      add(e.gx + e.gy + 0.6, () => blitProp("door", e.gx, e.gy, true));
     }
 
     items.sort((a, b) => a.d - b.d);
@@ -837,7 +857,7 @@ const PubScene2D = (() => {
       glow(px, py - 6 * S, 34 * S, 0.45);
       const ly = py - 30 * S;
       R(px - S / 2, ly - 22 * S, S, 22 * S, "#3a2a20");
-      blit("lamp", px, ly);
+      blit("pendant", px, ly);
       glow(px, ly + 3 * S, 14 * S, 0.75);
     }
     if (snap && snap.showTableIncome && snap.perTableIncome > 0) {
@@ -878,10 +898,15 @@ const PubScene2D = (() => {
     ctx = canvas.getContext("2d");
     resize();
     addEventListener("resize", resize);
-    canvas.addEventListener("pointerdown", (e) => {
+    // ── 손가락으로 화면 끌기 ──
+    // 방이 화면보다 넓으므로 이동이 없으면 구석을 볼 수가 없다.
+    // 끈 거리가 짧으면 탭으로 친다 — 그래야 테이블을 눌러도 화면이 안 흔들린다.
+    let press = null;
+    const toCanvas = (e) => {
       const r = canvas.getBoundingClientRect();
-      const x = ((e.clientX - r.left) / r.width) * VW;
-      const y = ((e.clientY - r.top) / r.height) * VH;
+      return [((e.clientX - r.left) / r.width) * VW, ((e.clientY - r.top) / r.height) * VH];
+    };
+    const tapAt = (x, y) => {
       for (let i = hits.length - 1; i >= 0; i--) {   // 나중에 그린 것이 위
         const h = hits[i];
         if (x < h.x || y < h.y || x > h.x + h.w || y > h.y + h.h) continue;
@@ -891,7 +916,27 @@ const PubScene2D = (() => {
         } else if (typeof api.onTap === "function") api.onTap(h.info);
         return;
       }
+    };
+    canvas.addEventListener("pointerdown", (e) => {
+      const [x, y] = toCanvas(e);
+      press = { x, y, camX, camY, moved: false };
+      if (canvas.setPointerCapture) { try { canvas.setPointerCapture(e.pointerId); } catch (err) {} }
     });
+    canvas.addEventListener("pointermove", (e) => {
+      if (!press) return;
+      const [x, y] = toCanvas(e);
+      const dx = x - press.x, dy = y - press.y;
+      if (!press.moved && Math.abs(dx) + Math.abs(dy) > 10) press.moved = true;
+      if (press.moved) { camX = press.camX + dx; camY = press.camY + dy; clampCam(); }
+    });
+    const release = (e) => {
+      if (!press) return;
+      if (!press.moved) { const [x, y] = toCanvas(e); tapAt(x, y); }
+      press = null;
+    };
+    canvas.addEventListener("pointerup", release);
+    canvas.addEventListener("pointercancel", () => { press = null; });
+    canvas.addEventListener("pointerleave", () => { press = null; });
     loadAll().then(() => { if (snap) layout = buildLayout(snap); });
     if (!raf) raf = requestAnimationFrame(frame);
   }

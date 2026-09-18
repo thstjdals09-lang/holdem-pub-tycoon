@@ -99,7 +99,7 @@ for (const t of ["princess", "neon", "european", "japanese"]) {
 }
 
 /** 마젠타 배경 → 투명. 색상환에서 자홍 언저리이면서 채도가 높은 픽셀만 지운다. */
-function keyMagenta(img) {
+export function keyMagenta(img) {
   const { width: w, height: h, data } = img;
   for (let i = 0, n = w * h; i < n; i++) {
     const o = i * 4;
@@ -119,7 +119,7 @@ function keyMagenta(img) {
 }
 
 /** 외곽 1px에 남은 마젠타 기운을 빼 준다(키잉 경계의 보라 테두리). */
-function deFringe(img) {
+export function deFringe(img) {
   const { width: w, height: h, data } = img;
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
@@ -139,7 +139,7 @@ function deFringe(img) {
 
 /** 모델이 칸 사이에 그어 놓은 격자선을 지운다 — 이게 남으면 12개가 한 덩어리로 붙는다.
  *  판별: 이미지 가로(세로)의 70%를 넘게 이어지는 어두운 줄. 오브젝트는 그렇게 길지 않다. */
-function stripGridLines(img) {
+export function stripGridLines(img) {
   const { width: w, height: h, data } = img;
   const dark = (o) => data[o + 3] > 40 && (data[o] + data[o + 1] + data[o + 2]) / 3 < 70;
   let killed = 0;
@@ -162,7 +162,7 @@ function stripGridLines(img) {
 }
 
 /** 불투명 픽셀의 연결 성분. 작은 티끌은 버린다. */
-function components(img, minArea) {
+export function components(img, minArea) {
   const { width: w, height: h, data } = img;
   const seen = new Uint8Array(w * h);
   const out = [];
@@ -195,7 +195,7 @@ function components(img, minArea) {
 }
 
 /** 서로 가까운 성분을 합친다 — 로프 폴대처럼 부품이 떨어져 있는 오브젝트 때문. */
-function mergeNear(boxes, gap) {
+export function mergeNear(boxes, gap) {
   const b = boxes.slice();
   let changed = true;
   while (changed) {
@@ -224,7 +224,7 @@ function mergeNear(boxes, gap) {
 
 /** 연결 성분이 기대 개수와 다를 때의 대안: 격자를 균등 분할하고 칸마다 내용물의 경계를 잡는다.
  *  모델이 격자로 그려 놨다는 사실만 믿으면 되므로, 성분이 붙거나 흩어져도 결과가 안정적이다. */
-function gridBoxes(img, cols, rows) {
+export function gridBoxes(img, cols, rows) {
   const { width: w, height: h, data } = img;
   const out = [];
   for (let r = 0; r < rows; r++) {
@@ -248,7 +248,7 @@ function gridBoxes(img, cols, rows) {
 
 /** 덩어리가 기대보다 많을 때: 각 덩어리를 중심점이 속한 칸에 배당하고 칸마다 합친다.
  *  격자 균등 분할과 달리 덩어리 경계를 그대로 쓰므로 칸 경계에서 잘리지 않는다. */
-function cellUnion(boxes, cols, rows, w, h) {
+export function cellUnion(boxes, cols, rows, w, h) {
   const cells = new Array(cols * rows).fill(null);
   for (const b of boxes) {
     const cx = (b.x0 + b.x1) / 2, cy = (b.y0 + b.y1) / 2;
@@ -265,7 +265,7 @@ function cellUnion(boxes, cols, rows, w, h) {
 }
 
 /** 행으로 묶고 열로 정렬해 "읽는 순서"를 만든다. */
-function readingOrder(boxes, rows) {
+export function readingOrder(boxes, rows) {
   const byY = boxes.slice().sort((a, b) => (a.y0 + a.y1) - (b.y0 + b.y1));
   const per = Math.ceil(byY.length / rows);
   const out = [];
@@ -276,7 +276,7 @@ function readingOrder(boxes, rows) {
   return out;
 }
 
-function crop(img, box) {
+export function crop(img, box) {
   const w = box.x1 - box.x0 + 1, h = box.y1 - box.y0 + 1;
   const data = Buffer.alloc(w * h * 4);
   for (let y = 0; y < h; y++) {
@@ -287,7 +287,7 @@ function crop(img, box) {
 }
 
 /** 알파를 고려한 박스 필터 축소. 최근접 이웃으로 줄이면 외곽선 한 줄이 통째로 날아간다. */
-function shrink(img, dw, dh) {
+export function shrink(img, dw, dh) {
   const { width: w, height: h, data } = img;
   const out = Buffer.alloc(dw * dh * 4);
   for (let y = 0; y < dh; y++) {
@@ -313,7 +313,7 @@ function shrink(img, dw, dh) {
 }
 
 /** 중앙값 분할 색 줄이기 — 작은 크기에서 중간톤이 많으면 형태가 죽는다. */
-function posterize(img, k) {
+export function posterize(img, k) {
   const { width: w, height: h, data } = img;
   const px = [];
   for (let i = 0, n = w * h; i < n; i++) {
@@ -422,8 +422,12 @@ function writeAll(spec, img, ordered, write, outName) {
   return ordered.length;
 }
 
+// CLI 로 직접 실행할 때만 동작한다(다른 도구가 import 해도 안 돌게).
+const isCli = String(process.argv[1] || "").split(String.fromCharCode(92)).join("/").endsWith("tools/sheet-cut.mjs");
+if (isCli) {
 const arg = process.argv[2];
 const write = process.argv.includes("--write");
 const names = !arg || arg === "all" ? Object.keys(SHEETS) : [arg];
 for (const n of names) cutSheet(n, write);
 if (!write) console.log("\n(--write 를 붙여야 실제로 저장한다)");
+}
