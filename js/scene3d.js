@@ -57,6 +57,22 @@ const COLORS = {
   wood: 0xb98a5f,
   sofa: 0xd98fb5,
 };
+// 실제로 기물·가구를 만들 때 쓰는 "살아있는" 팔레트.
+// applyTheme()이 COLORS(기본값) 위에 테마의 props를 덮어쓰고, 빌더는 전부 이 표를 읽는다.
+// update()가 상태가 바뀔 때마다 테이블·기물·장식을 다시 만들기 때문에,
+// 테마를 바꾸면 매장 전체가 다음 렌더에서 새 색으로 다시 그려진다.
+const PAL = { ...COLORS };
+
+// hex 두 색을 섞는다. 딜러 등급색을 테마 쪽으로 끌어올 때 쓴다(등급은 알아보되 테마 톤은 입도록).
+const _tintA = new THREE.Color();
+const _tintB = new THREE.Color();
+function tint(hexColor, towardHex, amount) {
+  if (towardHex == null || !amount) return hexColor;
+  _tintA.setHex(hexColor);
+  _tintB.setHex(towardHex);
+  return _tintA.lerp(_tintB, amount).getHex();
+}
+
 
 // 딜러 등급별 정장/포인트 색 — 도감 등급이 매장 안에서도 바로 보이게 한다.
 // accent는 js/assets.js의 등급 색(카드 프레임·배지)과 같은 값을 쓴다 — 도감에서 본 색이 매장에서도 그대로 보이게.
@@ -527,7 +543,7 @@ function makePersonMesh(opts = {}) {
     shirt = 0xff8fab,
     pants = 0x4a5a7a,
     hair = 0x3b2b20,
-    skin = COLORS.skin,
+    skin = PAL.skin,
     style = "short",
     seated = false,
     vest = null,
@@ -646,9 +662,9 @@ function buildChair(padColor) {
   seat.position.y = 0.45;
   const back = plain(furnGeo.chairBack, padColor);
   back.position.set(0, 0.7, -0.2);
-  const post = plain(furnGeo.chairPost, COLORS.chair);
+  const post = plain(furnGeo.chairPost, PAL.chair);
   post.position.y = 0.21;
-  const foot = plain(furnGeo.stoolFoot, COLORS.chair);
+  const foot = plain(furnGeo.stoolFoot, PAL.chair);
   foot.position.y = 0.02;
   g.add(seat, back, post, foot);
   return g;
@@ -656,7 +672,7 @@ function buildChair(padColor) {
 
 function buildBarStool() {
   const g = new THREE.Group();
-  const top = plain(furnGeo.stoolTop, COLORS.stool);
+  const top = plain(furnGeo.stoolTop, PAL.stool);
   top.position.y = 0.68;
   const post = plain(furnGeo.stoolPost, 0x6b6b78);
   post.position.y = 0.34;
@@ -668,13 +684,13 @@ function buildBarStool() {
 
 function buildSofa(width) {
   const g = new THREE.Group();
-  const seat = meshWO(new RoundedBoxGeometry(width, 0.42, 0.85, 3, 0.12), COLORS.sofa, 1.03);
+  const seat = meshWO(new RoundedBoxGeometry(width, 0.42, 0.85, 3, 0.12), PAL.sofa, 1.03);
   seat.position.y = 0.26;
-  const back = meshWO(new RoundedBoxGeometry(width, 0.7, 0.24, 3, 0.1), COLORS.sofa, 1.04);
+  const back = meshWO(new RoundedBoxGeometry(width, 0.7, 0.24, 3, 0.1), PAL.sofa, 1.04);
   back.position.set(0, 0.68, -0.33);
   g.add(seat, back);
   for (const sx of [-width / 2 + 0.12, width / 2 - 0.12]) {
-    const arm = plain(new RoundedBoxGeometry(0.22, 0.28, 0.85, 2, 0.08), COLORS.sofa);
+    const arm = plain(new RoundedBoxGeometry(0.22, 0.28, 0.85, 2, 0.08), PAL.sofa);
     arm.position.set(sx, 0.58, 0);
     g.add(arm);
   }
@@ -683,9 +699,9 @@ function buildSofa(width) {
 
 function buildLowTable() {
   const g = new THREE.Group();
-  const top = meshWO(new THREE.CylinderGeometry(0.42, 0.42, 0.08, 16), COLORS.wood, 1.05);
+  const top = meshWO(new THREE.CylinderGeometry(0.42, 0.42, 0.08, 16), PAL.wood, 1.05);
   top.position.y = 0.44;
-  const post = plain(new THREE.CylinderGeometry(0.07, 0.11, 0.44, 8), COLORS.tableLeg);
+  const post = plain(new THREE.CylinderGeometry(0.07, 0.11, 0.44, 8), PAL.tableLeg);
   post.position.y = 0.22;
   g.add(top, post);
   return g;
@@ -718,7 +734,7 @@ function buildPendantLamp() {
   // 반투명 구체로 "빛나 보이게"만 한다.
   const halo = new THREE.Mesh(
     new THREE.SphereGeometry(0.26, 10, 10),
-    new THREE.MeshBasicMaterial({ color: COLORS.lightWarm, transparent: true, opacity: 0.3, depthWrite: false })
+    new THREE.MeshBasicMaterial({ color: PAL.lightWarm, transparent: true, opacity: 0.3, depthWrite: false })
   );
   halo.position.y = 2.34;
   g.add(cord, shade, bulb, halo);
@@ -727,9 +743,9 @@ function buildPendantLamp() {
 
 function buildBottleShelf(level) {
   const g = new THREE.Group();
-  const board = meshWO(new RoundedBoxGeometry(3.4, 0.12, 0.34, 2, 0.05), COLORS.wood, 1.03);
+  const board = meshWO(new RoundedBoxGeometry(3.4, 0.12, 0.34, 2, 0.05), PAL.wood, 1.03);
   board.position.y = 0;
-  const board2 = meshWO(new RoundedBoxGeometry(3.4, 0.12, 0.34, 2, 0.05), COLORS.wood, 1.03);
+  const board2 = meshWO(new RoundedBoxGeometry(3.4, 0.12, 0.34, 2, 0.05), PAL.wood, 1.03);
   board2.position.y = 0.72;
   g.add(board, board2);
   const bottleColors = [0x5c3a21, 0x2f6b4a, 0x7a2f4a, 0x2f4a7a, 0xc9a24a];
@@ -746,7 +762,7 @@ function buildBottleShelf(level) {
 
 function buildDoor() {
   const g = new THREE.Group();
-  const frame = meshWO(new RoundedBoxGeometry(1.9, 2.5, 0.16, 2, 0.06), COLORS.wood, 1.03);
+  const frame = meshWO(new RoundedBoxGeometry(1.9, 2.5, 0.16, 2, 0.06), PAL.wood, 1.03);
   frame.position.y = 1.25;
   const panel = plain(new RoundedBoxGeometry(1.55, 2.15, 0.1, 2, 0.05), 0x3f2f3a);
   panel.position.set(0, 1.25, 0.06);
@@ -757,7 +773,7 @@ function buildDoor() {
   glass.position.set(0, 1.7, 0.13);
   const sign = new THREE.Mesh(
     new THREE.PlaneGeometry(1.3, 0.3),
-    new THREE.MeshBasicMaterial({ color: COLORS.lightPink })
+    new THREE.MeshBasicMaterial({ color: PAL.lightPink })
   );
   sign.position.set(0, 2.72, 0.1);
   g.add(frame, panel, glass, sign);
@@ -766,7 +782,7 @@ function buildDoor() {
 
 function buildWallArt(color) {
   const g = new THREE.Group();
-  const frame = plain(new RoundedBoxGeometry(0.9, 0.7, 0.07, 2, 0.03), COLORS.wood);
+  const frame = plain(new RoundedBoxGeometry(0.9, 0.7, 0.07, 2, 0.03), PAL.wood);
   const art = new THREE.Mesh(new THREE.PlaneGeometry(0.68, 0.48), new THREE.MeshBasicMaterial({ color }));
   art.position.z = 0.05;
   g.add(frame, art);
@@ -830,12 +846,12 @@ function buildJukebox() {
 
 function buildChandelier() {
   const g = new THREE.Group();
-  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.4, 0.05, 8, 20), toonMat(COLORS.emptySlot));
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.4, 0.05, 8, 20), toonMat(PAL.emptySlot));
   ring.rotation.x = Math.PI / 2;
   const bulbs = new THREE.Group();
   for (let i = 0; i < 6; i++) {
     const a = (i / 6) * Math.PI * 2;
-    const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 8), new THREE.MeshBasicMaterial({ color: COLORS.lightWarm }));
+    const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 8), new THREE.MeshBasicMaterial({ color: PAL.lightWarm }));
     bulb.position.set(Math.cos(a) * 0.4, -0.05, Math.sin(a) * 0.4);
     bulbs.add(bulb);
   }
@@ -848,9 +864,9 @@ function buildVip() {
   const g = new THREE.Group();
   const curtain = meshWO(new RoundedBoxGeometry(1.4, 1.9, 0.14, 3, 0.15), 0x8a2b4a, 1.05);
   curtain.position.y = 0.95;
-  const trim = plain(new THREE.BoxGeometry(1.4, 0.12, 0.16), COLORS.emptySlot);
+  const trim = plain(new THREE.BoxGeometry(1.4, 0.12, 0.16), PAL.emptySlot);
   trim.position.y = 1.85;
-  const rope = plain(new THREE.CylinderGeometry(0.03, 0.03, 1.1, 6), COLORS.emptySlot);
+  const rope = plain(new THREE.CylinderGeometry(0.03, 0.03, 1.1, 6), PAL.emptySlot);
   rope.rotation.z = Math.PI / 2;
   rope.position.set(0, 0.7, 0.55);
   g.add(curtain, trim, rope);
@@ -912,7 +928,7 @@ function buildHoldemTable({ index, dealer, feltColor, seatCount }) {
     curveSegments: 18,
   });
   railGeo.rotateX(-Math.PI / 2);
-  const rail = meshWO(railGeo, COLORS.rail, 1.01);
+  const rail = meshWO(railGeo, PAL.rail, 1.01);
   rail.position.y = TABLE_TOP_Y - 0.18;
 
   // 펠트 상판 — 레일 윗면보다 살짝 낮게 앉혀서 실제 테이블처럼 움푹 들어가 보이게
@@ -937,9 +953,9 @@ function buildHoldemTable({ index, dealer, feltColor, seatCount }) {
   marks.renderOrder = 1;
 
   // 다리 / 받침
-  const post = plain(new THREE.CylinderGeometry(0.16, 0.22, 0.46, 12), COLORS.tableLeg);
+  const post = plain(new THREE.CylinderGeometry(0.16, 0.22, 0.46, 12), PAL.tableLeg);
   post.position.y = 0.23;
-  const foot = meshWO(new THREE.CylinderGeometry(0.55, 0.62, 0.09, 16), COLORS.tableLeg, 1.05);
+  const foot = meshWO(new THREE.CylinderGeometry(0.55, 0.62, 0.09, 16), PAL.tableLeg, 1.05);
   foot.position.y = 0.045;
 
   g.add(foot, post, rail, felt, marks);
@@ -949,13 +965,13 @@ function buildHoldemTable({ index, dealer, feltColor, seatCount }) {
 
   // 커뮤니티 카드 5장
   for (let i = 0; i < 5; i++) {
-    const card = plain(furnGeo.card, COLORS.card);
+    const card = plain(furnGeo.card, PAL.card);
     card.position.set(-0.4 + i * 0.2, topY, 0.06);
     g.add(card);
   }
   // 팟(가운데 칩 더미)
   for (let i = 0; i < 3; i++) {
-    const chip = plain(furnGeo.chipStack, i === 1 ? COLORS.chipRed : COLORS.chip);
+    const chip = plain(furnGeo.chipStack, i === 1 ? PAL.chipRed : PAL.chip);
     chip.scale.y = 0.5 + Math.random() * 0.6;
     chip.position.set(-0.16 + i * 0.16, topY + 0.05, -0.34);
     g.add(chip);
@@ -972,7 +988,7 @@ function buildHoldemTable({ index, dealer, feltColor, seatCount }) {
   tray.position.set(0, topY, -R + 0.3);
   g.add(tray);
   for (let i = 0; i < 5; i++) {
-    const c = plain(furnGeo.chipStack, [COLORS.chip, COLORS.chipRed, COLORS.chipBlue][i % 3]);
+    const c = plain(furnGeo.chipStack, [PAL.chip, PAL.chipRed, PAL.chipBlue][i % 3]);
     c.scale.y = 0.8;
     c.position.set(-0.32 + i * 0.16, topY + 0.13, -R + 0.3);
     g.add(c);
@@ -1030,7 +1046,7 @@ function buildHoldemTable({ index, dealer, feltColor, seatCount }) {
     const sx = p.x + p.nx * SEAT_OUT;
     const sz = p.z + p.nz * SEAT_OUT;
     const rot = Math.atan2(-p.nx, -p.nz);
-    const chair = buildChair(COLORS.chairPad);
+    const chair = buildChair(PAL.chairPad);
     chair.position.set(sx, 0, sz);
     chair.rotation.y = rot;
     g.add(chair);
@@ -1039,7 +1055,7 @@ function buildHoldemTable({ index, dealer, feltColor, seatCount }) {
     const hx = p.x * 0.74;
     const hz = p.z * 0.74;
     for (let c = 0; c < 2; c++) {
-      const card = plain(furnGeo.card, COLORS.card);
+      const card = plain(furnGeo.card, PAL.card);
       card.position.set(hx + (c - 0.5) * 0.12, topY, hz);
       card.rotation.y = rot;
       g.add(card);
@@ -1056,11 +1072,11 @@ function buildEmptySlot() {
   const shape = stadiumShape(TABLE_HALF_LEN, TABLE_RADIUS);
   const pts = shape.getPoints(48);
   const geo = new THREE.BufferGeometry().setFromPoints(pts.map((p) => new THREE.Vector3(p.x, 0.03, p.y)));
-  const line = new THREE.LineLoop(geo, new THREE.LineDashedMaterial({ color: COLORS.emptySlot, dashSize: 0.22, gapSize: 0.16 }));
+  const line = new THREE.LineLoop(geo, new THREE.LineDashedMaterial({ color: PAL.emptySlot, dashSize: 0.22, gapSize: 0.16 }));
   line.computeLineDistances();
   g.add(line);
 
-  const plusMat = new THREE.MeshBasicMaterial({ color: COLORS.emptySlot, transparent: true, opacity: 0.9 });
+  const plusMat = new THREE.MeshBasicMaterial({ color: PAL.emptySlot, transparent: true, opacity: 0.9 });
   const plusA = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.05, 0.14), plusMat);
   const plusB = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.05, 0.62), plusMat);
   plusA.position.y = plusB.position.y = 0.05;
@@ -1103,7 +1119,7 @@ function rebuildStringLights() {
     const sag = Math.sin(t * Math.PI) * 0.5;
     const bulb = new THREE.Mesh(
       new THREE.SphereGeometry(0.09, 8, 8),
-      new THREE.MeshBasicMaterial({ color: i % 2 === 0 ? COLORS.lightWarm : COLORS.lightPink })
+      new THREE.MeshBasicMaterial({ color: i % 2 === 0 ? PAL.lightWarm : PAL.lightPink })
     );
     bulb.position.set(x, 6.1 - sag, zBack + 0.1);
     stringLightsGroup.add(bulb);
@@ -1177,7 +1193,7 @@ export function init(containerEl) {
   try {
     toonGradient = makeToonGradient();
     feltTexture = makeFeltTexture();
-    outlineMat = new THREE.MeshBasicMaterial({ color: COLORS.outline, side: THREE.BackSide });
+    outlineMat = new THREE.MeshBasicMaterial({ color: PAL.outline, side: THREE.BackSide });
     raycaster = new THREE.Raycaster();
 
     scene = new THREE.Scene();
@@ -1231,23 +1247,23 @@ export function init(containerEl) {
     fill.position.set(-6, 6, -4);
     scene.add(fill);
 
-    floorMat = toonMat(COLORS.floorBase, { map: makeFloorTexture("plank") });
+    floorMat = toonMat(PAL.floorBase, { map: makeFloorTexture("plank") });
     floorMat.userData.pattern = "plank";
     floorMesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), floorMat);
     floorMesh.rotation.x = -Math.PI / 2;
     floorMesh.receiveShadow = true;
     scene.add(floorMesh);
 
-    backWallMat = toonMat(COLORS.wallBack);
+    backWallMat = toonMat(PAL.wallBack);
     backWallMesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), backWallMat);
     backWallMesh.receiveShadow = true;
     scene.add(backWallMesh);
 
-    backTrimMat = toonMat(COLORS.wallTrim);
+    backTrimMat = toonMat(PAL.wallTrim);
     backTrimMesh = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), backTrimMat);
     scene.add(backTrimMesh);
 
-    sideWallMat = toonMat(COLORS.wallSide);
+    sideWallMat = toonMat(PAL.wallSide);
     leftWallMesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), sideWallMat);
     leftWallMesh.rotation.y = Math.PI / 2;
     leftWallMesh.receiveShadow = true;
@@ -1259,7 +1275,7 @@ export function init(containerEl) {
     // 벽 아래쪽 우드 패널 + 좌우 트림. 크기는 applyRoomSize()가 매장 크기에 맞춰 다시 잡는다.
     // 벽과 똑같이 단면(Plane)으로 만든다. Box로 하면 우측 벽처럼 카메라가 바깥에 있는 면에서
     // 뒷면이 보여 바닥 가장자리에 갈색 판때기가 생긴다(벽 Plane은 앞면만 그려져서 안 보이는 것).
-    wainscotMat = toonMat(COLORS.wainscot);
+    wainscotMat = toonMat(PAL.wainscot);
     backWainscotMesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), wainscotMat);
     leftWainscotMesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), wainscotMat);
     leftWainscotMesh.rotation.y = Math.PI / 2;
@@ -1313,7 +1329,7 @@ function applyTheme(themeId) {
   backWallMat.color.set(t.wallBack);
   sideWallMat.color.set(t.wallSide);
   backTrimMat.color.set(t.trim);
-  wainscotMat.color.set(t.wainscot || COLORS.wainscot);
+  wainscotMat.color.set(t.wainscot || PAL.wainscot);
   if (scene.background && scene.background.dispose) scene.background.dispose();
   scene.background = makeSkyTexture(t.sky[0], t.sky[1]);
 }
@@ -1486,11 +1502,11 @@ export function update(snapshot) {
   const barLevel = fixtures.bar || 0;
   const barGroup = new THREE.Group();
   barGroup.userData = { type: "fixture", id: "bar" };
-  const barBody = meshWO(new RoundedBoxGeometry(3.6, 1.05, 0.7, 3, 0.1), COLORS.bar, 1.03);
+  const barBody = meshWO(new RoundedBoxGeometry(3.6, 1.05, 0.7, 3, 0.1), PAL.bar, 1.03);
   barBody.position.set(barX, 0.52, zWall + 0.5);
-  const barTop = plain(new RoundedBoxGeometry(3.9, 0.12, 0.92, 2, 0.05), COLORS.barTop);
+  const barTop = plain(new RoundedBoxGeometry(3.9, 0.12, 0.92, 2, 0.05), PAL.barTop);
   barTop.position.set(barX, 1.1, zWall + 0.5);
-  const barLight = plain(new THREE.BoxGeometry(3.6, 0.06, 0.06), COLORS.barTrim);
+  const barLight = plain(new THREE.BoxGeometry(3.6, 0.06, 0.06), PAL.barTrim);
   barLight.position.set(barX, 0.95, zWall + 0.87);
   barGroup.add(barBody, barTop, barLight);
   // 카운터 위 잔/병
@@ -1506,7 +1522,7 @@ export function update(snapshot) {
   groups.fixtures.add(shelf);
 
   if (staff.bartender > 0) {
-    const bartender = makePersonMesh({ shirt: 0xffffff, pants: 0x3a3a4a, vest: 0x4a3a52, bowtie: COLORS.bartenderAccent, hair: 0x3b2b20, style: "short" });
+    const bartender = makePersonMesh({ shirt: 0xffffff, pants: 0x3a3a4a, vest: 0x4a3a52, bowtie: PAL.bartenderAccent, hair: 0x3b2b20, style: "short" });
     bartender.position.set(barX, 0, zWall - 0.35);
     bartender.rotation.y = Math.PI;
     bartender.userData.bobPhase = 0.5;
@@ -1528,9 +1544,9 @@ export function update(snapshot) {
   const fridgeX = barX + 3.0;
   const fridgeGroup = new THREE.Group();
   fridgeGroup.userData = { type: "fixture", id: "fridge" };
-  const fridge = meshWO(new RoundedBoxGeometry(0.9, 1.6, 0.75, 3, 0.1), COLORS.fridge, 1.04);
+  const fridge = meshWO(new RoundedBoxGeometry(0.9, 1.6, 0.75, 3, 0.1), PAL.fridge, 1.04);
   fridge.position.set(fridgeX, 0.8, zWall);
-  const fridgeDoor = plain(new THREE.BoxGeometry(0.62, 1.2, 0.05), COLORS.fridgeDoor);
+  const fridgeDoor = plain(new THREE.BoxGeometry(0.62, 1.2, 0.05), PAL.fridgeDoor);
   fridgeDoor.position.set(fridgeX, 0.85, zWall + 0.39);
   fridgeGroup.add(fridge, fridgeDoor);
   groups.fixtures.add(fridgeGroup);
@@ -1546,17 +1562,17 @@ export function update(snapshot) {
   const vaultX = halfW - 2.4;
   const vaultGroup = new THREE.Group();
   vaultGroup.userData = { type: "tournamentDesk" };
-  const counter = meshWO(new RoundedBoxGeometry(2.0, 1.0, 0.7, 3, 0.08), COLORS.wood, 1.03);
+  const counter = meshWO(new RoundedBoxGeometry(2.0, 1.0, 0.7, 3, 0.08), PAL.wood, 1.03);
   counter.position.set(vaultX, 0.5, zWall + 0.4);
   const cage = plain(new RoundedBoxGeometry(1.9, 1.0, 0.1, 2, 0.04), 0x8a8a9a);
   cage.position.set(vaultX, 1.6, zWall + 0.4);
-  const safe = meshWO(new RoundedBoxGeometry(0.9, 0.9, 0.7, 3, 0.08), COLORS.vault, 1.04);
+  const safe = meshWO(new RoundedBoxGeometry(0.9, 0.9, 0.7, 3, 0.08), PAL.vault, 1.04);
   safe.position.set(vaultX, 0.45, zWall - 0.4);
-  const dial = plain(new THREE.TorusGeometry(0.12, 0.028, 8, 16), COLORS.vaultTrim);
+  const dial = plain(new THREE.TorusGeometry(0.12, 0.028, 8, 16), PAL.vaultTrim);
   dial.position.set(vaultX, 0.5, zWall - 0.04);
   vaultGroup.add(counter, cage, safe, dial);
   for (let i = 0; i < 3; i++) {
-    const chip = plain(furnGeo.chipStack, [COLORS.chip, COLORS.chipRed, COLORS.chipBlue][i % 3]);
+    const chip = plain(furnGeo.chipStack, [PAL.chip, PAL.chipRed, PAL.chipBlue][i % 3]);
     chip.position.set(vaultX - 0.75 + i * 0.3, 1.12, zWall + 0.25);
     vaultGroup.add(chip);
   }
@@ -1612,8 +1628,8 @@ export function update(snapshot) {
   // ---------- 돌아다니는 직원 ----------
   clearGroup(groups.staff);
   const roamDefs = [
-    { id: "server", color: COLORS.serverShirt },
-    { id: "marketer", color: COLORS.marketerShirt },
+    { id: "server", color: PAL.serverShirt },
+    { id: "marketer", color: PAL.marketerShirt },
   ];
   let idx = 0;
   roamDefs.forEach((r) => {
@@ -2174,7 +2190,7 @@ function updateBubbles(dt, t) {
 
 export function chipBurst(colorHex) {
   if (!ready) return;
-  const color = colorHex || COLORS.chip;
+  const color = colorHex || PAL.chip;
   const cx = controls.target.x;
   const cz = controls.target.z;
   for (let i = 0; i < 8; i++) {
@@ -2195,7 +2211,7 @@ function formatCoinAmount(n) {
 
 function spawnTableCoin(tablePos, amount) {
   for (let i = 0; i < 2; i++) {
-    const coin = new THREE.Mesh(furnGeo.chipStack, toonMat(COLORS.chip, { transparent: true }));
+    const coin = new THREE.Mesh(furnGeo.chipStack, toonMat(PAL.chip, { transparent: true }));
     coin.scale.y = 0.4;
     coin.position.set(tablePos.x + (Math.random() - 0.5) * 0.8, 0.95, tablePos.z + (Math.random() - 0.5) * 0.5);
     groups.bursts.add(coin);
