@@ -55,6 +55,8 @@ globalThis.window = {};
 globalThis.document = { createElement: () => fakeCanvas, getElementById: () => host };
 globalThis.Image = FakeImage;
 globalThis.addEventListener = () => {};
+// 매니페스트(fetch)도 로컬 파일에서 읽어 준다
+globalThis.fetch = (u) => Promise.resolve({ json: () => JSON.parse(readFileSync(join(ROOT, u), "utf8")) });
 globalThis.performance = { now: () => 1500 };
 globalThis.requestAnimationFrame = (fn) => { frameFn = fn; return 1; };
 

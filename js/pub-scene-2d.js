@@ -98,6 +98,7 @@ const PubScene2D = (() => {
     gold: "#e8b44a", goldLo: "#a97c22",
   };
 
+  const MANIFEST = {};      // 테마 → { 이름: {w,h,axis} }  (에셋이 어느 축으로 그려졌는지)
   const SETS = {};          // 테마 → { 키: Image }
   const IMG = {};           // 기본(클래식) — 테마에 빠진 게 있으면 여기서 채운다
   let loaded = false;
@@ -106,6 +107,9 @@ const PubScene2D = (() => {
     if (SETS[name]) return Promise.resolve(SETS[name]);
     const bank = {};
     SETS[name] = bank;
+    fetch("assets/pack/" + name + "/manifest.json")
+      .then((r) => r.json()).then((j) => { MANIFEST[name] = j; })
+      .catch(() => {});
     return Promise.all(Object.keys(SRC).map((k) => new Promise((res) => {
       const im = new Image();
       im.onload = () => { bank[k] = im; res(); };
@@ -172,10 +176,20 @@ const PubScene2D = (() => {
   /** 바닥에 놓는 물건. 그림 폭이 (발자국 가로+세로)×16 이므로,
    *  발자국의 남쪽 꼭짓점 = 중심에서 아래로 (폭/4) 만큼 내려간 지점이다.
    *  이 규칙 하나로 모든 가구가 제 칸에 정확히 앉는다 — 물건마다 보정값을 주던 걸 없앴다. */
-  function blitProp(key, cx, cy, flip) {
+  /** 그림이 그려진 축(매니페스트)과 놓는 축이 다르면 좌우반전한다.
+   *  벽마다 가구가 제각각 방향을 보던 원인이 이것이었다 — 이제 데이터가 정한다. */
+  function artAxis(key) {
+    const m = MANIFEST[theme] || MANIFEST.classic;
+    return (m && m[key] && m[key].axis) || "sym";
+  }
+  function needFlip(key, placeAxis) {
+    const a = artAxis(key);
+    return a !== "sym" && placeAxis && a !== placeAxis;
+  }
+  function blitProp(key, cx, cy, placeAxis) {
     const im = A(key);
     if (!im) return null;
-    return blit(key, sx(cx, cy), sy(cx, cy) + (im.width * S) / 4, flip);
+    return blit(key, sx(cx, cy), sy(cx, cy) + (im.width * S) / 4, needFlip(key, placeAxis));
   }
 
   /** 평면 그림을 아이소 벽 기울기에 눕힌다. dir +1 = 북쪽 벽(gy=0), -1 = 서쪽 벽(gx=0). */
@@ -189,12 +203,17 @@ const PubScene2D = (() => {
     }
   }
   // 311 간판은 이미 북쪽 벽 기울기로 그려져 있다 — 또 눕히면 두 배로 꺾인다.
-  const PRESHEARED = { sign: 1 };
+  /** 벽에 거는 그림.
+   *  정면으로 그려진 것(axis=sym)은 벽 기울기에 눕히고,
+   *  이미 기울어져 그려진 것은 그대로 걸되 반대쪽 벽에서는 좌우반전한다.
+   *  dir +1 = 북쪽 벽(gx 방향), -1 = 서쪽 벽(gy 방향). */
   function hangWall(key, cx, cy, dir) {
-    const native = PRESHEARED[key];
-    if (!native) return blitWall(key, cx, cy, dir);
+    const a = artAxis(key);
+    if (a === "sym") return blitWall(key, cx, cy, dir);
     const im = A(key);
-    if (im) blit(key, cx, cy + (im.height * S) / 2, native !== dir);
+    if (!im) return;
+    const wantAxis = dir > 0 ? "gx" : "gy";
+    blit(key, cx, cy + (im.height * S) / 2, a !== wantAxis);
   }
 
   /** 아이소 박스. 소파·낮은 벽 같은 건 에셋보다 코드가 정확하다. */
@@ -282,7 +301,7 @@ const PubScene2D = (() => {
   // 좌석은 **화면 좌표 타원**으로 잡는다. 격자에서 원을 그리면 화면에서는 대각선으로
   // 늘어난 타원이 되어, 위쪽 자리가 테이블에 파묻히고 옆자리는 너무 멀어진다.
   // 테이블 그림이 화면에서 128×96 이므로 그보다 한 바퀴 큰 타원에 앉힌다.
-  const SIT_K = 0.78;                  // 사람은 의자보다 조금 안쪽
+  const SIT_K = 0.95;                  // 사람은 의자 바로 앞 — 테이블 가장자리에 붙어야 "앉았다"로 읽힌다                  // 사람은 의자보다 조금 안쪽
   /** 좌석 타원의 화면 반지름 — 테이블 그림에서 직접 뽑는다.
    *  고정값으로 두면 테마마다 테이블 폭이 달라질 때 사람이 테이블 위에 올라간다. */
   function seatRX() {
@@ -382,7 +401,7 @@ const PubScene2D = (() => {
     slots.filter((x) => x.owned).forEach((t) => {
       // 딜러는 테이블 북쪽에 서서 손님 쪽(+gy)을 본다
       if (s.assignedDealers && s.assignedDealers[t.i]) {
-        const [dgx, dgy] = seatAt(t.cx, t.cy, -90, 1.25);
+        const [dgx, dgy] = seatAt(t.cx, t.cy, -90, 1.62);   // 딜러는 테이블 뒤로 한 걸음
         people.push({ gx: dgx, gy: dgy, mode: "staff",
                       sprite: hash(t.i) % 3 === 0 ? "pd_deal" : "pd_stand",
                       hx: 0, hy: 1, seed: t.i * 17 + 3 });
@@ -439,11 +458,11 @@ const PubScene2D = (() => {
 
     // ── 화분 · 소품 ──
     const props = [];
-    const P = (a, cx, cy, flip) => props.push({ a, cx, cy, flip });
+    const P = (a, cx, cy, axis) => props.push({ a, cx, cy, axis: axis || "gx" });
     P("palm", 7.0, 0.6); P("palm", 0.6, 0.6); P("palm", W - 0.6, D - 0.7);
     const plantLv = (s.decor && s.decor.plant) || 0;
     // 세 번째 값 = 좌우반전 여부 (세로줄에 놓는 것은 원본, 가로줄은 반전)
-    const plantSpots = [[5.6, 0.6, true], [2.8, 0.6, true], [9.8, 3.4, false],
+    const plantSpots = [[5.6, 0.6, "gx"], [2.8, 0.6, "gx"], [9.8, 3.4, "gy"],
                         [7.4, D - 0.8, true], [2.6, 9.6, false], [11.4, 6.4, false]];
     for (let i = 0; i < Math.min(plantLv, plantSpots.length); i++) {
       const sp = plantSpots[i];
@@ -474,8 +493,8 @@ const PubScene2D = (() => {
 
     // ── 바깥 ── 도심 블록: 좁은 보도 + 도로. 잔디는 두지 않는다.
     const out = [];
-    const O = (a, cx, cy, flip) => out.push({ a, cx, cy, flip });
-    const X = true;   // 가로(gx) 줄에는 좌우반전본 (에셋이 +gy 방향으로 그려져 있다)
+    const O = (a, cx, cy, axis) => out.push({ a, cx, cy, axis: axis || "gy" });
+    const X = "gx";   // 가로줄에 놓는다 — 그림 축이 다르면 blitProp 이 알아서 뒤집는다
     O("board", entrance.gx + 1.8, D + 1.4);
     for (let g = 1.2; g < W + 1; g += 3.4) O("flower_bed", g, D + 2.4, X);
     for (let g = 0.5; g < W; g += 4.6) O("street_lamp", g, D + 3.1);
@@ -637,7 +656,7 @@ const PubScene2D = (() => {
 
   /** 소파 — 에셋 벤치보다 덩치가 커서 라운지가 라운지답게 보인다. */
   function booth(cx, cy) {
-    if (A("sofa")) blitProp("sofa", cx, cy);
+    if (A("sofa")) blitProp("sofa", cx, cy, "gx");
     else isoBox(cx, cy, 1.9, 0.85, 8 * S, PAL.leather);       // 에셋이 없으면 박스로라도
     isoBox(cx + 1.45, cy + 0.35, 0.7, 0.7, 11 * S, PAL.wood); // 옆 탁자
   }
@@ -735,7 +754,7 @@ const PubScene2D = (() => {
     ctx.clearRect(0, 0, VW, VH);
 
     drawGround();
-    for (const o of L.outBack) blitProp(o.a, o.cx, o.cy, o.flip);
+    for (const o of L.outBack) blitProp(o.a, o.cx, o.cy, o.axis);
 
     drawBackWalls();
     marquee(Math.min(3.4, ROOM.w - 3), 1);
@@ -745,7 +764,7 @@ const PubScene2D = (() => {
     for (const g of L.sconceW) sconce(sx(0, g), sy(0, g) - WALL_H + 28 * S, -1);
 
     // 바닥 데칼 — 러그 · 레드카펫
-    for (const s of L.slots) if (s.owned) blitProp("rug_rect", s.cx, s.cy);
+    for (const s of L.slots) if (s.owned) blitProp("rug_rect", s.cx, s.cy, "gy");
     {
       const e = L.entrance;
       const strip = (mw, ext, col) => poly([
@@ -761,10 +780,10 @@ const PubScene2D = (() => {
 
     for (const o of L.outFront) {
       const px = Math.round(sx(o.cx, o.cy)), py = Math.round(sy(o.cx, o.cy));
-      add(o.cx + o.cy + 0.01, () => blitProp(o.a, o.cx, o.cy, o.flip));
+      add(o.cx + o.cy + 0.01, () => blitProp(o.a, o.cx, o.cy, o.axis));
     }
     if (L.bar) {
-      for (const gy of L.bar.shelves) add(0.35 + gy - 0.5, () => blitProp("back_bar", 0.35, gy, true));
+      for (const gy of L.bar.shelves) add(0.35 + gy - 0.5, () => blitProp("back_bar", 0.35, gy, "gy"));
       // 카운터 에셋은 2칸짜리 모듈이라 길이만큼 이어 붙인다(테마마다 같은 자리에 다른 그림).
       {
         const n = Math.max(1, Math.round(L.bar.len / 2));
@@ -772,19 +791,19 @@ const PubScene2D = (() => {
         for (let i = 0; i < n; i++) {
           const gy = gy0 + i * 2;
           add(L.bar.cx + gy, () => {
-            const r = A("bar_straight") ? blitProp("bar_straight", L.bar.cx, gy, true)
+            const r = A("bar_straight") ? blitProp("bar_straight", L.bar.cx, gy, "gy")
                                         : barCounter(L.bar.cx, gy, 2);
             if (r) hits.push({ x: r.x, y: r.y, w: r.w, h: r.h, info: { type: "fixture", id: "bar" } });
           });
         }
       }
-      for (const gy of L.bar.stools) add(2.7 + gy - 0.1, () => blitProp("stool", 2.7, gy));
+      for (const gy of L.bar.stools) add(2.7 + gy - 0.1, () => blitProp("stool", 2.7, gy, "gy"));
     }
     for (const b of L.booths) add(b[0] + b[1], () => booth(b[0], b[1]));
     for (const p of L.props) {
       const px = sx(p.cx, p.cy), py = sy(p.cx, p.cy);
       add(p.cx + p.cy, () => {
-        const r = blitProp(p.a, p.cx, p.cy, p.flip);
+        const r = blitProp(p.a, p.cx, p.cy, p.axis);
         if (r && p.fixture) hits.push({ x: r.x, y: r.y, w: r.w, h: r.h, info: { type: "fixture", id: p.fixture } });
       });
     }
@@ -799,14 +818,14 @@ const PubScene2D = (() => {
       }
       SEAT_ANGLE.forEach((deg) => {
         const a = (deg * Math.PI) / 180;
-        const [gx, gy] = seatAt(s.cx, s.cy, deg, 1);
+        const [gx, gy] = seatAt(s.cx, s.cy, deg, 1.08);
         // 의자는 앉은 사람보다 한쪽만 앞이다 — 가까운 쪽(아래)은 등받이가 사람을 가리고,
         // 먼 쪽(위)은 사람 뒤에 놓인다. 그래야 "앉아 있다"로 보인다.
         const near = Math.sin(a) > 0;
-        add(gx + gy + (near ? 0.12 : -0.12), () => blitProp("chair", gx, gy, Math.cos(a) < 0));
+        add(gx + gy + (near ? 0.12 : -0.12), () => blitProp("chair", gx, gy));
       });
       add(s.cx + s.cy, () => {
-        const r = blitProp("table_6", s.cx, s.cy);
+        const r = blitProp("table_6", s.cx, s.cy, "gy");
         if (r) hits.push({ x: r.x, y: r.y, w: r.w, h: r.h, info: { type: "table", index: s.i } });
       });
     }
@@ -820,7 +839,7 @@ const PubScene2D = (() => {
     if (L.host) {
       const px = sx(L.host.cx, L.host.cy), py = sy(L.host.cx, L.host.cy);
       add(L.host.cx + L.host.cy, () => {
-        const r = blitProp("board", L.host.cx, L.host.cy);
+        const r = blitProp("board", L.host.cx, L.host.cy, "gx");
         if (r) hits.push({ x: r.x, y: r.y, w: r.w, h: r.h, info: { type: "tournament" } });
       });
     }
@@ -844,7 +863,7 @@ const PubScene2D = (() => {
     frontWall(L, add);
     {
       const e = L.entrance;
-      add(e.gx + e.gy + 0.6, () => blitProp("door", e.gx, e.gy, true));
+      add(e.gx + e.gy + 0.6, () => blitProp("door", e.gx, e.gy, "gy"));
     }
 
     items.sort((a, b) => a.d - b.d);
@@ -860,9 +879,9 @@ const PubScene2D = (() => {
       blit("pendant", px, ly);
       glow(px, ly + 3 * S, 14 * S, 0.75);
     }
+    // 테이블별 수익은 모두 같은 값이라 네 번 띄우면 화면만 어지럽다 — 한 곳에만 띄운다.
     if (snap && snap.showTableIncome && snap.perTableIncome > 0) {
-      for (const s of L.slots) {
-        if (!s.owned) continue;
+      for (const s of L.slots.filter((x) => x.owned).slice(0, 1)) {
         incomeTag(Math.round(sx(s.cx, s.cy)), Math.round(sy(s.cx, s.cy)) - 54 * S, snap.perTableIncome);
       }
     }

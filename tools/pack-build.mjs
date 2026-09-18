@@ -68,9 +68,9 @@ function pieces(file, cols, rows) {
 }
 
 /** 목표 폭(또는 키)에 맞춰 줄이고 색을 평탄화한다. */
-function bake(img, box, { width, height, hmax }) {
+function bake(img, box, { width, height, hmax, scale }) {
   let piece = crop(img, box);
-  let k = width ? width / piece.width : height / piece.height;
+  let k = scale || (width ? width / piece.width : height / piece.height);
   // 폭으로 맞췄는데 세로가 상한을 넘으면 세로 기준으로 다시 잡는다
   if (hmax && piece.height * k > hmax) k = hmax / piece.height;
   const dw = Math.max(1, Math.round(piece.width * k));
@@ -78,11 +78,34 @@ function bake(img, box, { width, height, hmax }) {
   return { ...posterize(shrink(piece, dw, dh), 12), w: dw, h: dh };
 }
 
+/** 바닥선 기울기로 그림이 어느 축으로 그려졌는지 잰다.
+ *  오른쪽이 더 아래면 +gx(오른쪽 아래로 뻗는 물건), 더 위면 +gy. 차이가 작으면 대칭.
+ *  렌더러는 이 값을 보고 반대 축에 놓을 때 좌우반전한다 — 벽 가구 방향이 제각각이던 원인. */
+function axisOf(img) {
+  const { width: w, height: h, data } = img;
+  const bot = [];
+  for (let x = 0; x < w; x++) {
+    let b = -1;
+    for (let y = 0; y < h; y++) if (data[(y * w + x) * 4 + 3] > 40) b = y;
+    bot.push(b);
+  }
+  const cols = bot.map((v, i) => i).filter((i) => bot[i] >= 0);
+  if (cols.length < 6) return "sym";
+  const q = Math.max(1, Math.round(cols.length * 0.2));
+  const avg = (arr) => arr.reduce((s2, i) => s2 + bot[i], 0) / arr.length;
+  const d = avg(cols.slice(-q)) - avg(cols.slice(0, q));
+  const rel = d / Math.max(1, h);
+  if (rel > 0.08) return "gx";
+  if (rel < -0.08) return "gy";
+  return "sym";
+}
+
 let made = 0, missing = [];
 for (const theme of THEMES) {
   const propDir = join(ROOT, "assets/pack", theme, "props");
   const actDir = join(ROOT, "assets/pack", theme, "actors");
   if (WRITE) { mkdirSync(propDir, { recursive: true }); mkdirSync(actDir, { recursive: true }); }
+  const manifest = {};
 
   // ── 가구 ──
   for (const kind of Object.keys(PROP_ORDER)) {
@@ -92,6 +115,7 @@ for (const theme of THEMES) {
     PROP_ORDER[kind].forEach((name, i) => {
       if (!boxes[i]) return;
       const out = bake(img, boxes[i], { width: widthOf(name), hmax: heightOf(name) });
+      manifest[name] = { w: out.w, h: out.h, axis: axisOf(out) };
       if (WRITE) writeFileSync(join(propDir, name + ".png"), encodePng(out.w, out.h, out.data));
       made++;
     });
@@ -99,16 +123,23 @@ for (const theme of THEMES) {
   }
 
   // ── 사람 ──
+  // 칸마다 제 바운딩 박스를 28px에 맞추면 안 된다. 팔을 든 그림은 박스가 커서 몸이
+  // 작아지고, 앉은 그림은 박스가 작아서 몸이 커진다 — 그래서 키가 제각각으로 보였다.
+  // 시트는 한 배율로 그려져 있으니 **서 있는 칸 하나에서 배율을 구해 24칸 전부에 쓴다.**
   const castFile = join(RAW, "cast", theme + ".png");
   if (!existsSync(castFile)) { missing.push("cast/" + theme); continue; }
   const { img, boxes, n } = pieces(castFile, 4, 6);
-  CAST.forEach(([name, kindOf], i) => {
+  const refIdx = CAST.findIndex(([nm]) => nm === "a_stand_f");
+  const refBox = boxes[refIdx] || boxes[0];
+  const k = ACTOR.stand / (refBox.y1 - refBox.y0 + 1);
+  CAST.forEach(([name], i) => {
     if (!boxes[i]) return;
-    const out = bake(img, boxes[i], { height: ACTOR[kindOf] });
+    const out = bake(img, boxes[i], { scale: k });
     if (WRITE) writeFileSync(join(actDir, name + ".png"), encodePng(out.w, out.h, out.data));
     made++;
   });
-  console.log(`  ${theme}/cast     성분 ${String(n).padStart(2)} → 24개`);
+  console.log(`  ${theme}/cast     성분 ${String(n).padStart(2)} → 24개 (배율 ${k.toFixed(3)} 일괄)`);
+  if (WRITE) writeFileSync(join(ROOT, "assets/pack", theme, "manifest.json"), JSON.stringify(manifest, null, 1));
 }
 
 console.log(`\n${made}개 ${WRITE ? "저장" : "(--write 필요)"} — assets/pack/<테마>/{props,actors}`);
