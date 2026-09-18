@@ -244,8 +244,37 @@ const GAME_DATA = {
   deployment: {
     maxDeployed: 10,
     presets: 5, // 편성 프리셋(팀) 개수 — 도감 위 스테이지에서 번호로 전환한다
-    synergyPerRole: 0.05, // 배치된 인원 중 서로 다른 role 1종류당 +5% (곱연산)
+    synergyPerTier: 0.05, // 활성화된 특성 시너지 단계 1당 장착효과 +5% (곱연산)
     fullSquadBonus: 0.2, // 정확히 10명 전원 배치 시 추가 +20%
+  },
+
+  // ---------- 특성 시너지 ----------
+  // 운영진마다 특성이 2개씩 있고(역할에서 1개 + 고유 1개), 편성한 10명 중 같은 특성을 가진 사람이
+  // tiers.need명 이상 모이면 그 단계 보너스가 매장 전체에 붙는다(롤토체스/쿠키런식 조합 짜기).
+  // effect: income=전체 수익 / fixture=바·시설 수익 / visitor=방문객 / power=대회 전투력
+  //         bubble=💎 말풍선 빈도 / offline=오프라인 효율
+  traits: {
+    tierNames: ["1단계", "2단계", "3단계"],
+    list: [
+      // 10명 × 특성 2개 = 20칸을 6종류가 나눠 가지므로, 한 특성을 3/5/7명까지 모으려면 일부러 몰아줘야 한다
+      { id: "dealing", name: "딜링", emoji: "🃏", color: "#4fa3ff", effect: "income", effectLabel: "전체 수익", desc: "카드를 다루는 손이 빠르다", tiers: [{ need: 3, bonus: 0.1 }, { need: 5, bonus: 0.25 }, { need: 7, bonus: 0.5 }] },
+      { id: "social", name: "처세", emoji: "🗣️", color: "#ff8fab", effect: "visitor", effectLabel: "방문객", desc: "누구와도 금방 친해진다", tiers: [{ need: 3, bonus: 0.15 }, { need: 5, bonus: 0.35 }, { need: 7, bonus: 0.7 }] },
+      { id: "service", name: "접객", emoji: "🍸", color: "#7bc67e", effect: "fixture", effectLabel: "바·시설 수익", desc: "손님 잔이 비는 걸 못 본다", tiers: [{ need: 3, bonus: 0.2 }, { need: 5, bonus: 0.5 }, { need: 7, bonus: 1.0 }] },
+      { id: "gambler", name: "승부사", emoji: "🎲", color: "#ffb400", effect: "power", effectLabel: "대회 전투력", desc: "판이 커질수록 강해진다", tiers: [{ need: 3, bonus: 0.12 }, { need: 5, bonus: 0.3 }, { need: 7, bonus: 0.65 }] },
+      { id: "host", name: "흥", emoji: "🎉", color: "#c86bff", effect: "bubble", effectLabel: "💎 말풍선 빈도", desc: "테이블 분위기를 띄운다", tiers: [{ need: 3, bonus: 0.2 }, { need: 5, bonus: 0.5 }, { need: 7, bonus: 1.0 }] },
+      { id: "brain", name: "두뇌", emoji: "🧠", color: "#62d0f0", effect: "offline", effectLabel: "오프라인 효율", desc: "없을 때도 매장이 굴러가게 만든다", tiers: [{ need: 3, bonus: 0.06 }, { need: 5, bonus: 0.14 }, { need: 7, bonus: 0.28 }] },
+    ],
+    // 역할에서 오는 기본 특성 (나머지 1개는 id를 해시해 고정으로 정해진다 — 같은 사람은 항상 같은 특성)
+    roleTrait: { 영업: "dealing", 서비스: "service", 이벤트: "host", 인맥: "social" },
+    // 특정 운영진의 특성을 손으로 정하고 싶으면 여기에 { 아이디: ["dealing", "gambler"] } 형태로 적는다
+    overrides: {
+      minhyuk: ["dealing", "gambler"], // 강민혁 — 전설의 영업통
+      taegyu: ["social", "gambler"], // 정태규 — 인맥왕
+      hyeseo: ["service", "social"], // 김혜서 — 취향을 기억하는 감각파
+      seongmin: ["host", "gambler"], // 손성민 — 판을 키우는 이벤트 기획자
+      hyeyeon: ["service", "brain"], // 윤혜연 — 디테일에 강함
+      hyunmo: ["dealing", "brain"], // 구현모 — 전설의 투자자
+    },
   },
 
   // ---------- 영구 업그레이드(다이아) — 리뉴얼(프레스티지)해도 절대 초기화되지 않는다 ----------

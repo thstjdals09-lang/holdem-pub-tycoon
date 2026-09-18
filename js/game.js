@@ -291,12 +291,60 @@
     refresh();
   }
   const isDeployed = (id) => deployedIds().includes(id);
-  // 배치된 인원끼리 서로 다른 역할(role)을 고루 갖추면 시너지, 정원(10명)을 꽉 채우면 추가 보너스
-  function deploymentSynergyMultiplier() {
-    const ids = deployedIds();
+  // ---------- 특성 시너지 ----------
+  // 운영진마다 특성 2개: 역할에서 오는 것 + id를 해시해 고정으로 정해지는 것(같은 사람은 항상 같은 특성).
+  // D.traits.overrides에 적어두면 그 사람만 손으로 정한 특성을 쓴다.
+  const traitDef = (id) => D.traits.list.find((t) => t.id === id);
+  const traitCache = new Map();
+  function dealerTraits(dealerId) {
+    if (traitCache.has(dealerId)) return traitCache.get(dealerId);
+    const def = rosterDef(dealerId);
+    let traits = D.traits.overrides[dealerId];
+    if (!traits) {
+      const primary = D.traits.roleTrait[def?.role] || D.traits.list[0].id;
+      const rest = D.traits.list.map((t) => t.id).filter((t) => t !== primary);
+      let h = 0;
+      for (let i = 0; i < dealerId.length; i++) h = (h * 33 + dealerId.charCodeAt(i)) >>> 0;
+      traits = [primary, rest[h % rest.length]];
+    }
+    traitCache.set(dealerId, traits);
+    return traits;
+  }
+
+  // 편성한 인원의 특성별 인원 수
+  function traitCounts(ids = deployedIds()) {
+    const counts = {};
+    ids.forEach((id) => dealerTraits(id).forEach((t) => (counts[t] = (counts[t] || 0) + 1)));
+    return counts;
+  }
+  // 특성별 현재 단계(0=미달) — { tier, bonus, next } 형태
+  function traitTier(traitId, counts = traitCounts()) {
+    const def = traitDef(traitId);
+    const n = counts[traitId] || 0;
+    let tier = 0;
+    let bonus = 0;
+    def.tiers.forEach((t, i) => {
+      if (n >= t.need) {
+        tier = i + 1;
+        bonus = t.bonus;
+      }
+    });
+    return { def, count: n, tier, bonus, next: def.tiers[tier] || null };
+  }
+  // 종류별 시너지 합계 — income/fixture/visitor/power/bubble/offline
+  function traitBonus(effect, counts = traitCounts()) {
+    let total = 0;
+    D.traits.list.forEach((t) => {
+      if (t.effect === effect) total += traitTier(t.id, counts).bonus;
+    });
+    return total;
+  }
+  const activeTierSum = (counts = traitCounts()) => D.traits.list.reduce((sum, t) => sum + traitTier(t.id, counts).tier, 0);
+
+  // 장착효과 배율 — 시너지 단계가 쌓일수록, 정원(10명)을 꽉 채우면 추가로 커진다
+  function deploymentSynergyMultiplier(ids = deployedIds()) {
     if (ids.length === 0) return 1;
-    const roles = new Set(ids.map((id) => rosterDef(id)?.role).filter(Boolean));
-    let mult = 1 + roles.size * D.deployment.synergyPerRole;
+    let mult = 1 + activeTierSum(traitCounts(ids)) * D.deployment.synergyPerTier;
     if (ids.length >= D.deployment.maxDeployed) mult *= 1 + D.deployment.fullSquadBonus;
     return mult;
   }
@@ -341,7 +389,7 @@
       list.splice(idx, 1);
     } else {
       if (list.length >= D.deployment.maxDeployed) {
-        toast(`⚠️ 동시 배치는 최대 ${D.deployment.maxDeployed}명까지예요`);
+        toast(`⚠️ 편성은 최대 ${D.deployment.maxDeployed}명까지예요`);
         return;
       }
       list.push(dealerId);
@@ -401,6 +449,7 @@
     mult += D.themeUpgrade.bonusPerLevel * themeLevel();
     mult += permanentBonus("incomeCore");
     mult += trophyBonus("hallOfFame");
+    mult += traitBonus("income"); // 🃏 딜링 시너지
     if (vipActive()) mult *= 1 + D.shop.vip.incomeBonusPct / 100;
     mult *= customerFlowMultiplier();
     mult *= prestigeMultiplier();
@@ -426,7 +475,8 @@
     const marketerLevel = state.staff.marketer || 0;
     const marketerMult = 1 + (marketerStaff?.effect.value ?? 0) * marketerLevel;
     const base = c.baseVisitorsPerHour + state.tables * c.visitorsPerTable;
-    return Math.round(base * marketerMult * (1 + dealerEffectTotal("visitor")));
+    // 🗣️ 처세 시너지도 방문객을 늘린다
+    return Math.round(base * marketerMult * (1 + dealerEffectTotal("visitor") + traitBonus("visitor")));
   }
   function customerFlowMultiplier() {
     const c = D.customerFlow;
@@ -463,7 +513,7 @@
     D.fixtures.forEach((f) => {
       if (f.incomePerLevel) income += f.incomePerLevel * state.fixtures[f.id];
     });
-    return income * (1 + dealerEffectTotal("fixture"));
+    return income * (1 + dealerEffectTotal("fixture") + traitBonus("fixture")); // 🍸 접객 시너지
   }
 
   const perTableIncome = () =>
@@ -494,6 +544,7 @@
     });
     eff += permanentBonus("offlineCore");
     eff += dealerEffectTotal("offline");
+    eff += traitBonus("offline"); // 🧠 두뇌 시너지
     return Math.min(D.offline.maxEfficiency, eff);
   }
 
@@ -959,7 +1010,8 @@
   function scheduleNextBubble(now) {
     const b = D.diamondBubble;
     const base = b.minIntervalMs + Math.random() * (b.maxIntervalMs - b.minIntervalMs);
-    nextBubbleAt = now + base / (1 + dealerEffectTotal("diamond"));
+    // 🎉 흥 시너지 + 운영진 "다이아 말풍선" 효과만큼 간격이 짧아진다
+    nextBubbleAt = now + base / (1 + dealerEffectTotal("diamond") + traitBonus("bubble"));
   }
   function tickDiamondBubble() {
     if (!window.PubScene3D || !window.PubScene3D.spawnDiamondBubble || document.hidden) return;
@@ -1002,7 +1054,8 @@
     });
     crew *= deploymentSynergyMultiplier();
     const pub = state.tables * T.tablePower + state.tableLevel * T.tableLevelPower;
-    const training = 1 + trophyBonus("training");
+    // 🎲 승부사 시너지 + 🏆 대회 훈련
+    const training = (1 + trophyBonus("training")) * (1 + traitBonus("power"));
     return { crew: Math.round(crew), pub, training, total: Math.round((crew + pub) * training) };
   }
   const tournamentPower = () => tournamentPowerParts().total;
@@ -1580,29 +1633,39 @@
     refresh();
   }
 
-  // 빠른 배치: 역할별 최강 1명씩(시너지) + 나머지는 전투력 순으로 채운 조합과, 그냥 전투력 상위 10명 조합 중
-  // 장착효과 합 × 시너지가 더 큰 쪽을 고른다
+  // 자동 편성: 전투력 상위 조합과 특성 시너지를 노린 조합들을 만들어 보고 점수가 가장 높은 걸 고른다
   function quickDeploy() {
     const owned = ownedDealerIds().sort((a, b) => dealerBonus(b) - dealerBonus(a));
     if (!owned.length) {
-      toast("🧑‍💼 배치할 운영진이 없어요. 먼저 스카우트해보세요");
+      toast("🧑‍💼 편성할 운영진이 없어요. 먼저 스카우트해보세요");
       return;
     }
     const max = D.deployment.maxDeployed;
+    // 점수 = 장착효과 합 × 시너지 배율 × 수익계 특성 보너스
+    // (특성마다 오르는 값이 달라서 정확히는 못 비교하니, 수익에 직접 닿는 쪽에 가중치를 둔다)
     const score = (ids) => {
-      const roles = new Set(ids.map((id) => rosterDef(id).role));
-      let mult = 1 + roles.size * D.deployment.synergyPerRole;
-      if (ids.length >= max) mult *= 1 + D.deployment.fullSquadBonus;
-      return ids.reduce((s, id) => s + dealerBonus(id), 0) * mult;
+      const counts = traitCounts(ids);
+      const value = 1 + traitBonus("income", counts) + 0.5 * traitBonus("fixture", counts) + 0.5 * traitBonus("visitor", counts);
+      return ids.reduce((s, id) => s + dealerBonus(id), 0) * deploymentSynergyMultiplier(ids) * value;
     };
-    const topOnly = owned.slice(0, max);
-    const bestPerRole = [];
-    Object.keys(D.dealerEffects.equipByRole).forEach((role) => {
-      const best = owned.find((id) => rosterDef(id).role === role);
-      if (best) bestPerRole.push(best);
+    const fill = (base) => [...base, ...owned.filter((id) => !base.includes(id))].slice(0, max);
+    const candidates = [owned.slice(0, max)];
+    // 특성별로 그 특성을 가진 최강 인원부터 몰아주는 조합도 후보에 넣는다(3단계까지 노릴 수 있게)
+    D.traits.list.forEach((t) => {
+      candidates.push(fill(owned.filter((id) => dealerTraits(id).includes(t.id)).slice(0, 6)));
     });
-    const diverse = [...bestPerRole, ...owned.filter((id) => !bestPerRole.includes(id))].slice(0, max);
-    state.squads[state.activeSquad] = score(diverse) >= score(topOnly) ? diverse : topOnly;
+    // 특성 2종류를 같이 노리는 조합
+    D.traits.list.forEach((t1) => {
+      D.traits.list.forEach((t2) => {
+        if (t1.id >= t2.id) return;
+        const pick = [
+          ...owned.filter((id) => dealerTraits(id).includes(t1.id)).slice(0, 4),
+          ...owned.filter((id) => dealerTraits(id).includes(t2.id)).slice(0, 4),
+        ];
+        candidates.push(fill([...new Set(pick)]));
+      });
+    });
+    state.squads[state.activeSquad] = candidates.reduce((best, c) => (score(c) > score(best) ? c : best));
     sceneDirty = true;
     toast(`⚡ ${state.activeSquad + 1}번 편성 완료 · ${deployedIds().length}명 · 시너지 +${Math.round((deploymentSynergyMultiplier() - 1) * 100)}%`);
     renderCodexTab();
@@ -1965,7 +2028,7 @@
     );
     const n = deployedIds().length;
     const synergyPct = Math.round((deploymentSynergyMultiplier() - 1) * 100);
-    setText($("deploy-summary"), `🧑‍💼 배치 ${n}/${D.deployment.maxDeployed}명 · 시너지 +${synergyPct}% (도감에서 배치 변경)`);
+    setText($("deploy-summary"), `🧑‍💼 편성 ${n}/${D.deployment.maxDeployed}명 · 시너지 +${synergyPct}% (도감에서 변경)`);
     renderAdButtons();
   }
 
@@ -1999,7 +2062,7 @@
     setText($("tourney-power"), formatNumber(parts.total));
     setText(
       $("tourney-power-detail"),
-      `배치 운영진 ${formatNumber(parts.crew)} + 매장(테이블·리모델링) ${formatNumber(parts.pub)}${parts.training > 1 ? ` · 훈련 +${Math.round((parts.training - 1) * 100)}%` : ""}`
+      `편성 운영진 ${formatNumber(parts.crew)} + 매장(테이블·리모델링) ${formatNumber(parts.pub)}${parts.training > 1 ? ` · 훈련 +${Math.round((parts.training - 1) * 100)}%` : ""}`
     );
 
     // 참가 중인 대회 / 결과
@@ -2185,6 +2248,7 @@
             ${isNew ? '<span class="badge-new">NEW</span>' : ""}
             <img src="${DealerPortraits.url(d.id, d.rarity)}" alt="${d.name}" loading="lazy" />
             ${own ? "" : '<span class="codex-lock">🔒</span>'}
+            <div class="codex-traits">${dealerTraits(d.id).map((t) => `<span title="${traitDef(t).name}">${traitDef(t).emoji}</span>`).join("")}</div>
             <div class="codex-name">${own ? d.name : "???"}</div>
             <div class="codex-stars">${own ? starsHtml(own.star) : ""}</div>
             ${own ? `<div class="shard-bar ${upReady ? "ready" : ""}"><i style="width:${shardPct}%"></i></div>` : ""}
@@ -2231,6 +2295,24 @@
     );
     slots.querySelectorAll(".squad-slot.empty").forEach((el) =>
       el.addEventListener("click", () => toast("🧑‍💼 아래 목록에서 운영진을 눌러 편성하세요"))
+    );
+
+    // 특성 시너지 칩 — 활성화된 것부터, 미달이면 몇 명 더 필요한지 보여준다
+    const counts = traitCounts(deployed);
+    const tiers = D.traits.list
+      .map((t) => traitTier(t.id, counts))
+      .sort((a, b) => b.tier - a.tier || b.count - a.count);
+    setHtml(
+      $("squad-synergies"),
+      tiers
+        .map((s) => {
+          const label = s.tier
+            ? `${s.def.effectLabel} +${Math.round(s.bonus * 100)}%`
+            : `${s.def.effectLabel} +${Math.round(s.next.bonus * 100)}%까지 ${s.next.need - s.count}명`;
+          return `<span class="synergy-chip ${s.tier ? "on" : ""}" style="--tc:${s.def.color}" title="${s.def.name} · ${s.def.desc} · ${label}">
+            ${s.def.emoji} ${s.def.name} <b>${s.count}${s.tier ? "" : `/${s.next.need}`}</b>${s.tier ? `<i class="synergy-tier">${s.tier}</i><small>+${Math.round(s.bonus * 100)}%</small>` : ""}</span>`;
+        })
+        .join("")
     );
 
     const presets = $("squad-presets");
@@ -2753,6 +2835,22 @@
     const ownedType = ownedEffectType(dealerId);
     const equip = own ? equipEffect(dealerId) : { type: equipType, value: r.bonus * E.typeScale[equipType] };
     const owned = own ? ownedEffect(dealerId) : { type: ownedType, value: r.bonus * E.ownedScale * E.typeScale[ownedType] };
+    // 특성 — 지금 편성에서 같은 특성이 몇 명인지, 다음 단계까지 몇 명 남았는지 같이 보여준다
+    const counts = traitCounts();
+    const traitsHtml = `
+      <div class="dealer-traits">
+        ${dealerTraits(dealerId)
+          .map((tid) => {
+            const s = traitTier(tid, counts);
+            const sub = s.tier
+              ? `${s.tier}단계 · ${s.def.effectLabel} +${Math.round(s.bonus * 100)}%`
+              : s.next
+              ? `${s.next.need - s.count}명 더 모으면 ${s.def.effectLabel} +${Math.round(s.next.bonus * 100)}%`
+              : "";
+            return `<span class="trait-chip ${s.tier ? "on" : ""}" style="--tc:${s.def.color}">${s.def.emoji} ${s.def.name} <b>${s.count}</b><small>${sub}</small></span>`;
+          })
+          .join("")}
+      </div>`;
     const effectsHtml = `
       <div class="dealer-effects">
         <div class="dealer-effect"><span class="dealer-effect-tag">보유효과</span>${effectLabel(owned)}<small>보유만 해도 적용</small></div>
@@ -2763,6 +2861,7 @@
         <img src="${DealerPortraits.url(def.id, def.rarity)}" alt="" style="filter:brightness(.35) grayscale(1)" />
         <h3>??? <span style="color:${r.color}">${r.short}</span></h3>
         <p class="dealer-quote">아직 만나지 못한 운영진이에요.<br/>가챠로 영입해보세요!</p>
+        ${traitsHtml}
         ${effectsHtml}`;
       return;
     }
@@ -2777,8 +2876,9 @@
         <div class="dealer-stat">승급<b>${starsHtml(own.star)}</b></div>
         <div class="dealer-stat">별<b>★${own.star} / ${D.dealerStar.maxStar}</b></div>
       </div>
+      ${traitsHtml}
       ${effectsHtml}
-      <button class="deploy-toggle ${isDeployed(dealerId) ? "on" : ""}" id="dealer-modal-deploy-btn" style="width:100%;margin-bottom:8px;padding:8px 0;font-size:12px">${isDeployed(dealerId) ? "✅ 배치 중 (탭하면 해제)" : "🧑‍💼 배치하기"}</button>
+      <button class="deploy-toggle ${isDeployed(dealerId) ? "on" : ""}" id="dealer-modal-deploy-btn" style="width:100%;margin-bottom:8px;padding:8px 0;font-size:12px">${isDeployed(dealerId) ? "✅ 편성 중 (탭하면 해제)" : "🧑‍💼 편성하기"}</button>
       ${
         need === null
           ? '<div class="mission-allclear">⭐ 최고 등급까지 승급했어요!</div>'

@@ -930,7 +930,7 @@ body.sheet-open .floor-note { display: none; }
   box-shadow: 0 0 10px rgba(255, 224, 138, 0.25) inset;
   cursor: pointer;
   overflow: hidden;
-  aspect-ratio: 1 / 1.18;
+  aspect-ratio: 1 / 1.06;
 }
 .squad-slot img { width: 100%; display: block; }
 .squad-slot-star {
@@ -966,13 +966,54 @@ body.sheet-open .floor-note { display: none; }
   font-size: 18px;
   font-family: "Jua", sans-serif;
 }
+/* 특성 시너지 칩 */
+.squad-synergies {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 9px;
+}
+.synergy-chip {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 3px 7px;
+  border-radius: 999px;
+  border: 1.5px solid rgba(255, 255, 255, 0.2);
+  background: rgba(0, 0, 0, 0.3);
+  font-family: "Jua", sans-serif;
+  font-size: 10.5px;
+  color: rgba(255, 255, 255, 0.55);
+  white-space: nowrap;
+}
+.synergy-chip b { color: #fff; font-size: 11px; }
+.synergy-chip small { font-family: inherit; font-size: 10px; }
+.synergy-chip.on {
+  border-color: var(--tc, #fff);
+  background: color-mix(in srgb, var(--tc, #fff) 26%, rgba(0, 0, 0, 0.45));
+  color: #fff;
+  box-shadow: 0 0 10px color-mix(in srgb, var(--tc, #fff) 45%, transparent);
+}
+.synergy-chip .synergy-tier {
+  font-style: normal;
+  font-size: 9px;
+  width: 14px;
+  height: 14px;
+  line-height: 14px;
+  text-align: center;
+  border-radius: 999px;
+  background: var(--tc, #fff);
+  color: #2a1b40;
+}
 .squad-bottom { position: relative; display: flex; align-items: center; gap: 8px; }
 .squad-presets { display: flex; gap: 5px; flex: 1 1 auto; min-width: 0; }
 .squad-preset {
   position: relative;
   flex: 1 1 0;
   min-width: 0;
-  height: 32px;
+  height: 30px;
   border-radius: 10px;
   border: 2px solid rgba(255, 255, 255, 0.25);
   background: rgba(0, 0, 0, 0.3);
@@ -1097,6 +1138,47 @@ body.sheet-open .floor-note { display: none; }
 .shard-bar.ready i { background: linear-gradient(90deg, #ffe08a, #ffb400); }
 
 .codex-bottom-bar .btn b { font-size: 11px; background: rgba(255,255,255,.7); color: #6b3f00; border-radius: 999px; padding: 0 6px; margin-left: 2px; }
+
+/* 카드 속 특성 이모지 */
+.codex-traits {
+  position: absolute;
+  top: 5px;
+  left: 5px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 10px;
+  line-height: 1;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.45));
+  pointer-events: none;
+}
+.codex-card .codex-rank { top: auto; bottom: 5px; left: 5px; }
+.codex-card.locked .codex-traits { opacity: 0.45; }
+
+/* 운영진 상세: 특성 */
+.dealer-traits { display: flex; gap: 6px; margin: 2px 0 10px; }
+.trait-chip {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 7px 9px;
+  border-radius: 12px;
+  border: 2px solid rgba(58, 42, 48, 0.1);
+  background: var(--paper-2);
+  font-family: "Jua", sans-serif;
+  font-size: 12.5px;
+  color: var(--ink-soft);
+  text-align: left;
+}
+.trait-chip b { color: var(--ink); }
+.trait-chip small { font-family: "Gowun Dodum", sans-serif; font-size: 9.5px; color: var(--muted); white-space: normal; line-height: 1.35; }
+.trait-chip.on {
+  border-color: var(--tc, var(--gold));
+  background: color-mix(in srgb, var(--tc, #fff) 14%, #fff);
+  color: var(--ink);
+}
 
 /* 운영진 상세: 보유효과 / 장착효과 */
 .dealer-effects { display: flex; flex-direction: column; gap: 6px; margin: 4px 0 10px; text-align: left; }
