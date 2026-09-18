@@ -14,9 +14,9 @@ const PixelSprites = (() => {
   // ============================================================
   //  타원(아이소 원) — 원형 테이블·스툴 받침에 쓴다
   // ============================================================
-  function ellipse(ctx, cx, cy, rx, ry, color) {
-    if (!color) return;
-    ctx.fillStyle = color;
+  function ellipse(ctx, cx, cy, rx, ry, color, rawStyle) {
+    if (!color && !rawStyle) return;
+    ctx.fillStyle = rawStyle || color;
     for (let y = -Math.ceil(ry); y <= Math.ceil(ry); y++) {
       const t = 1 - (y * y) / (ry * ry);
       if (t < 0) continue;
@@ -116,6 +116,7 @@ const PixelSprites = (() => {
   /** 제등 — 천장에 매다는 붉은 종이등. 위아래 어두운 테와 세로 살로 종이등처럼 보이게. */
   function lantern(ctx, ox, oy, pal) {
     const c = pal.accent;
+    glow(ctx, ox, oy + 6, 16, pal.lampGlow || "#ffd9a0", 0.85);
     rect(ctx, ox, oy - 10, 1, 10, "#4a3a32"); // 줄
     const rx = 6;
     const h = 11;
@@ -283,6 +284,45 @@ const PixelSprites = (() => {
     ellipse(ctx, ox + 3, oy - 4, 4, 3, "#356b38");
   }
 
+  /** 따뜻한 빛 번짐 — 조명 주변을 은은하게. 도트에서도 광원이 있으면 방이 아늑해진다. */
+  function glow(ctx, ox, oy, r, color, strength) {
+    const st = strength == null ? 1 : strength;
+    // 알파를 3단으로 겹쳐 그라데이션 흉내 (도트라 단계가 보이는 편이 자연스럽다)
+    const steps = [[1.0, 0.1], [0.66, 0.14], [0.36, 0.2]];
+    for (const [k, a] of steps) {
+      ctx.fillStyle = withAlpha(color, a * st);
+      ellipse(ctx, ox, oy, Math.round(r * k), Math.round(r * k * 0.5), null, ctx.fillStyle);
+    }
+  }
+  function withAlpha(hex, a) {
+    const n = parseInt(String(hex).replace("#", ""), 16);
+    return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
+  }
+
+  /** 칠판 메뉴판 */
+  function chalkboard(ctx, ox, oy, pal, dir) {
+    const w = 13, h = 15;
+    const skew = dir === "back" ? 1 : -1;
+    for (let y = 0; y < h; y++) {
+      const off = Math.round((y * skew * 4) / h);
+      rect(ctx, ox - w / 2 + off, oy - h + y, w, 1, y < 2 || y > h - 3 ? shade(pal.wood, -0.2) : "#33403a");
+    }
+    for (let r = 0; r < 4; r++) {
+      const off = Math.round(((3 + r * 3) * skew * 4) / h);
+      rect(ctx, ox - 4 + off, oy - h + 3 + r * 3, [7, 5, 8, 4][r], 1, "#d8e8dc");
+    }
+  }
+
+  /** 맥주/네온 사인 — 빛 번짐 포함 */
+  function beerSign(ctx, ox, oy, pal) {
+    const c = pal.accent;
+    glow(ctx, ox, oy - 5, 13, c, 0.9);
+    rect(ctx, ox - 8, oy - 12, 16, 12, shade(pal.wood, -0.45));
+    rect(ctx, ox - 6, oy - 10, 12, 8, shade(c, -0.25));
+    rect(ctx, ox - 5, oy - 9, 10, 3, c);
+    rect(ctx, ox - 4, oy - 5, 8, 2, shade(c, 0.3));
+  }
+
   /** 다트보드 (벽걸이) */
   function dartboard(ctx, ox, oy, pal) {
     ellipse(ctx, ox, oy, 9, 9, "#2f2a2a");
@@ -425,7 +465,7 @@ const PixelSprites = (() => {
   return {
     ellipse, cylinder, drawPixels,
     pokerTable, chair, stool, zabuton, lantern, barCounter, bottleShelf,
-    rug, frame, wallSign, wallLamp, marquee, tree, bush,
+    rug, frame, wallSign, wallLamp, marquee, tree, bush, glow, chalkboard, beerSign,
     plant, trophyStand, dartboard, jukebox, wall, person,
     BODY,
   };

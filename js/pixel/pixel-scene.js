@@ -110,7 +110,24 @@ const PixelScene = (() => {
       }
     }
 
-    // 5) 남은 가장자리에 화분
+    // 5) 서 있는 손님 — 통로에 흩어 놓는다. 자리 배치와 마찬가지로 결정적.
+    {
+      const standing = Math.min(6, Math.round((opts.tables || 0) * 0.8) + (isUpper ? 0 : 1));
+      let n = 0;
+      for (const [x, y] of list) {
+        if (n >= standing) break;
+        if (!free(x, y)) continue;
+        if ((x * 2 + y) % 3 !== 0) continue; // 띄엄띄엄 — 통로가 사람으로 꽉 차면 안 된다
+        // 가구가 놓인 칸을 피해서만 서 있게 한다(겹치면 사람이 테이블을 뚫고 나온 것처럼 보인다)
+        const jitter = ((x * 7 + y * 13) % 5) / 10 - 0.2;
+        put("guest", x + 0.5 + jitter, y + 0.75, { i: (x * 3 + y) % 4 });
+        n++;
+        // 두 칸 걸러 하나만 — 통로가 사람으로 꽉 차면 바닥이 안 보인다
+        used.add(`${x},${y}`);
+      }
+    }
+
+    // 6) 남은 가장자리에 화분
     let plants = isUpper ? 2 : 3;
     for (const [x, y] of list) {
       if (plants <= 0) break;
@@ -127,7 +144,7 @@ const PixelScene = (() => {
     switch (o.t) {
       case "rug": S.rug(ctx, x, y, theme, o.gw, o.gd); break;
       case "table": S.pokerTable(ctx, x, y, theme); break;
-      case "bar": S.barCounter(ctx, x, y, theme); break;
+      case "bar": S.glow(ctx, x, y - 16, 30, theme.lampGlow || "#ffd68f", 0.7); S.barCounter(ctx, x, y, theme); break;
       case "shelf": S.bottleShelf(ctx, x, y - WALL_H + 13, theme); break;
       case "stool": S.stool(ctx, x, y, theme); break;
       case "plant": S.plant(ctx, x, y, theme); break;
@@ -206,15 +223,22 @@ const PixelScene = (() => {
       // 벽 장식 — 액자 / 간판 / 조명을 번갈아 건다
       let deco = 0;
       for (const wp of walls) {
-        if ((wp.x + wp.y) % 3 !== 0) { continue; }
+        if ((wp.x + wp.y) % 2 !== 0) { continue; }
         const [gx, gy] = wallAnchor(wp);
         const mid = wp.dir === "back" ? iso(gx - 0.5, gy, floor.level) : iso(gx, gy - 0.5, floor.level);
         const dx = ox + mid[0];
         const dy = oy + mid[1] - Math.round(WALL_H * 0.52);
-        const kind = deco % 4;
-        if (kind === 0) S.frame(ctx, dx, dy, theme, wp.dir, theme.arts[deco % theme.arts.length]);
-        else if (kind === 2) S.wallSign(ctx, dx, dy - 2, theme, wp.dir);
-        else if (kind === 1) S.wallLamp(ctx, dx, dy - 4, theme);
+        // 액자 → 조명 → 간판 → 칠판 → 조명 → 다트 → 맥주사인 순으로 돌린다.
+        // 한 종류만 반복하면 벽지처럼 보이고, 전부 다르면 산만하다 — 조명을 사이사이 끼운다.
+        switch (deco % 7) {
+          case 0: S.frame(ctx, dx, dy, theme, wp.dir, theme.arts[deco % theme.arts.length]); break;
+          case 1: S.wallLamp(ctx, dx, dy - 4, theme); break;
+          case 2: S.wallSign(ctx, dx, dy - 2, theme, wp.dir); break;
+          case 3: S.chalkboard(ctx, dx, dy, theme, wp.dir); break;
+          case 4: S.wallLamp(ctx, dx, dy - 4, theme); break;
+          case 5: S.dartboard(ctx, dx, dy - 7, theme); break;
+          default: S.beerSign(ctx, dx, dy - 2, theme); break;
+        }
         deco++;
       }
 
@@ -226,6 +250,19 @@ const PixelScene = (() => {
           S.lantern(ctx, ox + x, oy + y - WALL_H - 4, theme);
         }
       }
+      // 입구 차양 간판 — 1층 앞쪽 가장자리. 건물이 "가게"로 읽히게 하는 요소.
+      if (floor.level === 0) {
+        const cellSet = PixelMap.cellsOf(floor);
+        const frontEdge = byDepth.filter(([gx, gy]) => !cellSet.has(`${gx},${gy + 1}`));
+        if (frontEdge.length) {
+          // 화면상 가장 아래(gx+gy가 큰) 앞칸 — 거기가 카메라에서 보이는 "정면"이다.
+          // gx가 작은 칸을 고르면 건물 왼쪽 끝 허공에 간판이 걸린다.
+          const [gx, gy] = frontEdge.reduce((a, b) => (a[0] + a[1] >= b[0] + b[1] ? a : b));
+          const [x, y] = iso(gx + 0.5, gy + 1, floor.level);
+          S.marquee(ctx, ox + x, oy + y + 9, theme);
+        }
+      }
+
       // 오브젝트
       const objs = layoutFloor(floor, theme, opts).sort(
         (p, q) => (p.layer ?? 1) - (q.layer ?? 1) || p.px + p.py - (q.px + q.py)
