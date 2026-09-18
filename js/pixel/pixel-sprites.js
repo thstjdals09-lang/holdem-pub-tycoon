@@ -142,12 +142,13 @@ const PixelSprites = (() => {
 
   /** 바 카운터 — 2×1칸. 상판 + 병 선반 */
   function barCounter(ctx, ox, oy, pal) {
-    A.isoBox(ctx, ox, oy, 2, 0.7, 14, pal.bar);
-    A.isoBox(ctx, ox, oy - 14, 2.1, 0.8, 2, pal.barTop);
+    // gx축(뒷벽 방향)으로 길게 → gd = 2, gw = 0.7
+    A.isoBox(ctx, ox, oy, 0.7, 2, 14, pal.bar);
+    A.isoBox(ctx, ox, oy - 14, 0.8, 2.1, 2, pal.barTop);
     // 상판 위 잔
     for (let i = 0; i < 3; i++) {
-      const gx = ox - 18 + i * 14;
-      const gy = oy - 16 - 5 - i * 1;
+      const gx = ox - 8 - i * 9;
+      const gy = oy - 20 - i * 4;
       rect(ctx, gx, gy - 4, 3, 5, "#dff0f7");
       rect(ctx, gx, gy - 4, 3, 1, "#ffffff");
     }
@@ -158,12 +159,12 @@ const PixelSprites = (() => {
 
   /** 백바 병 선반 (벽에 붙는다) */
   function bottleShelf(ctx, ox, oy, pal) {
-    A.isoBox(ctx, ox, oy, 1.8, 0.28, 2, pal.bar);
+    A.isoBox(ctx, ox, oy, 0.28, 1.8, 2, pal.bar);
     const cols = pal.bottles || ["#5c3a21", "#2f6b4a", "#7a2f4a", "#2f4a7a", "#c9a24a"];
     for (let i = 0; i < 7; i++) {
       const c = cols[i % cols.length];
-      const bx = ox - 22 + i * 7;
-      const by = oy - 2 - i * 1.6;
+      const bx = ox - 6 - i * 7;
+      const by = oy - 3 - i * 3.5;
       rect(ctx, bx, by - 9, 3, 9, c);
       rect(ctx, bx, by - 9, 1, 9, shade(c, 0.25));
       rect(ctx, bx + 1, by - 11, 1, 2, shade(c, -0.2));

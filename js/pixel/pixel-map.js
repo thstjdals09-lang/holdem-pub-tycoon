@@ -13,28 +13,83 @@ const PixelMap = (() => {
   //  rects: [x, y, w, h] (칸 단위, 좌상단 기준)
   //  unlock: 다음 단계로 넘어가는 조건 (game.js 상태 기준)
   // ============================================================
+  // ============================================================
+  //  증축 단계
+  //
+  //  치수 규칙 (이걸 어기면 배치가 무너진다)
+  //   - 테이블은 2×2칸을 차지하고 의자가 중심에서 반지름 1.5칸까지 둘러앉는다.
+  //     → 테이블 중심끼리 최소 3칸은 떨어져야 한다. 방 깊이 4칸에 두 줄을 넣으면 반드시 겹친다.
+  //   - 그래서 테이블 줄은 y=1과 y=4에 둔다(중심 y=2, y=5 → 3칸 간격). 방 깊이는 최소 6.
+  //   - 방은 깊이보다 폭을 키운다. 아이소메트릭에서 깊은 방은 화면 세로로 길어져 잘린다.
+  //
+  //  배치는 알고리즘이 아니라 손으로 적는다. 그리디로 채우면 한쪽에만 몰리고 반대편이 텅 빈다.
+  //   bar     : 바 카운터 시작 칸 + 길이(칸)
+  //   tables  : 테이블 2×2의 좌상단 칸 목록. 앞에서부터 보유 수만큼 채운다.
+  //   props   : 고정 소품
+  //   entrance: 손님이 드나드는 앞칸 — 파사드 간판이 여기 걸린다
+  // ============================================================
   const STAGES = [
     {
       id: "small",
       name: "작은 펍",
       desc: "테이블 하나로 시작하는 좁은 가게",
-      floors: [{ level: 0, rects: [[0, 0, 5, 4]] }],
+      floors: [
+        {
+          level: 0,
+          rects: [[0, 0, 6, 5]],
+          entrance: { x: 0, y: 4 },
+          bar: null,
+          tables: [[2, 1]],
+          props: [
+            { t: "plant", x: 0, y: 0 },
+            { t: "plant", x: 5, y: 0 },
+            { t: "plant", x: 5, y: 4 },
+          ],
+        },
+      ],
       unlock: null,
       next: { tables: 2, lifetimeEarned: 3000, label: "테이블 2개 · 누적 3,000 BB" },
     },
     {
       id: "wide",
       name: "넓은 펍",
-      desc: "벽을 터서 홀을 넓혔다",
-      floors: [{ level: 0, rects: [[0, 0, 8, 5]] }],
+      desc: "벽을 터서 홀을 넓히고 바 카운터를 들였다",
+      floors: [
+        {
+          level: 0,
+          rects: [[0, 0, 10, 6]],
+          entrance: { x: 0, y: 5 },
+          bar: { x: 0, y: 0, len: 3 },
+          tables: [[4, 1], [7, 1], [1, 4], [4, 4], [7, 4]],
+          props: [
+            { t: "plant", x: 9, y: 0 },
+            { t: "plant", x: 0, y: 3 },
+            { t: "jukebox", x: 9, y: 5 },
+          ],
+        },
+      ],
       unlock: { tables: 2, lifetimeEarned: 3000 },
       next: { tables: 4, prestigePoints: 1, label: "테이블 4개 · 명성 1" },
     },
     {
       id: "lshape",
       name: "ㄱ자 홀",
-      desc: "옆 점포를 트고 안쪽에 별실을 만들었다",
-      floors: [{ level: 0, rects: [[0, 0, 8, 5], [8, 0, 4, 3]] }],
+      desc: "옆 점포를 트고 안쪽에 별실을 냈다",
+      floors: [
+        {
+          level: 0,
+          rects: [[0, 0, 10, 6], [10, 2, 5, 4]],
+          entrance: { x: 0, y: 5 },
+          bar: { x: 0, y: 0, len: 4 },
+          tables: [[4, 1], [7, 1], [1, 4], [4, 4], [7, 4], [11, 3]],
+          props: [
+            { t: "plant", x: 9, y: 0 },
+            { t: "plant", x: 0, y: 3 },
+            { t: "jukebox", x: 10, y: 2 },
+            { t: "trophy", x: 14, y: 2 },
+          ],
+        },
+      ],
       unlock: { tables: 4, prestigePoints: 1 },
       next: { tables: 6, prestigePoints: 5, label: "테이블 6개 · 명성 5" },
     },
@@ -43,19 +98,62 @@ const PixelMap = (() => {
       name: "2층 신설",
       desc: "위층을 올려 VIP 라운지를 뒀다",
       floors: [
-        { level: 0, rects: [[0, 0, 8, 5], [8, 0, 4, 3]] },
-        { level: 1, rects: [[0, 0, 5, 4]] },
+        {
+          level: 0,
+          rects: [[0, 0, 10, 6], [10, 2, 5, 4]],
+          entrance: { x: 0, y: 5 },
+          bar: { x: 0, y: 0, len: 4 },
+          tables: [[4, 1], [7, 1], [1, 4], [4, 4], [7, 4], [11, 3]],
+          props: [
+            { t: "plant", x: 9, y: 0 },
+            { t: "plant", x: 0, y: 3 },
+            { t: "jukebox", x: 10, y: 2 },
+          ],
+        },
+        {
+          // 2층은 1층 "뒤쪽"에만 올린다. 앞쪽까지 덮으면 화면에서 1층 홀을 가린다.
+          level: 1,
+          rects: [[0, 0, 7, 4]],
+          bar: null,
+          tables: [[3, 1]],
+          props: [
+            { t: "trophy", x: 0, y: 0 },
+            { t: "plant", x: 6, y: 0 },
+            { t: "plant", x: 6, y: 3 },
+          ],
+        },
       ],
       unlock: { tables: 6, prestigePoints: 5 },
       next: { tables: 9, prestigePoints: 20, label: "테이블 9개 · 명성 20" },
     },
     {
-      id: "tower",
-      name: "포커 하우스",
-      desc: "2층까지 넓힌 본격 홀덤 하우스",
+      id: "empire",
+      name: "포커 제국",
+      desc: "2층까지 꽉 채운 홀덤 하우스",
       floors: [
-        { level: 0, rects: [[0, 0, 8, 5], [8, 0, 4, 3]] },
-        { level: 1, rects: [[0, 0, 8, 5]] },
+        {
+          level: 0,
+          rects: [[0, 0, 10, 6], [10, 2, 5, 4]],
+          entrance: { x: 0, y: 5 },
+          bar: { x: 0, y: 0, len: 4 },
+          tables: [[4, 1], [7, 1], [1, 4], [4, 4], [7, 4], [11, 3]],
+          props: [
+            { t: "plant", x: 9, y: 0 },
+            { t: "plant", x: 0, y: 3 },
+            { t: "jukebox", x: 10, y: 2 },
+          ],
+        },
+        {
+          level: 1,
+          rects: [[0, 0, 10, 4]],
+          bar: { x: 0, y: 0, len: 3 },
+          tables: [[4, 1], [7, 1]],
+          props: [
+            { t: "trophy", x: 9, y: 0 },
+            { t: "plant", x: 9, y: 3 },
+            { t: "plant", x: 3, y: 0 },
+          ],
+        },
       ],
       unlock: { tables: 9, prestigePoints: 20 },
       next: null,

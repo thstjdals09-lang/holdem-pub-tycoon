@@ -45,103 +45,86 @@ const PixelScene = (() => {
    * 층 하나에 놓을 오브젝트 목록. 배치는 결정적(셀 순서 기반)이라
    * 다시 그려도 가구가 돌아다니지 않는다. 각 오브젝트는 앵커를 격자 점으로 들고 있다.
    */
+  /**
+   * 층 하나의 오브젝트 목록.
+   * 자리는 PixelMap의 단계 정의(bar / tables / props)에 손으로 적혀 있다.
+   * 예전처럼 빈 칸을 그리디로 채우면 한쪽에만 몰리고 반대편이 텅 빈다.
+   */
   function layoutFloor(floor, theme, opts) {
-    const cells = PixelMap.cellsOf(floor);
-    const list = [...cells].map((k) => k.split(",").map(Number)).sort((a, b) => a[1] - b[1] || a[0] - b[0]);
-    const used = new Set();
     const objs = [];
-    const free = (x, y) => cells.has(`${x},${y}`) && !used.has(`${x},${y}`);
-    const take = (x, y, w, h) => {
-      for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) used.add(`${x + i},${y + j}`);
-    };
     const put = (t, px, py, extra) => objs.push({ t, px, py, ...extra });
+    const cells = PixelMap.cellsOf(floor);
+    const taken = new Set();
+    const mark = (x, y, w, h) => {
+      for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) taken.add(`${x + i},${y + j}`);
+    };
 
-    const isUpper = floor.level > 0;
-    let tablesLeft = isUpper ? Math.max(0, (opts.tables || 0) - 6) : Math.min(opts.tables || 0, 6);
-
-    // 1) 바 카운터 — 뒷벽(y=0)을 따라 왼쪽부터. 2×1칸.
-    if (!isUpper && opts.bar) {
-      for (const [x, y] of list) {
-        if (y !== 0 || !free(x, y) || !free(x + 1, y)) continue;
-        put("bar", x + 2, y + 1);
-        put("shelf", x + 2, y); // 뒷벽에 붙는 선반
-        take(x, y, 2, 1);
-        put("stool", x + 1.4, y + 2);
-        put("stool", x + 2.4, y + 2);
-        break;
+    // 바 카운터 — 뒷벽을 따라 가로로. 스툴은 손님 쪽(앞)에 붙는다.
+    if (floor.bar && opts.bar !== false) {
+      const { x, y, len } = floor.bar;
+      for (let i = 0; i < len; i += 2) {
+        put("bar", x + Math.min(i + 2, len), y + 1);
+        put("shelf", x + Math.min(i + 2, len), y);
       }
-    }
-    // 2) 트로피 거치대 — 2층이 있으면 위층 안쪽에
-    if (opts.trophyStand) {
-      const row = list.filter(([, y]) => y === 0);
-      for (const [x, y] of row.reverse()) {
-        if (free(x, y)) { put("trophy", x + 1, y + 1); take(x, y, 1, 1); break; }
-      }
-    }
-    // 3) 오락 요소
-    if (!isUpper && opts.jukebox) {
-      for (const [x, y] of [...list].reverse()) {
-        if (free(x, y)) { put("jukebox", x + 1, y + 1); take(x, y, 1, 1); break; }
-      }
+      for (let i = 0; i < len; i++) put("stool", x + i + 0.5, y + 1.9);
+      mark(x, y, len, 1);
     }
 
-    // 4) 테이블 — 2×2칸, 안쪽부터. 딜러는 북쪽, 손님은 좌우/남쪽.
-    for (const [x, y] of list) {
-      if (tablesLeft <= 0) break;
-      if (!free(x, y) || !free(x + 1, y) || !free(x, y + 1) || !free(x + 1, y + 1)) continue;
-      // 테이블은 2×2지만 3×3을 잡아둔다 — 딱 붙여 놓으면 손님·의자가 옆 테이블을 덮는다
-      take(x, y, 3, 3);
-      tablesLeft--;
-      const cx = x + 1; // 2×2의 중심 점
+    // 테이블 — 선언된 자리에 보유 수만큼
+    const want = Math.max(0, opts.tables || 0);
+    const mine = floor.tables || [];
+    // 1층이 먼저 차고 남으면 2층으로
+    const before = floor.level === 0 ? 0 : (PixelMap.STAGES.find((st) => st.floors.includes(floor)) || { floors: [] })
+      .floors.filter((f) => f.level < floor.level)
+      .reduce((n, f) => n + (f.tables || []).length, 0);
+    const count = Math.max(0, Math.min(mine.length, want - before));
+
+    for (let i = 0; i < count; i++) {
+      const [x, y] = mine[i];
+      const cx = x + 1;
       const cy = y + 1;
-      // 러그는 테이블보다 먼저 깔려야 하므로 layer 0
+      mark(x, y, 2, 2);
       put("rug", cx + 1.35, cy + 1.35, { layer: 0, gw: 2.7, gd: 2.7 });
       put("table", cx, cy);
-      // 둘레 좌석 8개. 0번(북쪽)은 딜러 자리, 나머지에 손님이 앉는다.
       const SEATS = 8;
       for (let k = 0; k < SEATS; k++) {
         const ang = (k / SEATS) * Math.PI * 2 - Math.PI / 2;
-        // 격자에서 반지름 r인 원은 화면에서 가로 약 22.6r · 세로 11.3r 타원이 된다.
-        // 테이블 상판이 28×14px이므로 r=1.7이면 딱 그 바깥에 의자가 둘러앉는다.
-        const sx = cx + Math.cos(ang) * 1.7;
-        const sy = cy + Math.sin(ang) * 1.7;
+        // 반지름 1.5 = 화면상 가로 34px. 테이블 중심 간격 3칸과 딱 맞물린다.
+        const sx = cx + Math.cos(ang) * 1.5;
+        const sy = cy + Math.sin(ang) * 1.5;
         put("seat", sx, sy);
         if (k === 0) put("dealer", sx, sy - 0.1);
         else if (k <= (opts.guestsPerTable ?? 5)) {
-          // 테이블 위쪽(화면 안쪽)에 앉은 사람은 등을 보인다
           const facingAway = Math.sin(ang) < -0.25;
           put("guest", sx, sy, { i: (x + y + k) % 4, back: facingAway });
         }
       }
     }
 
-    // 5) 서 있는 손님 — 통로에 흩어 놓는다. 자리 배치와 마찬가지로 결정적.
-    {
-      const standing = Math.min(9, Math.round((opts.tables || 0) * 1.1) + (isUpper ? 0 : 2));
-      let n = 0;
-      for (const [x, y] of list) {
-        if (n >= standing) break;
-        if (!free(x, y)) continue;
-        if ((x * 2 + y) % 3 !== 0) continue; // 띄엄띄엄 — 통로가 사람으로 꽉 차면 안 된다
-        // 가구가 놓인 칸을 피해서만 서 있게 한다(겹치면 사람이 테이블을 뚫고 나온 것처럼 보인다)
-        const jitter = ((x * 7 + y * 13) % 5) / 10 - 0.2;
-        put("guest", x + 0.5 + jitter, y + 0.75, { i: (x * 3 + y) % 4 });
-        n++;
-        // 두 칸 걸러 하나만 — 통로가 사람으로 꽉 차면 바닥이 안 보인다
-        used.add(`${x},${y}`);
-      }
+    // 고정 소품
+    for (const pr of floor.props || []) {
+      if (pr.t === "trophy" && opts.trophyStand === false) continue;
+      if (pr.t === "jukebox" && opts.jukebox === false) continue;
+      put(pr.t, pr.x + 1, pr.y + 1);
+      mark(pr.x, pr.y, 1, 1);
     }
 
-    // 6) 남은 가장자리에 화분
-    let plants = isUpper ? 2 : 3;
-    for (const [x, y] of list) {
-      if (plants <= 0) break;
-      const edge = !cells.has(`${x + 1},${y}`) || !cells.has(`${x},${y + 1}`);
-      if (edge && free(x, y)) { put("plant", x + 1, y + 1); take(x, y, 1, 1); plants--; }
+    // 서 있는 손님 — 비어 있는 통로 칸에만, 띄엄띄엄
+    const standing = Math.min(8, Math.round(count * 1.4) + (floor.level === 0 ? 2 : 0));
+    let n = 0;
+    for (const key of [...cells].sort()) {
+      if (n >= standing) break;
+      const [x, y] = key.split(",").map(Number);
+      if (taken.has(key)) continue;
+      // (x*2+y)%3 같은 선형 조건은 격자에서 대각선 한 줄이 된다 → 해시로 흩뿌린다
+      const hsh = ((x * 73856093) ^ (y * 19349663)) >>> 0;
+      if (hsh % 5 > 1) continue;
+      put("guest", x + 0.5, y + 0.8, { i: (x * 3 + y) % 4 });
+      taken.add(key);
+      n++;
     }
     return objs;
   }
-
   function drawObject(ctx, ox, oy, o, theme, level) {
     const [sx, sy] = iso(o.px, o.py, level);
     const x = ox + sx;
