@@ -131,6 +131,8 @@ const PixelMap = (() => {
       wood: "#a87249", gold: "#e8b84a", accent: "#e2789a",
       chipA: "#e0574f", chipB: "#4a7fd0", chipC: "#e8b84a",
       bottles: ["#5c3a21", "#2f6b4a", "#7a2f4a", "#2f4a7a", "#c9a24a"],
+      rug: "#4f7a56", signBg: "#3a2a24", signInk: "#f2e4c0", frameWood: "#8a5c39",
+      lampGlow: "#ffd68f", grass: "#6faa54", arts: ["#c9a24a", "#7ea8c9", "#c98a9a", "#8aa87a"],
       seat: "chair", lantern: false,
       dealer: { hair: "#3b2b20", skin: "#f2c9a0", cloth: "#f4f2ee", pants: "#3a3550", visor: "#2f6b8a", bowtie: "#c2404a" },
       guests: [
@@ -149,6 +151,8 @@ const PixelMap = (() => {
       wood: "#e8cfe0", gold: "#f5c84a", accent: "#f58ad2",
       chipA: "#f58ab5", chipB: "#b98ae0", chipC: "#f5c84a",
       bottles: ["#f5a8cc", "#e0c2f5", "#f7dca0", "#c2e4f5", "#fdeef5"],
+      rug: "#f0b8d4", signBg: "#8a3a62", signInk: "#fdeaf4", frameWood: "#e8c86a",
+      lampGlow: "#ffe6f2", grass: "#8fc47a", arts: ["#f5c84a", "#f0a8cc", "#d0b0f0", "#f7dca0"],
       seat: "chair", lantern: false,
       dealer: { hair: "#5a4632", skin: "#f7d6b4", cloth: "#fdf4fa", pants: "#c98ab5", visor: "#f58ad2", bowtie: "#f5c84a" },
       guests: [
@@ -167,6 +171,8 @@ const PixelMap = (() => {
       wood: "#7a5236", gold: "#d0a838", accent: "#8f2f3a",
       chipA: "#8f2f3a", chipB: "#2f4a7a", chipC: "#d0a838",
       bottles: ["#4a2f1a", "#2f5a3a", "#6b2f2f", "#3a3a5a", "#c9a24a"],
+      rug: "#7a3340", signBg: "#3a2a1a", signInk: "#e8d8a8", frameWood: "#c9a24a",
+      lampGlow: "#ffd68f", grass: "#5f8f4a", arts: ["#6b4a32", "#3f5a45", "#5a3a2a", "#8a6a3a"],
       seat: "chair", lantern: false,
       dealer: { hair: "#1f1a18", skin: "#e8b88c", cloth: "#f0e8d8", pants: "#3a3020", visor: "#8f2f3a", bowtie: "#d0a838" },
       guests: [
@@ -185,6 +191,8 @@ const PixelMap = (() => {
       wood: "#3a2358", gold: "#f0d84a", accent: "#f03fa0",
       chipA: "#f03fa0", chipB: "#00d8f0", chipC: "#f0d84a",
       bottles: ["#00d8f0", "#f03fa0", "#a86bff", "#5affc2", "#f0d84a"],
+      rug: "#3f2a6b", signBg: "#140c26", signInk: "#00d8f0", frameWood: "#3a2358",
+      lampGlow: "#00d8f0", grass: "#2a2a4a", arts: ["#f03fa0", "#00d8f0", "#a86bff", "#5affc2"],
       seat: "chair", lantern: false,
       dealer: { hair: "#1f1a28", skin: "#e8b88c", cloth: "#2a1a44", pants: "#1c1030", visor: "#00d8f0", bowtie: "#f03fa0" },
       guests: [
@@ -203,6 +211,8 @@ const PixelMap = (() => {
       wood: "#8a5c3a", gold: "#e0a84a", accent: "#c23a33",
       chipA: "#c23a33", chipB: "#2f4a78", chipC: "#e0a84a",
       bottles: ["#f2ece0", "#2f4a78", "#2f5a50", "#c23a33", "#e0a84a"],
+      rug: "#3f5a6b", signBg: "#3a2a24", signInk: "#f2ece0", frameWood: "#6b4630",
+      lampGlow: "#ffd9a0", grass: "#6f9a52", arts: ["#c23a33", "#2f4a78", "#e0a84a", "#4f8a4a"],
       seat: "zabuton", lantern: true,
       dealer: { hair: "#1f1a18", skin: "#f2c9a0", cloth: "#2f4a78", pants: "#3a3550", visor: null, bowtie: null, apron: "#c23a33" },
       guests: [

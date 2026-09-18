@@ -194,6 +194,95 @@ const PixelSprites = (() => {
     }
   }
 
+  /** 러그 — 테이블 아래 깔린다. 바닥이 허전하고 테이블이 떠 보이는 걸 잡아준다. */
+  function rug(ctx, ox, oy, pal, gw, gd) {
+    const base = pal.rug || shade(pal.floor, -0.12);
+    const f = faces(base);
+    const T = A.cornersTop(gw, gd, 0).map(([x, y]) => [ox + x, oy + y]);
+    poly(ctx, T, f.left);
+    // 안쪽 한 단 밝은 테두리 — 카이로소프트 러그의 이중 테두리
+    const shrink = 0.72;
+    const cx = (T[0][0] + T[2][0]) / 2;
+    const cy = (T[0][1] + T[2][1]) / 2;
+    poly(ctx, T.map(([x, y]) => [cx + (x - cx) * shrink, cy + (y - cy) * shrink]), f.top);
+    poly(ctx, T.map(([x, y]) => [cx + (x - cx) * 0.56, cy + (y - cy) * 0.56]), base);
+    for (let i = 0; i < 4; i++) line(ctx, T[i][0], T[i][1], T[(i + 1) % 4][0], T[(i + 1) % 4][1], f.edge);
+  }
+
+  /** 벽걸이 액자 — 벽면이 비면 방이 "대충 만든" 티가 제일 크게 난다. */
+  function frame(ctx, ox, oy, pal, dir, art) {
+    const w = 9, h = 11;
+    const skew = dir === "back" ? 1 : -1;
+    const dx = skew * 4;
+    // 액자틀 → 그림 → 하이라이트
+    for (let y = 0; y < h; y++) {
+      const off = Math.round((y * dx) / h);
+      rect(ctx, ox - w / 2 + off, oy - h + y, w, 1, pal.frameWood || shade(pal.wood, -0.1));
+    }
+    for (let y = 2; y < h - 2; y++) {
+      const off = Math.round((y * dx) / h);
+      rect(ctx, ox - w / 2 + 2 + off, oy - h + y, w - 4, 1, art);
+    }
+    rect(ctx, ox - w / 2 + 2, oy - h + 2, 2, 1, shade(art, 0.35));
+  }
+
+  /** 벽 간판 — 조명 박힌 목재 사인 (GOOD CARDS / POKER LIFE 자리) */
+  function wallSign(ctx, ox, oy, pal, dir) {
+    const w = 20, h = 13;
+    const skew = dir === "back" ? 1 : -1;
+    for (let y = 0; y < h; y++) {
+      const off = Math.round((y * skew * 6) / h);
+      rect(ctx, ox - w / 2 + off, oy - h + y, w, 1, y < 2 || y > h - 3 ? shade(pal.wood, -0.25) : pal.signBg || shade(pal.wood, -0.45));
+    }
+    // 글자 대신 밝은 막대 3줄 — 작은 크기에선 글자처럼 읽힌다
+    for (let r = 0; r < 3; r++) {
+      const off = Math.round(((3 + r * 3) * skew * 6) / h);
+      const lw = [11, 8, 13][r];
+      rect(ctx, ox - lw / 2 + off, oy - h + 3 + r * 3, lw, 2, pal.signInk || "#f2e4c0");
+    }
+    // 전구 줄
+    for (let i = 0; i < 4; i++) rect(ctx, ox - 8 + i * 5, oy - h - 1, 2, 2, pal.gold);
+  }
+
+  /** 벽 조명 — 따뜻한 빛 번짐까지 */
+  function wallLamp(ctx, ox, oy, pal) {
+    rect(ctx, ox - 1, oy - 9, 2, 5, shade(pal.wood, -0.3));
+    const g = pal.lampGlow || "#ffd68f";
+    // 빛 번짐(가장자리부터 옅게)
+    ellipse(ctx, ox, oy - 1, 8, 6, "rgba(255,214,143,0.16)");
+    ellipse(ctx, ox, oy - 1, 5, 4, "rgba(255,214,143,0.3)");
+    rect(ctx, ox - 3, oy - 4, 6, 4, g);
+    rect(ctx, ox - 4, oy, 8, 1, shade(g, -0.25));
+    rect(ctx, ox - 2, oy - 4, 4, 1, "#fff6dc");
+  }
+
+  /** 정면 차양 간판 — 매장 입구(POKER PUB) */
+  function marquee(ctx, ox, oy, pal) {
+    const w = 34, h = 11;
+    rect(ctx, ox - w / 2, oy - h, w, h, shade(pal.wood, -0.35));
+    rect(ctx, ox - w / 2 + 2, oy - h + 2, w - 4, h - 4, pal.signBg || shade(pal.wood, -0.5));
+    rect(ctx, ox - 12, oy - h + 4, 24, 3, pal.signInk || "#f2e4c0");
+    for (let i = 0; i < 6; i++) rect(ctx, ox - 15 + i * 6, oy - h - 2, 2, 2, pal.gold);
+    // 차양
+    for (let y = 0; y < 5; y++) {
+      const ww = w + 6 - y * 2;
+      rect(ctx, ox - ww / 2, oy + y, ww, 1, y % 2 ? "#f2ece0" : pal.accent);
+    }
+  }
+
+  /** 바깥 나무 / 덤불 */
+  function tree(ctx, ox, oy, pal) {
+    rect(ctx, ox - 2, oy - 8, 4, 8, "#7a5236");
+    ellipse(ctx, ox, oy - 14, 11, 9, "#3f7a42");
+    ellipse(ctx, ox - 3, oy - 16, 8, 6, "#4f9a50");
+    ellipse(ctx, ox + 3, oy - 12, 7, 5, "#356b38");
+  }
+  function bush(ctx, ox, oy) {
+    ellipse(ctx, ox, oy - 3, 8, 5, "#4f9a50");
+    ellipse(ctx, ox - 3, oy - 5, 5, 4, "#63b062");
+    ellipse(ctx, ox + 3, oy - 4, 4, 3, "#356b38");
+  }
+
   /** 다트보드 (벽걸이) */
   function dartboard(ctx, ox, oy, pal) {
     ellipse(ctx, ox, oy, 9, 9, "#2f2a2a");
@@ -336,6 +425,7 @@ const PixelSprites = (() => {
   return {
     ellipse, cylinder, drawPixels,
     pokerTable, chair, stool, zabuton, lantern, barCounter, bottleShelf,
+    rug, frame, wallSign, wallLamp, marquee, tree, bush,
     plant, trophyStand, dartboard, jukebox, wall, person,
     BODY,
   };

@@ -93,12 +93,21 @@ const PixelScene = (() => {
       tablesLeft--;
       const cx = x + 1; // 2×2의 중심 점
       const cy = y + 1;
+      // 러그는 테이블보다 먼저 깔려야 하므로 layer 0
+      put("rug", cx + 1.35, cy + 1.35, { layer: 0, gw: 2.7, gd: 2.7 });
       put("table", cx, cy);
-      put("dealer", cx, cy - 1.15);
-      put("seat", cx - 1.25, cy + 0.1);
-      put("seat", cx + 1.25, cy + 0.1);
-      put("guest", cx - 0.55, cy + 1.2, { i: (x + y) % 4 });
-      put("guest", cx + 0.55, cy + 1.2, { i: (x + y + 1) % 4 });
+      // 둘레 좌석 8개. 0번(북쪽)은 딜러 자리, 나머지에 손님이 앉는다.
+      const SEATS = 8;
+      for (let k = 0; k < SEATS; k++) {
+        const ang = (k / SEATS) * Math.PI * 2 - Math.PI / 2;
+        // 격자에서 반지름 r인 원은 화면에서 가로 약 22.6r · 세로 11.3r 타원이 된다.
+        // 테이블 상판이 28×14px이므로 r=1.7이면 딱 그 바깥에 의자가 둘러앉는다.
+        const sx = cx + Math.cos(ang) * 1.7;
+        const sy = cy + Math.sin(ang) * 1.7;
+        put("seat", sx, sy);
+        if (k === 0) put("dealer", sx, sy - 0.1);
+        else if (k <= (opts.guestsPerTable ?? 5)) put("guest", sx, sy, { i: (x + y + k) % 4 });
+      }
     }
 
     // 5) 남은 가장자리에 화분
@@ -116,6 +125,7 @@ const PixelScene = (() => {
     const x = ox + sx;
     const y = oy + sy;
     switch (o.t) {
+      case "rug": S.rug(ctx, x, y, theme, o.gw, o.gd); break;
       case "table": S.pokerTable(ctx, x, y, theme); break;
       case "bar": S.barCounter(ctx, x, y, theme); break;
       case "shelf": S.bottleShelf(ctx, x, y - WALL_H + 13, theme); break;
@@ -150,6 +160,21 @@ const PixelScene = (() => {
     const ox = -b.minX + pad;
     const oy = -b.minY + pad + WALL_H + 20;
 
+    // 바깥 — 잔디 바닥 + 가장자리 나무/덤불. 배치는 고정(rnd 없음)이라 흔들리지 않는다.
+    ctx.fillStyle = theme.grass || "#6faa54";
+    ctx.fillRect(0, 0, w, h);
+    ctx.fillStyle = A.shade(theme.grass || "#6faa54", -0.08);
+    for (let y = 0; y < h; y += 8) ctx.fillRect(0, y, w, 3);
+    const green = [];
+    for (let i = 0; i < 9; i++) {
+      green.push([12 + ((i * 137) % (w - 24)), 14 + ((i * 89) % 40), i % 3 === 0]);
+      green.push([12 + ((i * 211) % (w - 24)), h - 34 + ((i * 53) % 26), i % 2 === 0]);
+    }
+    for (const [gx2, gy2, big] of green) {
+      if (big) S.tree(ctx, gx2, gy2, theme);
+      else S.bush(ctx, gx2, gy2);
+    }
+
     for (const floor of stage.floors) {
       const cells = [...PixelMap.cellsOf(floor)].map((k) => k.split(",").map(Number));
       const depth = (gx, gy) => gx + gy;
@@ -178,6 +203,21 @@ const PixelScene = (() => {
         const [x, y] = iso(gx, gy, floor.level);
         S.wall(ctx, ox + x, oy + y, theme, wp.dir, WALL_H);
       }
+      // 벽 장식 — 액자 / 간판 / 조명을 번갈아 건다
+      let deco = 0;
+      for (const wp of walls) {
+        if ((wp.x + wp.y) % 3 !== 0) { continue; }
+        const [gx, gy] = wallAnchor(wp);
+        const mid = wp.dir === "back" ? iso(gx - 0.5, gy, floor.level) : iso(gx, gy - 0.5, floor.level);
+        const dx = ox + mid[0];
+        const dy = oy + mid[1] - Math.round(WALL_H * 0.52);
+        const kind = deco % 4;
+        if (kind === 0) S.frame(ctx, dx, dy, theme, wp.dir, theme.arts[deco % theme.arts.length]);
+        else if (kind === 2) S.wallSign(ctx, dx, dy - 2, theme, wp.dir);
+        else if (kind === 1) S.wallLamp(ctx, dx, dy - 4, theme);
+        deco++;
+      }
+
       // 제등 (일본풍) — 북쪽 벽을 따라 한 칸 걸러 매단다
       if (theme.lantern) {
         for (const wp of walls) {
@@ -187,7 +227,9 @@ const PixelScene = (() => {
         }
       }
       // 오브젝트
-      const objs = layoutFloor(floor, theme, opts).sort((p, q) => p.px + p.py - (q.px + q.py));
+      const objs = layoutFloor(floor, theme, opts).sort(
+        (p, q) => (p.layer ?? 1) - (q.layer ?? 1) || p.px + p.py - (q.px + q.py)
+      );
       for (const o of objs) drawObject(ctx, ox, oy, o, theme, floor.level);
     }
 
