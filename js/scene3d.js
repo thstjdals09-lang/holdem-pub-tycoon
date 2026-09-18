@@ -262,6 +262,8 @@ let floorMesh, floorMat, backWallMat, sideWallMat, backTrimMat, wainscotMat;
 let backWallMesh, leftWallMesh, rightWallMesh, backTrimMesh, stringLightsGroup, doorGroup;
 // 벽 아래쪽 우드 패널(웨인스코팅)과 좌우 트림 — 기존 핑크 트림(y=1.3)이 패널의 갓돌 역할을 한다
 let backWainscotMesh, leftWainscotMesh, rightWainscotMesh, leftTrimMesh, rightTrimMesh;
+let outsideGroup = null;    // 벽 너머 동네
+let themeDecorGroup = null; // 테마 전용 인테리어 소품
 const WAINSCOT_H = 1.3;
 
 let roomW = 0;
@@ -1214,6 +1216,550 @@ function gridPosition(i, cols, rows) {
 // ============================================================
 // 매장 골격
 // ============================================================
+// ============================================================
+// 매장 밖 풍경 + 테마 전용 인테리어
+//
+// 예전에는 테마가 색만 바꿔서 "같은 매장에 페인트만 칠한" 느낌이었고,
+// 벽 너머는 하늘 그라데이션뿐이라 매장이 허공에 떠 있는 것처럼 보였다.
+// 여기서 (1) 벽 밖 동네와 (2) 그 테마에서만 나오는 소품을 만든다.
+//
+// 바깥 배치는 시드 고정 난수를 쓴다 — 매번 무작위로 깔면 업그레이드할 때마다
+// (update()가 씬을 다시 만들 때마다) 바깥 동네가 통째로 움직여서 어지럽다.
+// ============================================================
+function seeded(seed) {
+  let a = seed;
+  return function () {
+    a |= 0;
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+const glowMat = (color) => new THREE.MeshBasicMaterial({ color });
+
+// ---------- 바깥 소품 ----------
+function buildHouse(wall, roof, lit, rnd) {
+  const g = new THREE.Group();
+  const h = 2.2 + rnd() * 0.8;
+  const body = meshWO(new RoundedBoxGeometry(2.4, h, 2.2, 2, 0.06), wall, 1.03);
+  body.position.y = h / 2;
+  const top = meshWO(new THREE.ConeGeometry(2.0, 1.2, 4), roof, 1.04);
+  top.position.y = h + 0.55;
+  top.rotation.y = Math.PI / 4;
+  g.add(body, top);
+  for (const sx of [-0.6, 0.6]) {
+    const win = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.5), glowMat(lit));
+    win.position.set(sx, h * 0.55, 1.12);
+    g.add(win);
+  }
+  return g;
+}
+
+function buildTreeRound(leaf, trunkColor) {
+  const g = new THREE.Group();
+  const trunk = meshWO(new THREE.CylinderGeometry(0.16, 0.22, 1.1, 8), trunkColor, 1.06);
+  trunk.position.y = 0.55;
+  const crown = meshWO(new THREE.SphereGeometry(0.95, 10, 10), leaf, 1.05);
+  crown.position.y = 1.7;
+  crown.scale.y = 1.1;
+  g.add(trunk, crown);
+  return g;
+}
+
+function buildCypress(leaf, trunkColor) {
+  const g = new THREE.Group();
+  const trunk = meshWO(new THREE.CylinderGeometry(0.14, 0.18, 0.6, 8), trunkColor, 1.06);
+  trunk.position.y = 0.3;
+  const crown = meshWO(new THREE.ConeGeometry(0.75, 3.2, 10), leaf, 1.04);
+  crown.position.y = 2.1;
+  g.add(trunk, crown);
+  return g;
+}
+
+function buildSakura() {
+  const g = new THREE.Group();
+  const trunk = meshWO(new THREE.CylinderGeometry(0.15, 0.22, 1.3, 8), 0x6b4a3a, 1.06);
+  trunk.position.y = 0.65;
+  g.add(trunk);
+  for (const [x, y, z, r] of [[0, 1.9, 0, 0.9], [-0.7, 1.6, 0.2, 0.6], [0.7, 1.65, -0.2, 0.62], [0.1, 2.35, 0.3, 0.55]]) {
+    const p = meshWO(new THREE.SphereGeometry(r, 9, 9), 0xffc2d8, 1.05);
+    p.position.set(x, y, z);
+    p.scale.y = 0.85;
+    g.add(p);
+  }
+  return g;
+}
+
+function buildBamboo(rnd) {
+  const g = new THREE.Group();
+  for (let i = 0; i < 3; i++) {
+    const h = 3 + rnd() * 1.4;
+    const stalk = meshWO(new THREE.CylinderGeometry(0.075, 0.085, h, 7), 0x7fae52, 1.07);
+    stalk.position.set((i - 1) * 0.28, h / 2, (i % 2) * 0.22);
+    g.add(stalk);
+    for (let k = 0; k < 2; k++) {
+      const leaf = plain(new THREE.SphereGeometry(0.28, 7, 7), 0x6b9a45);
+      leaf.scale.set(1.5, 0.28, 0.6);
+      leaf.position.set((i - 1) * 0.28 + (k ? 0.3 : -0.3), h * (0.72 + k * 0.14), (i % 2) * 0.22);
+      g.add(leaf);
+    }
+  }
+  return g;
+}
+
+function buildTower(wallColor, winColor, rnd) {
+  const g = new THREE.Group();
+  const h = 5 + rnd() * 5;
+  const body = meshWO(new RoundedBoxGeometry(2.0, h, 2.0, 2, 0.05), wallColor, 1.02);
+  body.position.y = h / 2;
+  g.add(body);
+  const mat = glowMat(winColor);
+  const rows = Math.floor(h / 0.9);
+  for (let r = 1; r < rows; r++) {
+    for (let c = -1; c <= 1; c++) {
+      if (rnd() < 0.35) continue;
+      const win = new THREE.Mesh(new THREE.PlaneGeometry(0.34, 0.42), mat);
+      win.position.set(c * 0.6, r * 0.9, 1.02);
+      g.add(win);
+    }
+  }
+  return g;
+}
+
+function buildLampPost(glow) {
+  const g = new THREE.Group();
+  const post = meshWO(new THREE.CylinderGeometry(0.07, 0.1, 3, 8), 0x4a4038, 1.07);
+  post.position.y = 1.5;
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.26, 10, 10), glowMat(glow));
+  head.position.y = 3.15;
+  g.add(post, head);
+  return g;
+}
+
+function buildTopiary() {
+  const g = new THREE.Group();
+  const pot = meshWO(new THREE.CylinderGeometry(0.4, 0.3, 0.5, 10), 0xf3e2ee, 1.05);
+  pot.position.y = 0.25;
+  g.add(pot);
+  for (let i = 0; i < 3; i++) {
+    const ball = meshWO(new THREE.SphereGeometry(0.5 - i * 0.1, 10, 10), 0x9fd48f, 1.05);
+    ball.position.y = 0.85 + i * 0.75;
+    g.add(ball);
+  }
+  return g;
+}
+
+function buildStoneLantern() {
+  const g = new THREE.Group();
+  const base = meshWO(new THREE.CylinderGeometry(0.34, 0.4, 0.34, 8), 0xa8a49a, 1.05);
+  base.position.y = 0.17;
+  const post = meshWO(new THREE.CylinderGeometry(0.16, 0.18, 0.9, 8), 0xb5b1a6, 1.06);
+  post.position.y = 0.8;
+  const box = meshWO(new RoundedBoxGeometry(0.62, 0.5, 0.62, 2, 0.06), 0xc2beb2, 1.04);
+  box.position.y = 1.5;
+  const fire = new THREE.Mesh(new THREE.SphereGeometry(0.16, 8, 8), glowMat(0xffd9a0));
+  fire.position.y = 1.5;
+  const cap = meshWO(new THREE.ConeGeometry(0.62, 0.36, 4), 0xa8a49a, 1.05);
+  cap.position.y = 1.9;
+  cap.rotation.y = Math.PI / 4;
+  g.add(base, post, box, fire, cap);
+  return g;
+}
+
+function buildHedge(len, color) {
+  const body = meshWO(new RoundedBoxGeometry(len, 0.8, 0.5, 2, 0.16), color, 1.04);
+  body.position.y = 0.4;
+  const g = new THREE.Group();
+  g.add(body);
+  return g;
+}
+
+// 테마별 바깥 동네
+const OUTSIDE = {
+  classic: {
+    ground: 0x9ccb7e,
+    scatter: [
+      { b: (r) => buildHouse(0xf0e2cc, 0xc26b5a, 0xffd98f, r), n: 7, zone: "near", radRel: [8, 17], s: [1.1, 1.7] },
+      { b: () => buildTreeRound(0x6bab5a, 0x7a5a3f), n: 10, zone: "near", s: [1, 1.7] },
+      { b: () => buildTreeRound(0x5f9e50, 0x7a5a3f), n: 6, zone: "far", s: [2.4, 3.4] },
+      { b: () => buildLampPost(0xffd98f), n: 4, zone: "near", s: [1, 1.2] },
+    ],
+  },
+  princess: {
+    ground: 0xd8eec4,
+    scatter: [
+      { b: () => buildTopiary(), n: 9, zone: "near", s: [1.1, 1.7] },
+      { b: () => buildTreeRound(0xa8dd94, 0x8a6a52), n: 6, zone: "near", s: [1, 1.6] },
+      { b: () => buildTreeRound(0x9ed488, 0x8a6a52), n: 5, zone: "far", s: [2.4, 3.4] },
+      { b: () => buildHedge(6, 0x86c47a), n: 5, zone: "near", s: [1, 1.3] },
+      { b: () => buildLampPost(0xffe6f2), n: 4, zone: "near", s: [1, 1.2] },
+    ],
+  },
+  european: {
+    ground: 0xbdb5a4,
+    scatter: [
+      { b: (r) => buildTower(0xd8cbb2, 0xffd98f, r), n: 8, zone: "near", radRel: [15, 27], s: [1.1, 1.7] },
+      { b: (r) => buildTower(0xcfc2a8, 0xffd98f, r), n: 6, zone: "far", s: [1.4, 2.1] },
+      { b: () => buildCypress(0x3f6b45, 0x6b5340), n: 9, zone: "near", radRel: [5, 14], s: [1, 1.5] },
+      { b: () => buildLampPost(0xffd98f), n: 4, zone: "near", s: [1, 1.2] },
+    ],
+  },
+  neon: {
+    ground: 0x241a38,
+    scatter: [
+      { b: (r) => buildTower(0x2a1f4a, r() < 0.5 ? 0x00e5ff : 0xff3fae, r), n: 11, zone: "near", radRel: [17, 30], s: [1.4, 2.2] },
+      { b: (r) => buildTower(0x241a3f, r() < 0.5 ? 0x00e5ff : 0xff3fae, r), n: 8, zone: "far", s: [1.5, 2.4] },
+      { b: () => buildLampPost(0x00e5ff), n: 5, zone: "near", s: [1, 1.2] },
+    ],
+  },
+  japanese: {
+    ground: 0x9fbd84,
+    scatter: [
+      { b: () => buildSakura(), n: 6, zone: "near", radRel: [6, 15], s: [1.1, 1.8] },
+      { b: () => buildSakura(), n: 5, zone: "far", s: [2.4, 3.2] },
+      { b: (r) => buildBamboo(r), n: 7, zone: "near", radRel: [6, 15], s: [1, 1.5] },
+      { b: () => buildStoneLantern(), n: 5, zone: "near", s: [1.1, 1.6] },
+      { b: (r) => buildHouse(0xefe6d2, 0x5a4a44, 0xffd9a0, r), n: 4, zone: "near", radRel: [8, 17], s: [1.2, 1.7] },
+    ],
+  },
+};
+
+// 카메라가 (+x, +z) 위쪽에 있어서 실제로 벽 너머가 보이는 건 그 두 방향이다.
+// 그 각도 범위에만 깔아 성능을 아낀다.
+function rebuildOutside() {
+  if (!outsideGroup) return;
+  clearGroup(outsideGroup);
+  const cfg = OUTSIDE[currentTheme] || OUTSIDE.classic;
+
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(150, 150), toonMat(cfg.ground));
+  ground.rotation.x = -Math.PI / 2;
+  ground.position.set(0, -0.08, ROOM_CENTER_Z);
+  ground.receiveShadow = true;
+  outsideGroup.add(ground);
+
+  const rnd = seeded(20260918);
+  const halfW = roomW / 2;
+  const halfD = roomD / 2;
+  const R0 = Math.max(halfW, halfD);
+
+  // 카메라는 (+x, +z) 위에 있다.
+  //  near = 카메라 쪽(-40°~130°). 여기에 가까이 두면 매장 앞을 가로막는다 →
+  //         화면 아래 여백에 깔리도록 R0+11 부터 멀리 깐다.
+  //  far  = 벽 뒤(150°~300°). 벽 높이가 WALL_H라 낮은 건 안 보이므로,
+  //         이 구역엔 크게 키운 것만 넣어 지붕 위로 빼꼼 보이게 한다.
+  // 거리는 매장 반지름(R0) 기준 상대값 — 매장을 확장해도 동네가 안쪽으로 파고들지 않는다.
+  const ZONE = {
+    near: { a0: -40, a1: 130, rad: [4, 13] },
+    far: { a0: 150, a1: 300, rad: [3, 14] },
+  };
+
+  for (const spec of cfg.scatter) {
+    const z0 = ZONE[spec.zone] || ZONE.near;
+    const radRel = spec.radRel || z0.rad;
+    for (let i = 0; i < spec.n; i++) {
+      const ang = (z0.a0 + rnd() * (z0.a1 - z0.a0)) * (Math.PI / 180);
+      const rad = R0 + radRel[0] + rnd() * (radRel[1] - radRel[0]);
+      const x = Math.cos(ang) * rad;
+      const z = Math.sin(ang) * rad + ROOM_CENTER_Z;
+      if (Math.abs(x) < halfW + 2 && Math.abs(z - ROOM_CENTER_Z) < halfD + 2) continue;
+      const obj = spec.b(rnd);
+      obj.position.set(x, 0, z);
+      obj.rotation.y = rnd() * Math.PI * 2;
+      obj.scale.setScalar(spec.s[0] + rnd() * (spec.s[1] - spec.s[0]));
+      outsideGroup.add(obj);
+    }
+  }
+}
+
+// ---------- 테마 전용 인테리어 ----------
+function buildBeerTaps() {
+  const g = new THREE.Group();
+  const base = meshWO(new RoundedBoxGeometry(0.9, 0.12, 0.3, 2, 0.04), 0x8a6a4a, 1.04);
+  base.position.y = 0.06;
+  g.add(base);
+  for (let i = 0; i < 3; i++) {
+    const x = -0.28 + i * 0.28;
+    const body = meshWO(new THREE.CylinderGeometry(0.05, 0.05, 0.5, 8), 0xd9b25a, 1.07);
+    body.position.set(x, 0.36, 0);
+    const spout = plain(new THREE.CylinderGeometry(0.035, 0.035, 0.22, 6), 0xd9b25a);
+    spout.rotation.x = Math.PI / 2;
+    spout.position.set(x, 0.54, 0.1);
+    const handle = plain(new THREE.SphereGeometry(0.07, 8, 8), [0xc23a33, 0x2f6b8a, 0x3a8a5a][i]);
+    handle.position.set(x, 0.66, 0);
+    g.add(body, spout, handle);
+  }
+  return g;
+}
+
+function buildHangingMugs() {
+  const g = new THREE.Group();
+  g.add(meshWO(new THREE.BoxGeometry(2.6, 0.07, 0.07), 0x8a6a4a, 1.06));
+  for (let i = 0; i < 5; i++) {
+    const x = -1.05 + i * 0.52;
+    const mug = meshWO(new THREE.CylinderGeometry(0.11, 0.1, 0.24, 8), 0xf2ede0, 1.06);
+    mug.position.set(x, -0.2, 0);
+    const ear = plain(new THREE.TorusGeometry(0.07, 0.022, 6, 10), 0xf2ede0);
+    ear.position.set(x + 0.12, -0.2, 0);
+    ear.rotation.y = Math.PI / 2;
+    g.add(mug, ear);
+  }
+  return g;
+}
+
+function buildWoodSign() {
+  const g = new THREE.Group();
+  g.add(meshWO(new RoundedBoxGeometry(2.2, 0.8, 0.1, 2, 0.06), 0x8a5c3a, 1.04));
+  const plate = plain(new THREE.PlaneGeometry(1.8, 0.44), 0xf2e6cc);
+  plate.position.z = 0.06;
+  const bar = plain(new THREE.PlaneGeometry(1.2, 0.09), 0x8a5c3a);
+  bar.position.z = 0.07;
+  g.add(plate, bar);
+  return g;
+}
+
+function buildRoseVase() {
+  const g = new THREE.Group();
+  const vase = meshWO(new THREE.CylinderGeometry(0.16, 0.22, 0.5, 10), 0xf7e9f3, 1.05);
+  vase.position.y = 0.25;
+  g.add(vase);
+  for (let i = 0; i < 5; i++) {
+    const a = (i / 5) * Math.PI * 2;
+    const stem = plain(new THREE.CylinderGeometry(0.02, 0.02, 0.5, 5), 0x6ba85a);
+    stem.position.set(Math.cos(a) * 0.09, 0.72, Math.sin(a) * 0.09);
+    const bud = meshWO(new THREE.SphereGeometry(0.12, 8, 8), i % 2 ? 0xff9ecb : 0xfff0f6, 1.06);
+    bud.position.set(Math.cos(a) * 0.12, 0.98, Math.sin(a) * 0.12);
+    g.add(stem, bud);
+  }
+  return g;
+}
+
+function buildCanopyArch() {
+  const g = new THREE.Group();
+  for (const sx of [-1, 1]) {
+    const post = meshWO(new THREE.CylinderGeometry(0.1, 0.12, 3.2, 10), 0xfff2fa, 1.05);
+    post.position.set(sx * 1.5, 1.6, 0);
+    g.add(post);
+  }
+  const arch = meshWO(new THREE.TorusGeometry(1.5, 0.11, 8, 18, Math.PI), 0xfff2fa, 1.05);
+  arch.position.y = 3.2;
+  g.add(arch);
+  for (let i = 0; i < 6; i++) {
+    const t = (i / 5) * Math.PI;
+    const flower = plain(new THREE.SphereGeometry(0.13, 8, 8), i % 2 ? 0xff9ecb : 0xffd9ec);
+    flower.position.set(Math.cos(t) * 1.5, 3.2 + Math.sin(t) * 1.5, 0);
+    g.add(flower);
+  }
+  return g;
+}
+
+function buildFireplace() {
+  const g = new THREE.Group();
+  const body = meshWO(new RoundedBoxGeometry(2.6, 2.4, 0.7, 2, 0.08), 0xcfc6b2, 1.03);
+  body.position.y = 1.2;
+  const hole = plain(new THREE.BoxGeometry(1.5, 1.3, 0.2), 0x2a201c);
+  hole.position.set(0, 0.85, 0.3);
+  const mantel = meshWO(new RoundedBoxGeometry(3.0, 0.22, 0.9, 2, 0.06), 0x8a6a4a, 1.04);
+  mantel.position.y = 2.45;
+  const fire = new THREE.Mesh(new THREE.SphereGeometry(0.45, 10, 10), glowMat(0xff9a3a));
+  fire.scale.set(1.3, 0.9, 0.5);
+  fire.position.set(0, 0.55, 0.32);
+  g.add(body, hole, mantel, fire);
+  return g;
+}
+
+function buildCandelabra() {
+  const g = new THREE.Group();
+  const stem = meshWO(new THREE.CylinderGeometry(0.06, 0.13, 0.9, 8), 0xd4af37, 1.06);
+  stem.position.y = 0.45;
+  g.add(stem);
+  for (let i = -1; i <= 1; i++) {
+    const y = 1.05 - Math.abs(i) * 0.08;
+    const candle = meshWO(new THREE.CylinderGeometry(0.05, 0.05, 0.3, 7), 0xfdf3dd, 1.07);
+    candle.position.set(i * 0.22, y, 0);
+    const flame = new THREE.Mesh(new THREE.SphereGeometry(0.06, 7, 7), glowMat(0xffd98f));
+    flame.scale.y = 1.7;
+    flame.position.set(i * 0.22, y + 0.23, 0);
+    g.add(candle, flame);
+  }
+  return g;
+}
+
+function buildColumn() {
+  const g = new THREE.Group();
+  const shaft = meshWO(new THREE.CylinderGeometry(0.3, 0.34, 4.2, 12), 0xe0d7c2, 1.03);
+  shaft.position.y = 2.3;
+  const base = meshWO(new THREE.CylinderGeometry(0.45, 0.5, 0.35, 12), 0xd0c6ae, 1.04);
+  base.position.y = 0.17;
+  const cap = meshWO(new THREE.BoxGeometry(0.9, 0.3, 0.9), 0xd0c6ae, 1.04);
+  cap.position.y = 4.55;
+  g.add(shaft, base, cap);
+  return g;
+}
+
+function buildDiscoBall() {
+  const g = new THREE.Group();
+  const cord = plain(new THREE.CylinderGeometry(0.015, 0.015, 1.4, 5), 0x2a2436);
+  cord.position.y = 0.7;
+  const ball = new THREE.Mesh(
+    new THREE.IcosahedronGeometry(0.42, 1),
+    new THREE.MeshStandardMaterial({ color: 0xdff6ff, metalness: 0.9, roughness: 0.15, flatShading: true })
+  );
+  g.add(cord, ball);
+  return g;
+}
+
+function buildNeonSign(color) {
+  const g = new THREE.Group();
+  g.add(plain(new THREE.PlaneGeometry(2.2, 1.0), 0x140c26));
+  const mat = glowMat(color);
+  for (let i = 0; i < 3; i++) {
+    const bar = new THREE.Mesh(new THREE.BoxGeometry(1.5 - i * 0.35, 0.09, 0.05), mat);
+    bar.position.set(-0.15 + i * 0.1, 0.3 - i * 0.3, 0.05);
+    g.add(bar);
+  }
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.3, 0.05, 6, 16), mat);
+  ring.position.set(0.72, 0, 0.05);
+  g.add(ring);
+  return g;
+}
+
+function buildNoren() {
+  const g = new THREE.Group();
+  const rod = meshWO(new THREE.CylinderGeometry(0.05, 0.05, 2.6, 8), 0x6b4a32, 1.06);
+  rod.rotation.z = Math.PI / 2;
+  g.add(rod);
+  for (let i = 0; i < 3; i++) {
+    const x = -0.85 + i * 0.85;
+    const panel = plain(new THREE.PlaneGeometry(0.78, 1.1), 0x27406e);
+    panel.position.set(x, -0.6, 0);
+    const band = plain(new THREE.PlaneGeometry(0.78, 0.16), 0xf2ece0);
+    band.position.set(x, -0.22, 0.01);
+    g.add(panel, band);
+  }
+  return g;
+}
+
+function buildShojiWindow() {
+  const g = new THREE.Group();
+  g.add(plain(new THREE.PlaneGeometry(2.2, 1.6), 0xfdf8ec));
+  const frameMat = toonMat(0x6e4630);
+  for (let i = 0; i <= 3; i++) {
+    const v = new THREE.Mesh(new THREE.BoxGeometry(0.05, 1.6, 0.05), frameMat);
+    v.position.set(-1.1 + (i * 2.2) / 3, 0, 0.03);
+    g.add(v);
+  }
+  for (let i = 0; i <= 2; i++) {
+    const h = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.05, 0.05), frameMat);
+    h.position.set(0, -0.8 + (i * 1.6) / 2, 0.03);
+    g.add(h);
+  }
+  return g;
+}
+
+function buildSakeBarrels() {
+  const g = new THREE.Group();
+  const put = (x, y) => {
+    const barrel = meshWO(new THREE.CylinderGeometry(0.34, 0.34, 0.62, 12), 0xf2ece0, 1.04);
+    barrel.rotation.x = Math.PI / 2;
+    barrel.position.set(x, y, 0);
+    const band = plain(new THREE.CylinderGeometry(0.36, 0.36, 0.12, 12), 0xc23a33);
+    band.rotation.x = Math.PI / 2;
+    band.position.set(x, y, 0);
+    g.add(barrel, band);
+  };
+  for (let i = 0; i < 3; i++) put(-0.72 + i * 0.72, 0.34);
+  put(-0.36, 1.0);
+  put(0.36, 1.0);
+  return g;
+}
+
+function buildBonsai() {
+  const g = new THREE.Group();
+  const pot = meshWO(new RoundedBoxGeometry(0.66, 0.26, 0.5, 2, 0.05), 0x6b4a3a, 1.05);
+  pot.position.y = 0.13;
+  const trunk = meshWO(new THREE.CylinderGeometry(0.06, 0.09, 0.5, 7), 0x7a5a42, 1.07);
+  trunk.position.y = 0.5;
+  trunk.rotation.z = 0.2;
+  g.add(pot, trunk);
+  for (const [x, y, r] of [[0.16, 0.86, 0.3], [-0.18, 0.74, 0.24], [0.02, 1.02, 0.2]]) {
+    const pad = meshWO(new THREE.SphereGeometry(r, 9, 9), 0x4f8a4a, 1.06);
+    pad.scale.y = 0.55;
+    pad.position.set(x, y, 0);
+    g.add(pad);
+  }
+  return g;
+}
+
+// 벽에 거는 액자 — 포스터의 벽처럼 여러 장이 걸려 있게 한다
+function buildFrames(frameColor, artColors) {
+  const g = new THREE.Group();
+  artColors.forEach((c, i) => {
+    const w = 0.8 + (i % 2) * 0.35;
+    const h = 0.95 - (i % 2) * 0.2;
+    const frame = meshWO(new RoundedBoxGeometry(w + 0.14, h + 0.14, 0.08, 2, 0.03), frameColor, 1.04);
+    frame.position.set((i - (artColors.length - 1) / 2) * 1.3, (i % 2) * 0.28, 0);
+    const art = plain(new THREE.PlaneGeometry(w, h), c);
+    art.position.set(frame.position.x, frame.position.y, 0.05);
+    g.add(frame, art);
+  });
+  return g;
+}
+
+// 테마별 배치표: [빌더, x, y, z, rotY, scale]
+const THEME_DECOR = {
+  classic: (zBack, halfW) => [
+    [buildHangingMugs, -halfW + 3.4, 3.2, zBack + 0.3, 0, 1],
+    [buildWoodSign, 3.0, 3.5, zBack + 0.12, 0, 1],
+    [() => buildFrames(0x8a5c3a, [0xd9b98f, 0xa8c4d9, 0xd9a8b5]), -1.4, 2.5, zBack + 0.12, 0, 1],
+    [buildBeerTaps, -halfW + 1.3, 1.12, zBack + 1.2, 0, 1],
+  ],
+  princess: (zBack, halfW) => [
+    [buildCanopyArch, 0, 0, zBack + 1.8, 0, 1],
+    [() => buildFrames(0xfff2fa, [0xffd9ec, 0xffe8f5, 0xf0d9ff]), 3.6, 3.2, zBack + 0.12, 0, 1],
+    [buildRoseVase, -halfW + 1.2, 1.12, zBack + 1.2, 0, 1],
+    [buildRoseVase, halfW - 1.4, 0, zBack + 1.4, 0, 1.5],
+    [buildChandelier, -3.6, 4.6, zBack + 4.6, 0, 1],
+    [buildChandelier, 3.6, 4.6, zBack + 4.6, 0, 1],
+  ],
+  european: (zBack, halfW) => [
+    [buildFireplace, 3.2, 0, zBack + 0.5, 0, 1],
+    [buildColumn, -halfW + 1.1, 0, zBack + 1.3, 0, 1],
+    [buildColumn, halfW - 1.1, 0, zBack + 1.3, 0, 1],
+    [() => buildFrames(0xd4af37, [0x6b4a32, 0x3f5a45, 0x5a3a2a]), -2.4, 3.2, zBack + 0.12, 0, 1.1],
+    [buildCandelabra, -halfW + 1.3, 1.12, zBack + 1.2, 0, 1],
+  ],
+  neon: (zBack, halfW) => [
+    [() => buildNeonSign(0x00e5ff), -3.6, 3.6, zBack + 0.14, 0, 1],
+    [() => buildNeonSign(0xff3fae), 3.6, 3.6, zBack + 0.14, 0, 1],
+    [buildDiscoBall, 0, 4.4, zBack + 4.6, 0, 1],
+    [buildDiscoBall, -4.6, 4.8, zBack + 6.6, 0, 0.8],
+  ],
+  japanese: (zBack, halfW) => [
+    [buildNoren, -halfW + 2.8, 3.2, zBack + 0.2, 0, 1],
+    [buildShojiWindow, 2.8, 3.3, zBack + 0.1, 0, 1],
+    [buildShojiWindow, -1.2, 3.3, zBack + 0.1, 0, 1],
+    [buildSakeBarrels, halfW - 1.7, 0, zBack + 1.0, 0, 1],
+    [buildBonsai, -halfW + 1.1, 1.12, zBack + 1.2, 0, 1],
+    [buildStoneLantern, halfW - 1.5, 0, zBack + 4.2, 0, 0.9],
+  ],
+};
+
+function rebuildThemeDecor() {
+  if (!themeDecorGroup) return;
+  clearGroup(themeDecorGroup);
+  const make = THEME_DECOR[currentTheme] || THEME_DECOR.classic;
+  const zBack = ROOM_CENTER_Z - roomD / 2;
+  for (const [builder, x, y, z, ry, sc] of make(zBack, roomW / 2)) {
+    const obj = builder();
+    obj.position.set(x, y, z);
+    obj.rotation.y = ry;
+    obj.scale.setScalar(sc);
+    themeDecorGroup.add(obj);
+  }
+}
+
 function rebuildStringLights() {
   if (stringLightsGroup) scene.remove(stringLightsGroup);
   stringLightsGroup = new THREE.Group();
@@ -1307,6 +1853,8 @@ function applyRoomSize(w, d) {
   doorGroup.rotation.y = Math.PI / 2;
 
   rebuildStringLights();
+  rebuildOutside();
+  rebuildThemeDecor();
 }
 
 export function init(containerEl) {
@@ -1410,6 +1958,10 @@ export function init(containerEl) {
     for (const m of [backWainscotMesh, leftWainscotMesh, rightWainscotMesh]) m.receiveShadow = true;
     scene.add(backWainscotMesh, leftWainscotMesh, rightWainscotMesh, leftTrimMesh, rightTrimMesh);
 
+    outsideGroup = new THREE.Group();
+    themeDecorGroup = new THREE.Group();
+    scene.add(outsideGroup, themeDecorGroup);
+
     applyRoomSize(ROOM_MIN_W, ROOM_MIN_D);
 
     groups = {
@@ -1470,6 +2022,8 @@ function applyTheme(themeId) {
   if (scene.background && scene.background.dispose) scene.background.dispose();
   scene.background = makeSkyTexture(t.sky[0], t.sky[1]);
   if (stringLightsGroup) rebuildStringLights(); // 조명 줄은 테마마다 모양(전구/제등)과 색이 다르다
+  rebuildOutside();
+  rebuildThemeDecor();
 }
 
 function applyFrustum(aspect) {
