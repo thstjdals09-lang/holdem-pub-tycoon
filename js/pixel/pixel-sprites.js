@@ -284,6 +284,41 @@ const PixelSprites = (() => {
     ellipse(ctx, ox + 3, oy - 4, 4, 3, "#356b38");
   }
 
+  /**
+   * 난간 — 벽이 없는 가장자리(주로 2층 앞쪽)에 세운다.
+   * axis "gx" = 칸의 남쪽 모서리(왼쪽 위로 뻗음), "gy" = 동쪽 모서리(오른쪽 위로 뻗음).
+   * 기준점은 두 경우 모두 칸의 남쪽 꼭짓점.
+   */
+  function railing(ctx, ox, oy, pal, axis) {
+    const ex = axis === "gx" ? ox - TW / 2 : ox + TW / 2;
+    const ey = oy - TH / 2;
+    const c = pal.gold;
+    const f = faces(c);
+    // 기둥 3개 (양 끝 + 가운데)
+    for (const t of [0, 0.5, 1]) {
+      const px = Math.round(ox + (ex - ox) * t);
+      const py = Math.round(oy + (ey - oy) * t);
+      rect(ctx, px - 1, py - 12, 2, 12, f.right);
+      rect(ctx, px - 1, py - 13, 2, 2, f.top);
+    }
+    // 위·아래 가로대
+    line(ctx, ox, oy - 12, ex, ey - 12, f.top);
+    line(ctx, ox, oy - 11, ex, ey - 11, c);
+    line(ctx, ox, oy - 6, ex, ey - 6, f.right);
+  }
+
+  /** 계단 — 층과 층을 잇는다. 2층이 그냥 떠 있는 판처럼 보이는 걸 막아준다. */
+  function stairs(ctx, ox, oy, pal, steps, rise) {
+    const n = steps || 7;
+    const dh = (rise || 46) / n;
+    for (let i = 0; i < n; i++) {
+      // 아래에서 위로: 한 칸씩 뒤로(-gy = 오른쪽 위) 가면서 높아진다
+      const sx = ox + (i * TW) / 2 / 2;
+      const sy = oy - (i * TH) / 2 / 2 - i * dh;
+      A.isoBox(ctx, sx, sy, 0.5, 0.9, Math.max(3, dh), pal.wainscot, { outline: false });
+    }
+  }
+
   /** 따뜻한 빛 번짐 — 조명 주변을 은은하게. 도트에서도 광원이 있으면 방이 아늑해진다. */
   function glow(ctx, ox, oy, r, color, strength) {
     const st = strength == null ? 1 : strength;
@@ -358,6 +393,17 @@ const PixelSprites = (() => {
     // 벽은 얇은 판이라 윗면만 살짝 밝게 두고 양 옆면은 같은 톤으로 — 두께가 도드라지면 지저분하다
     const flat = { ...f, left: f.left, right: shade(base, -0.06), top: shade(base, 0.12) };
     const g = A.isoBox(ctx, ox, oy, gw, gd, h, base, { faces: flat });
+
+    // 벽 상단 목재 보 (윗면을 어두운 나무로 덮어 마감)
+    {
+      const cap = shade(pal.wainscot, -0.12);
+      const capH = 3;
+      const top = A.cornersTop(gw, gd, h).map(([px, py]) => [ox + px, oy + py]);
+      poly(ctx, top, cap);
+      const under = A.cornersTop(gw, gd, h - capH).map(([px, py]) => [ox + px, oy + py]);
+      if (back) poly(ctx, [top[3], top[0], under[0], under[3]], shade(cap, -0.12));
+      else poly(ctx, [top[0], top[1], under[1], under[0]], shade(cap, -0.2));
+    }
 
     // 아래쪽 우드 패널(웨인스코팅) + 트림 — 보이는 면 위에 덧그린다
     const wy = Math.round(h * 0.4);
@@ -466,6 +512,7 @@ const PixelSprites = (() => {
     ellipse, cylinder, drawPixels,
     pokerTable, chair, stool, zabuton, lantern, barCounter, bottleShelf,
     rug, frame, wallSign, wallLamp, marquee, tree, bush, glow, chalkboard, beerSign,
+    railing, stairs,
     plant, trophyStand, dartboard, jukebox, wall, person,
     BODY,
   };

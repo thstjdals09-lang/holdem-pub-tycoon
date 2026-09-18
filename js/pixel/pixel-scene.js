@@ -250,6 +250,22 @@ const PixelScene = (() => {
           S.lantern(ctx, ox + x, oy + y - WALL_H - 4, theme);
         }
       }
+      // 2층 난간 — 벽이 없는 가장자리(앞/오른쪽)에 세운다. 없으면 2층이 그냥 떠 있는 판처럼 보인다.
+      if (floor.level > 0) {
+        const cellSet2 = PixelMap.cellsOf(floor);
+        for (const [gx, gy] of byDepth) {
+          const [x, y] = iso(gx + 1, gy + 1, floor.level);
+          if (!cellSet2.has(`${gx},${gy + 1}`)) S.railing(ctx, ox + x, oy + y, theme, "gx");
+          if (!cellSet2.has(`${gx + 1},${gy}`)) S.railing(ctx, ox + x, oy + y, theme, "gy");
+        }
+        // 계단 — 2층 앞쪽 오른쪽 끝에서 1층으로 내려온다
+        const lowest = byDepth[byDepth.length - 1];
+        if (lowest) {
+          const [x, y] = iso(lowest[0] + 1, lowest[1] + 1, floor.level);
+          S.stairs(ctx, ox + x + 6, oy + y + FLOOR_H, theme, 7, FLOOR_H);
+        }
+      }
+
       // 입구 차양 간판 — 1층 앞쪽 가장자리. 건물이 "가게"로 읽히게 하는 요소.
       if (floor.level === 0) {
         const cellSet = PixelMap.cellsOf(floor);
@@ -259,7 +275,7 @@ const PixelScene = (() => {
           // gx가 작은 칸을 고르면 건물 왼쪽 끝 허공에 간판이 걸린다.
           const [gx, gy] = frontEdge.reduce((a, b) => (a[0] + a[1] >= b[0] + b[1] ? a : b));
           const [x, y] = iso(gx + 0.5, gy + 1, floor.level);
-          S.marquee(ctx, ox + x, oy + y + 9, theme);
+          S.marquee(ctx, ox + x, oy + y + 3, theme); // 차양 끝이 슬래브 두께(7px) 안에 들어오게
         }
       }
 
