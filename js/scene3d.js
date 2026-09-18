@@ -131,6 +131,8 @@ const THEMES = {
     felt: [0x3fa878, 0x3a9bbf, 0xa8527a, 0x4a86a8, 0x8f75b5, 0x3fa895],
     props: {},
     bottles: [0x5c3a21, 0x2f6b4a, 0x7a2f4a, 0x2f4a7a, 0xc9a24a],
+    wallPattern: null,
+    light: { hemiSky: 0xfff6ec, hemiGround: 0xf0dcc4, hemiInt: 1.0, sun: 0xfff6e4, sunInt: 1.0, fill: 0xffd7ea, fillInt: 0.3 },
     customers: [0xff8fab, 0xffc85c, 0x7bc67e, 0x6fc1ff, 0xd98cff, 0xffa8a8, 0xffe08a],
     dealerTint: null,
     dealerMix: 0,
@@ -156,6 +158,9 @@ const THEMES = {
       lampShade: 0xfff2fa,
     },
     bottles: [0xffb3d2, 0xf0d9ff, 0xffe6b8, 0xd9f0ff, 0xfff0f6],
+    wallPattern: "stripe",
+    wallTile: 2.8,
+    light: { hemiSky: 0xfff4fb, hemiGround: 0xffe0ee, hemiInt: 1.15, sun: 0xfff2f8, sunInt: 0.95, fill: 0xffd9ec, fillInt: 0.38 },
     customers: [0xffb3d2, 0xffd6e8, 0xe3c2ff, 0xc2e0ff, 0xfff0b8, 0xffc2c2, 0xd9f0e0],
     dealerTint: 0xffd9ee,
     dealerMix: 0.42,
@@ -181,6 +186,9 @@ const THEMES = {
       lampShade: 0xd4af37,
     },
     bottles: [0x4a2f1a, 0x2f5a3a, 0x6b2f2f, 0x3a3a5a, 0xc9a24a],
+    wallPattern: "panel",
+    wallTile: 3.6,
+    light: { hemiSky: 0xffe9c8, hemiGround: 0xcbb08a, hemiInt: 0.78, sun: 0xffe0a8, sunInt: 0.92, fill: 0xc9a86b, fillInt: 0.22 },
     customers: [0x8f2f3a, 0x35704a, 0x455680, 0xc2a35a, 0x6b4a6b, 0xa8703a, 0xe8dcc0],
     dealerTint: 0x3a2a1a,
     dealerMix: 0.34,
@@ -206,6 +214,9 @@ const THEMES = {
       lampShade: 0x2a1a44,
     },
     bottles: [0x00e5ff, 0xff3fae, 0xb26bff, 0x5affc2, 0xffe14a],
+    wallPattern: "grid",
+    wallTile: 4.6,
+    light: { hemiSky: 0x9a7aff, hemiGround: 0x241a38, hemiInt: 0.55, sun: 0xbfa8ff, sunInt: 0.45, fill: 0x00e5ff, fillInt: 0.5 },
     customers: [0x00e5ff, 0xff3fae, 0xb26bff, 0x5affc2, 0xffe14a, 0xff7a4a, 0xffffff],
     dealerTint: 0x140c26,
     dealerMix: 0.46,
@@ -213,17 +224,17 @@ const THEMES = {
   },
   // 일본풍 — 다다미 바닥 + 격자(쇼지) 벽 + 제등. 펠트는 남색/주칠 계열.
   japanese: {
-    floor: 0xd9cf9e,
+    floor: 0xe7dcac,
     floorPattern: "tatami",
-    wallBack: 0xf7f0de,
+    wallBack: 0xfbf5e6,
     wallSide: 0xfdf8ec,
     trim: 0x8a4a32,
-    wainscot: 0x6e4630,
+    wainscot: 0x7a5236,
     sky: ["#fdf6e6", "#f0dcc0"],
     felt: [0x27406e, 0x8a2f2f, 0x2f5a50, 0x4a3a6b, 0x6e4a2a, 0x2f4a6b],
     props: {
-      rail: 0x8a5c3a, railTrim: 0x5e3b24, tableLeg: 0x6e4630,
-      chair: 0x8a5c3a, chairPad: 0xc23a33, stool: 0xc23a33,
+      rail: 0xbf9463, railTrim: 0x8a5c3a, tableLeg: 0x8a5c3a,
+      chair: 0xbf9463, chairPad: 0xc23a33, stool: 0xc23a33,
       bar: 0x7a5236, barTop: 0x5e3b24, barTrim: 0xc23a33,
       wood: 0x8a5c3a, sofa: 0x2f4a6b,
       fridge: 0xf2ece0, fridgeDoor: 0xbfd4cf,
@@ -232,6 +243,9 @@ const THEMES = {
       lampShade: 0xc23a33,
     },
     bottles: [0xf2ece0, 0x27406e, 0x2f5a50, 0xc23a33, 0xe8b04a],
+    wallPattern: "shoji",
+    wallTile: 6.2,
+    light: { hemiSky: 0xfff8ec, hemiGround: 0xe6d9b8, hemiInt: 1.08, sun: 0xfff0d4, sunInt: 0.95, fill: 0xffcf9a, fillInt: 0.3 },
     customers: [0x27406e, 0xc23a33, 0xf2ece0, 0x2f5a50, 0xe8b04a, 0xf0a8b8, 0x4a3a6b],
     dealerTint: 0x1f2f52,
     dealerMix: 0.4,
@@ -264,6 +278,8 @@ let outlineMat;
 let raycaster;
 let pointerStart = null;
 let currentTheme = null;
+const WALL_TEX = new Map(); // 스타일별 캐시 — 테마를 오갈 때마다 캔버스를 다시 그리지 않는다
+let hemiLight, sunLight, fillLight; // 테마마다 조명 톤이 달라진다
 let themeDef = THEMES.classic;                 // 적용 중인 테마 — 딜러 틴트·조명 종류를 여기서 읽는다
 let customerShirts = THEMES.classic.customers; // 손님 상의 팔레트 — applyTheme()이 교체한다
 let currentPerTableIncome = 0;
@@ -377,6 +393,62 @@ function makeFeltTexture() {
   return tex;
 }
 
+// 벽면 텍스처. 색만 바꾸면 벽은 계속 민무늬라 컨셉이 안 산다.
+//   shoji  : 창호지 + 나무 격자 (일본풍)
+//   panel  : 몰딩 액자 패널 (유럽풍)
+//   stripe : 세로 줄무늬 벽지 (공주풍)
+//   grid   : 발광 그리드 라인 (네온)
+function makeWallTexture(style) {
+  const size = 256;
+  const canvas = document.createElement("canvas");
+  canvas.width = canvas.height = size;
+  const ctx = canvas.getContext("2d");
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, size, size);
+
+  if (style === "shoji") {
+    // 격자 사이 종이면 + 나무 살. 바깥 테두리를 굵게 해서 미닫이 문짝처럼 보이게 한다.
+    ctx.fillStyle = "rgba(255,252,240,0.92)";
+    ctx.fillRect(0, 0, size, size);
+    ctx.fillStyle = "rgba(122,82,54,0.55)";
+    const cols = 4, rows = 5, t = 9;
+    for (let i = 0; i <= cols; i++) ctx.fillRect((size / cols) * i - t / 2, 0, t, size);
+    for (let i = 0; i <= rows; i++) ctx.fillRect(0, (size / rows) * i - t / 2, size, t);
+    ctx.fillStyle = "rgba(96,62,40,0.8)";
+    ctx.fillRect(0, 0, size, 15);
+    ctx.fillRect(0, size - 15, size, 15);
+    ctx.fillRect(0, 0, 15, size);
+    ctx.fillRect(size - 15, 0, 15, size);
+  } else if (style === "panel") {
+    ctx.strokeStyle = "rgba(60,40,26,0.32)";
+    ctx.lineWidth = 8;
+    ctx.strokeRect(24, 24, size - 48, size - 48);
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = "rgba(255,238,196,0.35)";
+    ctx.strokeRect(42, 42, size - 84, size - 84);
+  } else if (style === "stripe") {
+    for (let x = 0; x < size; x += 34) {
+      ctx.fillStyle = "rgba(255,255,255,0.5)";
+      ctx.fillRect(x, 0, 17, size);
+    }
+    ctx.fillStyle = "rgba(255,160,205,0.16)";
+    for (let y = 18; y < size; y += 64) for (let x = 12; x < size; x += 64) ctx.fillRect(x, y, 7, 7);
+  } else if (style === "grid") {
+    ctx.fillStyle = "rgba(255,255,255,0.86)";
+    ctx.fillRect(0, 0, size, size);
+    ctx.fillStyle = "rgba(255,255,255,1)";
+    for (let i = 0; i <= 4; i++) {
+      ctx.fillRect((size / 4) * i - 3, 0, 6, size);
+      ctx.fillRect(0, (size / 4) * i - 3, size, 6);
+    }
+  }
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
 function makeFloorTexture(pattern) {
   const size = 256;
   const canvas = document.createElement("canvas");
@@ -407,9 +479,9 @@ function makeFloorTexture(pattern) {
         ctx.fillRect(x + size / 2 - 4, y, 4, h);
       }
     }
-    ctx.strokeStyle = "rgba(130,115,70,0.14)";
+    ctx.strokeStyle = "rgba(130,115,70,0.2)";
     ctx.lineWidth = 1;
-    for (let x = 0; x < size; x += 5) {
+    for (let x = 0; x < size; x += 4) {
       ctx.beginPath();
       ctx.moveTo(x, 0);
       ctx.lineTo(x, size);
@@ -2188,9 +2260,12 @@ export function init(containerEl) {
     controls.target.copy(isoTarget);
     controls.update();
 
-    // 바닥 반사광이 진한 주황(0xd9a35f)이라 우드 바닥이 겨자색으로 떴다 → 크림으로 낮춤
-    scene.add(new THREE.HemisphereLight(0xfff6ec, 0xf0dcc4, 1.0));
+    // 바닥 반사광이 진한 주황(0xd9a35f)이라 우드 바닥이 겨자색으로 떴다 → 크림으로 낮춤.
+    // 색·세기는 applyTheme()이 테마마다 다시 잡는다.
+    hemiLight = new THREE.HemisphereLight(0xfff6ec, 0xf0dcc4, 1.0);
+    scene.add(hemiLight);
     const sun = new THREE.DirectionalLight(0xfff6e4, 1.0);
+    sunLight = sun;
     sun.position.set(6, 14, 7);
     sun.castShadow = true;
     sun.shadow.mapSize.set(2048, 2048);
@@ -2205,6 +2280,7 @@ export function init(containerEl) {
     const fill = new THREE.DirectionalLight(0xffd7ea, 0.3);
     fill.position.set(-6, 6, -4);
     scene.add(fill);
+    fillLight = fill;
 
     floorMat = toonMat(PAL.floorBase, { map: makeFloorTexture("plank") });
     floorMat.userData.pattern = "plank";
@@ -2307,6 +2383,37 @@ function applyTheme(themeId) {
   }
   backWallMat.color.set(t.wallBack);
   sideWallMat.color.set(t.wallSide);
+
+  // 벽면 무늬 (쇼지 격자 / 몰딩 패널 / 줄무늬 / 네온 그리드)
+  const wallStyle = t.wallPattern || null;
+  if (wallStyle && !WALL_TEX.has(wallStyle)) WALL_TEX.set(wallStyle, makeWallTexture(wallStyle));
+  // 무늬 한 칸의 실제 크기(m). 쇼지는 문짝 한 짝이 커야 하고 줄무늬는 촘촘해야 한다.
+  const tile = t.wallTile || 3.4;
+  for (const [mat, span] of [
+    [backWallMat, roomW],
+    [sideWallMat, roomD],
+  ]) {
+    mat.map = wallStyle ? WALL_TEX.get(wallStyle).clone() : null;
+    if (mat.map) {
+      mat.map.wrapS = mat.map.wrapT = THREE.RepeatWrapping;
+      mat.map.repeat.set(Math.max(1, span / tile), Math.max(1, WALL_H / (tile * 0.8)));
+      mat.map.needsUpdate = true;
+    }
+    mat.needsUpdate = true;
+  }
+
+  // 조명 톤 — 네온은 밤, 유럽은 어둑한 실내, 일본·공주는 밝은 낮.
+  // 지오메트리를 하나도 안 건드리고 매장 인상을 가장 크게 바꾸는 부분이다.
+  const L = t.light;
+  if (L && hemiLight) {
+    hemiLight.color.setHex(L.hemiSky);
+    hemiLight.groundColor.setHex(L.hemiGround);
+    hemiLight.intensity = L.hemiInt;
+    sunLight.color.setHex(L.sun);
+    sunLight.intensity = L.sunInt;
+    fillLight.color.setHex(L.fill);
+    fillLight.intensity = L.fillInt;
+  }
   backTrimMat.color.set(t.trim);
   wainscotMat.color.set(t.wainscot || PAL.wainscot);
   if (scene.background && scene.background.dispose) scene.background.dispose();
