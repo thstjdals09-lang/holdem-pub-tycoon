@@ -8,7 +8,7 @@
 // ⚠️ 중요: 실 결제로 전환된 뒤에도, 지금은 서버(Cloud Function 등 검증 백엔드)가 없어서 결제 성공
 // 응답을 클라이언트가 그대로 신뢰해 재화를 지급한다. 실제로 돈을 받기 시작하기 전에는 반드시 서버
 // 측에서 PortOne 결제 검증(paymentId로 조회) 후 재화를 지급하도록 바꿔야 한다.
-import { auth, db, doc, setDoc, serverTimestamp } from "./firebase-init.js?v=11";
+import { auth, db, doc, setDoc, serverTimestamp } from "./firebase-init.js?v=12";
 
 function paymentReady() {
   const p = GAME_DATA.payment;

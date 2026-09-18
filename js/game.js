@@ -658,6 +658,70 @@
   const sfx = (name, arg) => window.Sfx && window.Sfx.play(name, arg);
 
   // ============================================================
+  // 에셋 (js/assets.js의 GameAssets = SVG 아이콘, assets/img/*.png = 트로피·건물·테마)
+  // 에셋 파일이 없어도 게임이 돌아가게, 없으면 원래 이모지로 떨어진다.
+  // ============================================================
+  const GA = () => window.GameAssets;
+  const gaIcon = (name, size = 24) => (GA() ? GA().icon(name, { size }) : "");
+  // 아이콘이 있으면 SVG, 없으면 이모지
+  const itemIcon = (name, emoji, size = 26) => gaIcon(name, size) || emoji;
+  const pngIcon = (src, size = 34) => `<img class="ga-img" src="${src}" alt="" width="${size}" height="${size}" loading="lazy" />`;
+  // 시설·직원·특성처럼 데이터 id ↔ 아이콘 이름이 다른 것들
+  const FIXTURE_ICON = { bar: "bar", fridge: "fridge" };
+  const STAFF_ICON = { bartender: "bartender", server: "server", marketer: "marketer" };
+  const TRAIT_ICON = { dealing: "traitDealing", social: "traitSocial", service: "traitHospitality", gambler: "traitGambler", host: "traitHype", brain: "traitBrain" };
+  const TROPHY_SHOP_ICON = { offlineHours: "moon", training: "target", hallOfFame: "hall", ticket: "ticket", shard: "shard" };
+  const traitIcon = (traitId, size = 14) => gaIcon(TRAIT_ICON[traitId], size) || traitDef(traitId).emoji;
+  // 프레스티지 포인트에 따른 매장 외관 단계 (assets/img/prestige)
+  const BUILDING_STEPS = [
+    { id: "pub", name: "로컬 펍", min: 0 },
+    { id: "club", name: "인기 클럽", min: 5 },
+    { id: "premium", name: "프리미엄 하우스", min: 20 },
+    { id: "empire", name: "포커 제국", min: 50 },
+  ];
+  const buildingStep = (points = state.prestige.points) =>
+    [...BUILDING_STEPS].reverse().find((b) => points >= b.min) || BUILDING_STEPS[0];
+
+  // HUD·네비·사이드레일의 이모지를 아이콘으로 한 번만 교체한다
+  function applyStaticAssets() {
+    if (!GA()) return;
+    [["cur-icon-chip", "bb"], ["cur-icon-dia", "diamond"], ["cur-icon-trophy", "trophy"]].forEach(([cls, name]) => {
+      document.querySelectorAll("." + cls).forEach((el) => {
+        el.style.backgroundImage = `url("${GA().dataUri(name)}")`;
+      });
+    });
+    const NAV_ICON = { upgrade: "build", crew: "crew", tournament: "tournament", shop: "shop" };
+    document.querySelectorAll(".bottom-nav .tab-btn").forEach((btn) => {
+      const slot = btn.querySelector(".nav-icon");
+      const markup = gaIcon(NAV_ICON[btn.dataset.group], 24);
+      if (slot && markup) slot.innerHTML = markup;
+    });
+    const RAIL_ICON = { "gift-btn": "gift", "attendance-btn": "attendance", "mission-btn": "mission", "boost-btn": "boost" };
+    Object.entries(RAIL_ICON).forEach(([id, name]) => {
+      const btn = $(id);
+      const markup = gaIcon(name, 24);
+      if (!btn || !markup) return;
+      const dot = btn.querySelector(".dot");
+      btn.innerHTML = markup;
+      if (dot) btn.appendChild(dot); // 알림 점은 살려둔다
+    });
+    const settingsBtn = document.querySelector('.icon-btn[data-tab="settings"]');
+    const settingsIcon = gaIcon("settings", 20);
+    if (settingsBtn && settingsIcon) settingsBtn.innerHTML = settingsIcon;
+    // 시트 안의 고정 카드 아이콘(테이블·리모델링·매장 확장)
+    const staticIcons = [
+      ["#buy-table-btn", "table"],
+      ["#upgrade-table-btn", "income"],
+      ["#expand-store-btn", "build"],
+    ];
+    staticIcons.forEach(([btnSel, name]) => {
+      const slot = document.querySelector(btnSel)?.closest(".item-card")?.querySelector(".item-icon");
+      const markup = gaIcon(name, 26);
+      if (slot && markup) slot.innerHTML = markup;
+    });
+  }
+
+  // ============================================================
   // 재화 / 보상
   // ============================================================
   function addChips(amount) {
@@ -1928,7 +1992,7 @@
       const card = document.createElement("div");
       card.className = "item-card";
       card.innerHTML = `
-        <div class="item-icon">${f.emoji}</div>
+        <div class="item-icon">${itemIcon(FIXTURE_ICON[f.id], f.emoji)}</div>
         <div class="item-info">
           <div class="item-title">${f.name} <span class="lvl-chip"></span></div>
           <div class="item-desc">${f.desc}</div>
@@ -1992,7 +2056,7 @@
       const card = document.createElement("div");
       card.className = "item-card";
       card.innerHTML = `
-        <div class="item-icon">${s.emoji}</div>
+        <div class="item-icon">${itemIcon(STAFF_ICON[s.id], s.emoji)}</div>
         <div class="item-info">
           <div class="item-title">${s.name} <span class="lvl-chip"></span></div>
           <div class="item-desc">${s.desc}</div>
@@ -2115,7 +2179,7 @@
       const card = document.createElement("div");
       card.className = "item-card tourney-card";
       card.innerHTML = `
-        <div class="item-icon">${tier.emoji}</div>
+        <div class="item-icon">${pngIcon(`assets/img/trophy/${tier.id}-96.png`)}</div>
         <div class="item-info">
           <div class="item-title"></div>
           <div class="item-desc"></div>
@@ -2161,7 +2225,7 @@
       const card = document.createElement("div");
       card.className = "item-card trophy-card";
       const up = trophyUpgradeDef(id);
-      const icon = up ? up.emoji : id === "ticket" ? "🎫" : "🧩";
+      const icon = itemIcon(TROPHY_SHOP_ICON[id], up ? up.emoji : id === "ticket" ? "🎫" : "🧩");
       const name = up ? up.name : id === "ticket" ? "뽑기권 교환" : "운영진 조각 교환";
       card.innerHTML = `
         <div class="item-icon">${icon}</div>
@@ -2260,7 +2324,7 @@
             ${isNew ? '<span class="badge-new">NEW</span>' : ""}
             <img src="${DealerPortraits.url(d.id, d.rarity)}" alt="${d.name}" loading="lazy" />
             ${own ? "" : '<span class="codex-lock">🔒</span>'}
-            <div class="codex-traits">${dealerTraits(d.id).map((t) => `<span title="${traitDef(t).name}">${traitDef(t).emoji}</span>`).join("")}</div>
+            <div class="codex-traits">${dealerTraits(d.id).map((t) => `<span title="${traitDef(t).name}">${traitIcon(t, 13)}</span>`).join("")}</div>
             <div class="codex-name">${own ? d.name : "???"}</div>
             <div class="codex-stars">${own ? starsHtml(own.star) : ""}</div>
             ${own ? `<div class="shard-bar ${upReady ? "ready" : ""}"><i style="width:${shardPct}%"></i></div>` : ""}
@@ -2322,7 +2386,7 @@
             ? `${s.def.effectLabel} +${Math.round(s.bonus * 100)}%`
             : `${s.def.effectLabel} +${Math.round(s.next.bonus * 100)}%까지 ${s.next.need - s.count}명`;
           return `<span class="synergy-chip ${s.tier ? "on" : ""}" style="--tc:${s.def.color}" title="${s.def.name} · ${s.def.desc} · ${label}">
-            ${s.def.emoji} ${s.def.name} <b>${s.count}${s.tier ? "" : `/${s.next.need}`}</b>${s.tier ? `<i class="synergy-tier">${s.tier}</i><small>+${Math.round(s.bonus * 100)}%</small>` : ""}</span>`;
+            ${traitIcon(s.def.id, 14)} ${s.def.name} <b>${s.count}${s.tier ? "" : `/${s.next.need}`}</b>${s.tier ? `<i class="synergy-tier">${s.tier}</i><small>+${Math.round(s.bonus * 100)}%</small>` : ""}</span>`;
         })
         .join("")
     );
@@ -2343,7 +2407,9 @@
       const card = document.createElement("div");
       card.className = "theme-card" + (act === "up" ? " equipped" : "");
       card.innerHTML = `
-        <div class="theme-swatch" style="background:${THEME_SWATCH_COLORS[t.id] || "#ccc"}"></div>
+        <div class="theme-swatch" style="background:${THEME_SWATCH_COLORS[t.id] || "#ccc"}">
+          <img class="theme-thumb" src="assets/img/theme/${t.id}.png" alt="" loading="lazy" onerror="this.remove()" />
+        </div>
         <div class="theme-name"></div>
         <div class="theme-cost"></div>
         <button class="btn btn-buy"></button>`;
@@ -2397,6 +2463,13 @@
   }
 
   function renderPrestigeTab() {
+    const step = buildingStep();
+    const nextStep = BUILDING_STEPS.find((b) => b.min > state.prestige.points);
+    $("prestige-building").src = `assets/img/prestige/${step.id}-256.png`;
+    setText(
+      $("prestige-stage"),
+      `${step.name}${nextStep ? ` · 명성 ${nextStep.min}점이면 ${nextStep.name}` : " · 최고 단계"}`
+    );
     $("prestige-total-earned").textContent = formatNumber(state.totalEarned);
     $("prestige-requirement").textContent = formatNumber(prestigeRequirement());
     const gain = potentialPrestigePoints();
@@ -2887,7 +2960,7 @@
               : s.next
               ? `${s.next.need - s.count}명 더 모으면 ${s.def.effectLabel} +${Math.round(s.next.bonus * 100)}%`
               : "";
-            return `<span class="trait-chip ${s.tier ? "on" : ""}" style="--tc:${s.def.color}">${s.def.emoji} ${s.def.name} <b>${s.count}</b><small>${sub}</small></span>`;
+            return `<span class="trait-chip ${s.tier ? "on" : ""}" style="--tc:${s.def.color}">${traitIcon(tid, 16)} ${s.def.name} <b>${s.count}</b><small>${sub}</small></span>`;
           })
           .join("")}
       </div>`;
@@ -3218,6 +3291,7 @@
     await loadGameAndComputeOffline();
     ensureDailyState();
     if (window.Sfx) window.Sfx.setVolume(state.settings.sfxVolume ?? 0.6);
+    applyStaticAssets();
     setupControlBar();
 
     // 시트 내부 액션

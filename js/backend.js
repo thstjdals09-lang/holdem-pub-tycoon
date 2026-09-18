@@ -2,7 +2,7 @@
 // 로그인된 계정이 있으면 Firestore(holdemPub_saves/{uid})를 우선 사용하고,
 // localStorage는 오프라인 캐시 + 내보내기/가져오기 코드 생성용으로 계속 쓴다.
 // game.js는 이 모듈의 함수 시그니처만 알면 되므로, 백엔드를 바꿔도 game.js는 그대로 둘 수 있다.
-import { auth, db, doc, getDoc, setDoc } from "./firebase-init.js?v=11";
+import { auth, db, doc, getDoc, setDoc } from "./firebase-init.js?v=12";
 
 const STORAGE_KEY = "holdemPubTycoon.save.v1";
 const OWNER_KEY = "holdemPubTycoon.save.v1.owner"; // 로컬 캐시가 어느 계정 것인지

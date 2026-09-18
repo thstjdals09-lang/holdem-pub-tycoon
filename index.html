@@ -6,7 +6,8 @@
 <title>홀덤펍 키우기 🍺🃏</title>
 <meta name="description" content="작은 홀덤펍을 손님 가득한 대박 펍으로 키우는 방치형(incremental) 게임" />
 <meta name="theme-color" content="#ffd9c2" />
-<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2280%22>🍺</text></svg>" />
+<link rel="icon" href="assets/img/brand/app-icon-32.png" />
+<link rel="apple-touch-icon" href="assets/img/brand/app-icon-180.png" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Jua&family=Gowun+Dodum&display=swap" rel="stylesheet" />
@@ -14,7 +15,8 @@
      올리지 않으면 index.html만 새로 받고 js/css는 브라우저 캐시의 옛 파일이 섞여서
      (예: 옛 game.js가 지금은 없는 요소를 건드려 게임이 멈추고 매장이 안 그려짐) 화면이 깨진다.
      js/account.js·backend.js·shop.js 안의 "./firebase-init.js?v=" 도 같은 숫자로 맞출 것. -->
-<link rel="stylesheet" href="css/style.css?v=11" />
+<link rel="stylesheet" href="css/style.css?v=12" />
+<link rel="stylesheet" href="css/assets.css?v=12" />
 <script type="importmap">
 {
   "imports": {
@@ -293,7 +295,9 @@
 
     <div class="tab-panel" id="tab-prestige">
       <div class="prestige-box">
-        <div class="prestige-emoji">✨</div>
+        <!-- 지금 매장 외관 단계 (프레스티지 포인트에 따라 로컬 펍 → 인기 클럽 → 프리미엄 하우스 → 포커 제국) -->
+        <img class="prestige-building" id="prestige-building" src="assets/img/prestige/pub-256.png" alt="" />
+        <div class="prestige-stage" id="prestige-stage">로컬 펍</div>
         <h3>브랜드 리뉴얼</h3>
         <p>누적 <b id="prestige-total-earned">0</b> 칩 · 다음 포인트까지 <b id="prestige-requirement">100,000</b></p>
         <p class="muted">리뉴얼하면 테이블·직원·칩·시설이 초기화되지만 <b>명성 포인트</b>로 영구 수익 보너스를 받아요.</p>
@@ -438,15 +442,16 @@
 
 <div id="toast-wrap"></div>
 
-<script src="js/data.js?v=11" defer></script>
-<script src="js/portraits.js?v=11" defer></script>
-<script src="js/sfx.js?v=11" defer></script>
-<script src="js/ads.js?v=11" defer></script>
-<script type="module" src="js/account.js?v=11"></script>
-<script type="module" src="js/backend.js?v=11"></script>
-<script type="module" src="js/shop.js?v=11"></script>
-<script type="module" src="js/auth-gate.js?v=11"></script>
-<script type="module" src="js/scene3d.js?v=11"></script>
-<script src="js/game.js?v=11" defer></script>
+<script src="js/data.js?v=12" defer></script>
+<script src="js/assets.js?v=12" defer></script>
+<script src="js/portraits.js?v=12" defer></script>
+<script src="js/sfx.js?v=12" defer></script>
+<script src="js/ads.js?v=12" defer></script>
+<script type="module" src="js/account.js?v=12"></script>
+<script type="module" src="js/backend.js?v=12"></script>
+<script type="module" src="js/shop.js?v=12"></script>
+<script type="module" src="js/auth-gate.js?v=12"></script>
+<script type="module" src="js/scene3d.js?v=12"></script>
+<script src="js/game.js?v=12" defer></script>
 </body>
 </html>

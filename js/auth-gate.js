@@ -11,7 +11,7 @@
     const isLogin = mode === "login";
     root.innerHTML = `
       <div class="auth-card">
-        <div class="auth-emoji">🍺🃏</div>
+        <img class="auth-art" src="assets/img/brand/loading-pub-360.png" alt="" onerror="this.remove()" />
         <h1>홀덤펍 키우기</h1>
         <p class="auth-sub">아이디로 로그인하면 여러 기기에서 이어서 플레이할 수 있어요.</p>
 
