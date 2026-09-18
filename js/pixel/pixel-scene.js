@@ -107,7 +107,11 @@ const PixelScene = (() => {
         const sy = cy + Math.sin(ang) * 1.7;
         put("seat", sx, sy);
         if (k === 0) put("dealer", sx, sy - 0.1);
-        else if (k <= (opts.guestsPerTable ?? 5)) put("guest", sx, sy, { i: (x + y + k) % 4 });
+        else if (k <= (opts.guestsPerTable ?? 5)) {
+          // 테이블 위쪽(화면 안쪽)에 앉은 사람은 등을 보인다
+          const facingAway = Math.sin(ang) < -0.25;
+          put("guest", sx, sy, { i: (x + y + k) % 4, back: facingAway });
+        }
       }
     }
 
@@ -160,7 +164,11 @@ const PixelScene = (() => {
         S.person(ctx, x, y, d, { visor: d.visor, bowtie: d.bowtie, apron: d.apron });
         break;
       }
-      case "guest": S.person(ctx, x, y, theme.guests[o.i % theme.guests.length]); break;
+      case "guest": {
+        const g = theme.guests[o.i % theme.guests.length];
+        S.person(ctx, x, y, o.back ? { ...g, style: "back" } : g, o.mug ? { mug: true } : {});
+        break;
+      }
       default: break;
     }
   }
@@ -234,7 +242,7 @@ const PixelScene = (() => {
         switch (deco % 7) {
           case 0: S.frame(ctx, dx, dy, theme, wp.dir, theme.arts[deco % theme.arts.length]); break;
           case 1: S.wallLamp(ctx, dx, dy - 4, theme); break;
-          case 2: S.wallSign(ctx, dx, dy - 2, theme, wp.dir); break;
+          case 2: S.wallSign(ctx, dx, dy - 2, theme, wp.dir, (theme.signs || [])[(deco / 7) | 0 % 3] || (theme.signs || [])[0]); break;
           case 3: S.chalkboard(ctx, dx, dy, theme, wp.dir); break;
           case 4: S.wallLamp(ctx, dx, dy - 4, theme); break;
           case 5: S.dartboard(ctx, dx, dy - 7, theme); break;
@@ -292,7 +300,7 @@ const PixelScene = (() => {
           // gx가 작은 칸을 고르면 건물 왼쪽 끝 허공에 간판이 걸린다.
           const [gx, gy] = frontEdge.reduce((a, b) => (a[0] + a[1] >= b[0] + b[1] ? a : b));
           const [x, y] = iso(gx + 0.5, gy + 1, floor.level);
-          S.marquee(ctx, ox + x, oy + y + 16, theme); // 정면 벽 중간 높이에 건다
+          S.marquee(ctx, ox + x, oy + y + 16, theme, theme.shopName); // 정면 벽 중간 높이에 건다
         }
       }
 

@@ -227,22 +227,19 @@ const PixelSprites = (() => {
     rect(ctx, ox - w / 2 + 2, oy - h + 2, 2, 1, shade(art, 0.35));
   }
 
-  /** 벽 간판 — 조명 박힌 목재 사인 (GOOD CARDS / POKER LIFE 자리) */
-  function wallSign(ctx, ox, oy, pal, dir) {
-    const w = 20, h = 13;
-    const skew = dir === "back" ? 1 : -1;
+  /** 벽 간판 — 조명 박힌 목재 사인. lines에 실제 문구가 들어간다. */
+  function wallSign(ctx, ox, oy, pal, dir, lines) {
+    const txt = (lines && lines.length ? lines : ["POKER"]).slice(0, 2);
+    const longest = Math.max(...txt.map((t) => PixelFont.measure(t, 1)));
+    const w = Math.max(22, longest + 8);
+    const h = txt.length > 1 ? 18 : 13;
     for (let y = 0; y < h; y++) {
-      const off = Math.round((y * skew * 6) / h);
-      rect(ctx, ox - w / 2 + off, oy - h + y, w, 1, y < 2 || y > h - 3 ? shade(pal.wood, -0.25) : pal.signBg || shade(pal.wood, -0.45));
+      rect(ctx, ox - w / 2, oy - h + y, w, 1,
+        y < 2 || y > h - 3 ? shade(pal.wood, -0.25) : pal.signBg || shade(pal.wood, -0.45));
     }
-    // 글자 대신 밝은 막대 3줄 — 작은 크기에선 글자처럼 읽힌다
-    for (let r = 0; r < 3; r++) {
-      const off = Math.round(((3 + r * 3) * skew * 6) / h);
-      const lw = [11, 8, 13][r];
-      rect(ctx, ox - lw / 2 + off, oy - h + 3 + r * 3, lw, 2, pal.signInk || "#f2e4c0");
-    }
+    PixelFont.block(ctx, ox, oy - h + 4, txt, pal.signInk || "#f2e4c0", 1, 2);
     // 전구 줄
-    for (let i = 0; i < 4; i++) rect(ctx, ox - 8 + i * 5, oy - h - 1, 2, 2, pal.gold);
+    for (let i = 0; i * 5 < w - 4; i++) rect(ctx, ox - w / 2 + 2 + i * 5, oy - h - 1, 2, 2, pal.gold);
   }
 
   /** 벽 조명 — 따뜻한 빛 번짐까지 */
@@ -258,12 +255,14 @@ const PixelSprites = (() => {
   }
 
   /** 정면 차양 간판 — 매장 입구(POKER PUB) */
-  function marquee(ctx, ox, oy, pal) {
-    const w = 34, h = 11;
+  function marquee(ctx, ox, oy, pal, name) {
+    const label = name || "POKER PUB";
+    const w = Math.max(34, PixelFont.measure(label, 1) + 10);
+    const h = 13;
     rect(ctx, ox - w / 2, oy - h, w, h, shade(pal.wood, -0.35));
     rect(ctx, ox - w / 2 + 2, oy - h + 2, w - 4, h - 4, pal.signBg || shade(pal.wood, -0.5));
-    rect(ctx, ox - 12, oy - h + 4, 24, 3, pal.signInk || "#f2e4c0");
-    for (let i = 0; i < 6; i++) rect(ctx, ox - 15 + i * 6, oy - h - 2, 2, 2, pal.gold);
+    PixelFont.draw(ctx, ox, oy - h + 4, label, pal.signInk || "#f2e4c0", 1, "center");
+    for (let i = 0; i * 6 < w; i++) rect(ctx, ox - w / 2 + 2 + i * 6, oy - h - 2, 2, 2, pal.gold);
     // 차양
     for (let y = 0; y < 5; y++) {
       const ww = w + 6 - y * 2;
@@ -342,10 +341,7 @@ const PixelSprites = (() => {
       const off = Math.round((y * skew * 4) / h);
       rect(ctx, ox - w / 2 + off, oy - h + y, w, 1, y < 2 || y > h - 3 ? shade(pal.wood, -0.2) : "#33403a");
     }
-    for (let r = 0; r < 4; r++) {
-      const off = Math.round(((3 + r * 3) * skew * 4) / h);
-      rect(ctx, ox - 4 + off, oy - h + 3 + r * 3, [7, 5, 8, 4][r], 1, "#d8e8dc");
-    }
+    PixelFont.block(ctx, ox, oy - h + 3, (pal.menu || ["DRINK", "PLAY"]).slice(0, 2), "#d8e8dc", 1, 1);
   }
 
   /** 맥주/네온 사인 — 빛 번짐 포함 */
@@ -354,8 +350,7 @@ const PixelSprites = (() => {
     glow(ctx, ox, oy - 5, 13, c, 0.9);
     rect(ctx, ox - 8, oy - 12, 16, 12, shade(pal.wood, -0.45));
     rect(ctx, ox - 6, oy - 10, 12, 8, shade(c, -0.25));
-    rect(ctx, ox - 5, oy - 9, 10, 3, c);
-    rect(ctx, ox - 4, oy - 5, 8, 2, shade(c, 0.3));
+    PixelFont.draw(ctx, ox, oy - 9, "BEER", "#fff6dc", 1, "center");
   }
 
   /** 다트보드 (벽걸이) */
@@ -475,39 +470,13 @@ const PixelSprites = (() => {
    * opt.visor / opt.bowtie / opt.apron 을 켜면 그 위에 유니폼 요소를 덧그린다.
    * (기본 몸은 언제나 같은 스프라이트 — 파트만 얹는다)
    */
+  /**
+   * 사람 — 손으로 찍은 스프라이트(js/pixel/pixel-people.js)로 위임한다.
+   * 몸은 도형 조립으로 그릴 수 있어도 얼굴·머리 실루엣은 한 점씩 찍어야 나온다.
+   */
   function person(ctx, ox, oy, look, opt = {}) {
-    const map = {
-      O: shade(look.cloth, -0.62),
-      h: look.hair,
-      s: look.skin,
-      S: shade(look.skin, -0.14),
-      e: "#3a2a30",
-      C: look.cloth,
-      c: shade(look.cloth, 0.16),
-      P: look.pants,
-      D: shade(look.pants, -0.3),
-      ".": null,
-    };
-    // 외곽선은 옷이 아니라 전체를 감싸므로 살짝 중립적인 어두운 색으로
-    map.O = shade(look.hair, -0.4);
-    drawPixels(ctx, ox, oy, BODY, map);
-
-    const x0 = Math.round(ox - 7);
-    const y0 = Math.round(oy - 22);
-    if (opt.visor) {
-      rect(ctx, x0 + 2, y0 + 4, 10, 2, opt.visor);
-      rect(ctx, x0 + 1, y0 + 6, 12, 1, shade(opt.visor, -0.3));
-    }
-    if (opt.bowtie) {
-      rect(ctx, x0 + 5, y0 + 11, 4, 2, opt.bowtie);
-      rect(ctx, x0 + 6, y0 + 11, 2, 2, shade(opt.bowtie, -0.25));
-    }
-    if (opt.apron) {
-      rect(ctx, x0 + 4, y0 + 13, 6, 5, opt.apron);
-      rect(ctx, x0 + 4, y0 + 13, 6, 1, shade(opt.apron, 0.2));
-    }
+    PixelPeople.person(ctx, ox, oy, look, opt);
   }
-
   /**
    * 가게 정면(파사드) — 바닥보다 아래, 건물의 바깥면이다.
    * 레퍼런스에서 화면 아래쪽에 보이는 "간판 달린 가게 앞"이 바로 이것.
@@ -525,23 +494,18 @@ const PixelSprites = (() => {
     // 위쪽 마감 보
     poly(ctx, [[ox, oy], [ex, ey], [ex, ey + 3], [ox, oy + 3]], shade(base, -0.3));
 
-    // 장식은 벽면 높이의 비율로 놓는다 — 고정 오프셋이면 h가 바뀔 때 벽 밖으로 삐져나온다
     const mx = Math.round((ox + ex) / 2);
     const my = Math.round((oy + ey) / 2);
-    const top = my + Math.round(h * 0.22);
     if (variant === "window") {
-      const wh = Math.round(h * 0.42);
-      rect(ctx, mx - 6, top, 12, wh, shade(base, -0.4));
-      rect(ctx, mx - 5, top + 1, 10, wh - 2, pal.lampGlow || "#ffd68f");
-      rect(ctx, mx - 1, top + 1, 2, wh - 2, shade(base, -0.34));
-      rect(ctx, mx - 6, top + Math.round(wh / 2), 12, 1, shade(base, -0.34));
+      rect(ctx, mx - 5, my + 9, 10, 12, shade(base, -0.38));
+      rect(ctx, mx - 4, my + 10, 8, 10, pal.lampGlow || "#ffd68f");
+      rect(ctx, mx - 1, my + 10, 2, 10, shade(base, -0.32));
     } else if (variant === "lantern") {
-      lantern(ctx, mx, top - 2, pal);
+      lantern(ctx, mx, my + 6, pal);
     } else if (variant === "board") {
-      const bh = Math.round(h * 0.45);
-      rect(ctx, mx - 7, top, 14, bh, shade(pal.wood, -0.25));
-      rect(ctx, mx - 6, top + 1, 12, bh - 2, "#33403a");
-      for (let r = 0; r < 3; r++) rect(ctx, mx - 4, top + 3 + r * 4, [8, 5, 9][r], 1, "#d8e8dc");
+      rect(ctx, mx - 6, my + 11, 12, 14, shade(pal.wood, -0.25));
+      rect(ctx, mx - 5, my + 12, 10, 12, "#33403a");
+      for (let r = 0; r < 3; r++) rect(ctx, mx - 3, my + 14 + r * 3, [6, 4, 7][r], 1, "#d8e8dc");
     }
   }
 
@@ -549,7 +513,7 @@ const PixelSprites = (() => {
     ellipse, cylinder, drawPixels,
     pokerTable, chair, stool, zabuton, lantern, barCounter, bottleShelf,
     rug, frame, wallSign, wallLamp, marquee, tree, bush, glow, chalkboard, beerSign,
-    railing, stairs, facade,
+    railing, stairs, facade, facade,
     plant, trophyStand, dartboard, jukebox, wall, person,
     BODY,
   };
