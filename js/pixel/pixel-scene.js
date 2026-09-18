@@ -19,7 +19,8 @@ const PixelScene = (() => {
   const S = PixelSprites;
   const { TW, TH } = A;
   const FLOOR_H = 46; // 층 사이 높이(px) — 위층을 이만큼 올려 그린다
-  const WALL_H = 26;
+  const WALL_H = 52;   // 레퍼런스 기준: 벽이 화면 위쪽 1/3을 채운다
+  const FACADE_H = 34; // 바닥 아래로 내려가는 가게 정면 높이
 
   const iso = (gx, gy, level) => [((gx - gy) * TW) / 2, ((gx + gy) * TH) / 2 - level * FLOOR_H];
 
@@ -112,7 +113,7 @@ const PixelScene = (() => {
 
     // 5) 서 있는 손님 — 통로에 흩어 놓는다. 자리 배치와 마찬가지로 결정적.
     {
-      const standing = Math.min(6, Math.round((opts.tables || 0) * 0.8) + (isUpper ? 0 : 1));
+      const standing = Math.min(9, Math.round((opts.tables || 0) * 1.1) + (isUpper ? 0 : 2));
       let n = 0;
       for (const [x, y] of list) {
         if (n >= standing) break;
@@ -145,7 +146,7 @@ const PixelScene = (() => {
       case "rug": S.rug(ctx, x, y, theme, o.gw, o.gd); break;
       case "table": S.pokerTable(ctx, x, y, theme); break;
       case "bar": S.glow(ctx, x, y - 16, 30, theme.lampGlow || "#ffd68f", 0.7); S.barCounter(ctx, x, y, theme); break;
-      case "shelf": S.bottleShelf(ctx, x, y - WALL_H + 13, theme); break;
+      case "shelf": S.bottleShelf(ctx, x, y - Math.round(WALL_H * 0.55), theme); break;
       case "stool": S.stool(ctx, x, y, theme); break;
       case "plant": S.plant(ctx, x, y, theme); break;
       case "trophy": S.trophyStand(ctx, x, y, theme); break;
@@ -168,14 +169,14 @@ const PixelScene = (() => {
   function render(canvas, opts = {}) {
     const stage = PixelMap.STAGES[Math.max(0, Math.min(PixelMap.STAGES.length - 1, opts.stageIndex || 0))];
     const theme = PixelMap.THEMES[opts.themeId] || PixelMap.THEMES.classic;
-    const pad = 32;
+    const pad = 8; // 잔디는 테두리만 — 레퍼런스도 매장이 화면을 거의 채운다
     const b = boundsOf(stage.floors);
     const w = Math.ceil(b.maxX - b.minX) + pad * 2;
-    const h = Math.ceil(b.maxY - b.minY) + pad * 2 + WALL_H + 24;
+    const h = Math.ceil(b.maxY - b.minY) + pad * 2 + WALL_H + FACADE_H + 14;
     const off = A.surface(w, h);
     const ctx = off.ctx;
     const ox = -b.minX + pad;
-    const oy = -b.minY + pad + WALL_H + 20;
+    const oy = -b.minY + pad + WALL_H + 8;
 
     // 바깥 — 잔디 바닥 + 가장자리 나무/덤불. 배치는 고정(rnd 없음)이라 흔들리지 않는다.
     ctx.fillStyle = theme.grass || "#6faa54";
@@ -223,7 +224,7 @@ const PixelScene = (() => {
       // 벽 장식 — 액자 / 간판 / 조명을 번갈아 건다
       let deco = 0;
       for (const wp of walls) {
-        if ((wp.x + wp.y) % 2 !== 0) { continue; }
+        // 레퍼런스의 벽은 빈 곳이 거의 없다 → 칸마다 하나씩
         const [gx, gy] = wallAnchor(wp);
         const mid = wp.dir === "back" ? iso(gx - 0.5, gy, floor.level) : iso(gx, gy - 0.5, floor.level);
         const dx = ox + mid[0];
@@ -247,7 +248,7 @@ const PixelScene = (() => {
         for (const wp of walls) {
           if (wp.dir !== "back" || wp.x % 2 !== 0) continue;
           const [x, y] = iso(wp.x + 0.5, wp.y + 0.35, floor.level);
-          S.lantern(ctx, ox + x, oy + y - WALL_H - 4, theme);
+          S.lantern(ctx, ox + x, oy + y - WALL_H + 6, theme);
         }
       }
       // 2층 난간 — 벽이 없는 가장자리(앞/오른쪽)에 세운다. 없으면 2층이 그냥 떠 있는 판처럼 보인다.
@@ -266,6 +267,22 @@ const PixelScene = (() => {
         }
       }
 
+      // 가게 정면 — 1층의 앞(남)·오른(동) 가장자리를 바깥 벽으로 세운다.
+      // 이게 있어야 "잔디밭에 놓인 바닥판"이 아니라 "가게"로 보인다.
+      if (floor.level === 0) {
+        const cs = PixelMap.cellsOf(floor);
+        const front = [];
+        for (const [gx, gy] of byDepth) {
+          if (!cs.has(`${gx},${gy + 1}`)) front.push([gx, gy, "south"]);
+          if (!cs.has(`${gx + 1},${gy}`)) front.push([gx, gy, "east"]);
+        }
+        front.forEach(([gx, gy, dir], i) => {
+          const [x, y] = iso(gx + 1, gy + 1, floor.level);
+          const variant = ["window", "lantern", "plain", "board", "plain", "window"][i % 6];
+          S.facade(ctx, ox + x, oy + y, theme, dir, FACADE_H, variant);
+        });
+      }
+
       // 입구 차양 간판 — 1층 앞쪽 가장자리. 건물이 "가게"로 읽히게 하는 요소.
       if (floor.level === 0) {
         const cellSet = PixelMap.cellsOf(floor);
@@ -275,7 +292,7 @@ const PixelScene = (() => {
           // gx가 작은 칸을 고르면 건물 왼쪽 끝 허공에 간판이 걸린다.
           const [gx, gy] = frontEdge.reduce((a, b) => (a[0] + a[1] >= b[0] + b[1] ? a : b));
           const [x, y] = iso(gx + 0.5, gy + 1, floor.level);
-          S.marquee(ctx, ox + x, oy + y + 3, theme); // 차양 끝이 슬래브 두께(7px) 안에 들어오게
+          S.marquee(ctx, ox + x, oy + y + 16, theme); // 정면 벽 중간 높이에 건다
         }
       }
 

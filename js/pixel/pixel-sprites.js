@@ -508,11 +508,48 @@ const PixelSprites = (() => {
     }
   }
 
+  /**
+   * 가게 정면(파사드) — 바닥보다 아래, 건물의 바깥면이다.
+   * 레퍼런스에서 화면 아래쪽에 보이는 "간판 달린 가게 앞"이 바로 이것.
+   * 뒤쪽 벽(wall)과 달리 이 면은 **바깥**을 본다.
+   * dir "south" = 칸의 남쪽 모서리(왼쪽 위로 뻗음), "east" = 동쪽 모서리(오른쪽 위로).
+   */
+  function facade(ctx, ox, oy, pal, dir, h, variant) {
+    const base = pal.facade || shade(pal.wainscot, -0.05);
+    const f = faces(base);
+    const ex = dir === "south" ? ox - TW / 2 : ox + TW / 2;
+    const ey = oy - TH / 2;
+    poly(ctx, [[ox, oy], [ex, ey], [ex, ey + h], [ox, oy + h]], dir === "south" ? f.left : f.right);
+    // 판벽 결
+    for (let i = 5; i < h; i += 6) line(ctx, ox, oy + i, ex, ey + i, shade(base, -0.1));
+    // 위쪽 마감 보
+    poly(ctx, [[ox, oy], [ex, ey], [ex, ey + 3], [ox, oy + 3]], shade(base, -0.3));
+
+    // 장식은 벽면 높이의 비율로 놓는다 — 고정 오프셋이면 h가 바뀔 때 벽 밖으로 삐져나온다
+    const mx = Math.round((ox + ex) / 2);
+    const my = Math.round((oy + ey) / 2);
+    const top = my + Math.round(h * 0.22);
+    if (variant === "window") {
+      const wh = Math.round(h * 0.42);
+      rect(ctx, mx - 6, top, 12, wh, shade(base, -0.4));
+      rect(ctx, mx - 5, top + 1, 10, wh - 2, pal.lampGlow || "#ffd68f");
+      rect(ctx, mx - 1, top + 1, 2, wh - 2, shade(base, -0.34));
+      rect(ctx, mx - 6, top + Math.round(wh / 2), 12, 1, shade(base, -0.34));
+    } else if (variant === "lantern") {
+      lantern(ctx, mx, top - 2, pal);
+    } else if (variant === "board") {
+      const bh = Math.round(h * 0.45);
+      rect(ctx, mx - 7, top, 14, bh, shade(pal.wood, -0.25));
+      rect(ctx, mx - 6, top + 1, 12, bh - 2, "#33403a");
+      for (let r = 0; r < 3; r++) rect(ctx, mx - 4, top + 3 + r * 4, [8, 5, 9][r], 1, "#d8e8dc");
+    }
+  }
+
   return {
     ellipse, cylinder, drawPixels,
     pokerTable, chair, stool, zabuton, lantern, barCounter, bottleShelf,
     rug, frame, wallSign, wallLamp, marquee, tree, bush, glow, chalkboard, beerSign,
-    railing, stairs,
+    railing, stairs, facade,
     plant, trophyStand, dartboard, jukebox, wall, person,
     BODY,
   };
