@@ -4,3 +4,18 @@ node_modules/
 
 # 에셋 원본(2048px) — assets/img/의 가공본만 배포에 쓴다. tools/asset-pack.mjs로 다시 만들 수 있다.
 assets/raw/
+
+# 액터 원본 슬라이스 중간물 — 최종본(assets/actors/<카테고리>/)만 커밋한다
+assets/actors/_raw/
+assets/actors/_master/
+
+# 개발용 스크래치 페이지
+game-pixel.html
+slice-k.html
+slice-v1.html
+tools/_preview/
+
+# 생성 원본(1024px) — assets/pixel/out/의 가공본만 배포에 쓴다. 시트는 assets/raw/sheets에 있다.
+assets/pixel/raw/
+assets/pixel/raw_k/
+assets/pixel/raw_v1/

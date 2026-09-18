@@ -14,6 +14,7 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync } from 
 import { inflateSync, deflateSync } from "node:zlib";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { specFor } from "./pixel-manifest.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const RAW = join(ROOT, "assets", "raw");
@@ -481,35 +482,43 @@ const JOBS = [
 // 마젠타 배경을 빼고 잘라낸 뒤 파일명을 그대로 유지해 저장한다.
 const pixIdx = process.argv.indexOf("--pixel");
 if (pixIdx > -1) {
+  // node tools/asset-pack.mjs --pixel <원본폴더> <출력루트>
+  // 폴더와 목표 크기는 tools/pixel-manifest.mjs가 파일명으로 결정한다.
   const srcDir = process.argv[pixIdx + 1];
-  const outDir = process.argv[pixIdx + 2];
-  const maxSide = Number(process.argv[pixIdx + 3] || 0);
-  if (!srcDir || !outDir) {
-    console.error("사용법: --pixel <원본폴더> <출력폴더> [최대변]");
+  const outRoot = process.argv[pixIdx + 2];
+  if (!srcDir || !outRoot) {
+    console.error("사용법: --pixel <원본폴더> <출력루트>");
     process.exit(1);
   }
-  mkdirSync(outDir, { recursive: true });
   const files = readdirSync(srcDir).filter((f) => f.toLowerCase().endsWith(".png"));
   let ok = 0;
+  const byFolder = {};
   for (const f of files) {
+    const base = f.replace(/.png$/i, "");
+    const { folder, maxSide } = specFor(base);
     try {
       let img = decodePng(readFileSync(join(srcDir, f)));
       img = keyChroma(img);
       img = trim(img, { marginRatio: 0.04, square: false });
-      img = bleedAlpha(img, 2);
-      if (maxSide && Math.max(img.width, img.height) > maxSide) {
-        const k = maxSide / Math.max(img.width, img.height);
+      // 스케일 통일 — 생성 모델은 오브젝트마다 카메라 거리를 다르게 잡으므로 여기서 맞춘다
+      const big = Math.max(img.width, img.height);
+      if (maxSide && big !== maxSide) {
+        const k = maxSide / big;
         img = resize(img, Math.max(1, Math.round(img.width * k)), Math.max(1, Math.round(img.height * k)));
       }
-      const dst = join(outDir, f);
-      writeFileSync(dst, encodePng(img));
-      console.log(`  ✓ ${f}  ${img.width}x${img.height}  ${(readFileSync(dst).length / 1024).toFixed(0)}KB`);
+      img = bleedAlpha(img, 2);
+      const dir = join(outRoot, folder);
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(join(dir, f), encodePng(img));
+      byFolder[folder] = (byFolder[folder] || 0) + 1;
       ok++;
     } catch (e) {
       console.error(`  ✗ ${f}: ${e.message}`);
     }
   }
-  console.log(`\n도트 에셋 ${ok}/${files.length}개 처리`);
+  for (const [k, v] of Object.entries(byFolder).sort()) console.log(`  ${k}: ${v}개`);
+  console.log(`
+도트 에셋 ${ok}/${files.length}개 처리`);
   process.exit(0);
 }
 

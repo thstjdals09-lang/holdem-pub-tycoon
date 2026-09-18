@@ -1,0 +1,80 @@
+/* ============================================================
+   index-2d 전용 HUD 보정 — 배포본(index.html)이 쓰는 style.css는 건드리지 않는다.
+   이 파일은 index-2d.html 에서만 style.css 뒤에 실려 "크기·대비"만 덮어쓴다.
+   기능·구조·클래스는 그대로다(같은 버튼, 같은 id).
+
+   왜 키우나: 2D 씬은 도트가 굵고 대비가 세서, 기존 HUD(재화 16px·레일 48px)가
+   배경에 묻힌다. 모바일에서 엄지로 누르는 표적도 48px보다 여유가 필요하다.
+   ============================================================ */
+
+:root {
+  --nav-h: 66px;
+}
+
+/* 도트 배경 위에서 유리판이 흐릿해 보이지 않게 — 불투명도와 테두리를 올린다 */
+.wallet,
+.profile-card,
+.quest-banner,
+.rail-btn {
+  background-color: rgba(255, 250, 245, 0.93);
+}
+
+/* ===== 우측 상단 재화 ===== */
+.wallet { width: 206px; border-radius: 20px; }
+.wallet-main { gap: 9px; padding: 8px 12px 6px 9px; }
+.wallet-bb { font-size: 20px; letter-spacing: -0.4px; }
+.wallet-rate { font-size: 11.5px; margin-top: 3px; }
+.wallet-sub { padding: 6px 6px 7px 8px; gap: 5px; }
+.wallet-cell b { font-size: 15px; }
+.cur-icon { width: 33px; height: 33px; flex-basis: 33px; }
+.cur-icon.sm { width: 21px; height: 21px; flex: 0 0 21px; }
+.add-currency-btn { width: 22px; height: 22px; font-size: 14px; }
+
+/* ===== 좌측 상단 프로필 ===== */
+.profile-card { gap: 9px; padding: 6px 14px 6px 6px; }
+.avatar-ring { width: 44px; height: 44px; }
+.avatar { font-size: 21px; }
+.avatar-lv { font-size: 10.5px; min-width: 17px; height: 17px; }
+.profile-name { font-size: 15px; width: 86px; }
+.xp-bar { width: 78px; height: 8px; }
+.icon-btn { width: 40px; height: 40px; font-size: 18px; }
+
+/* ===== 우측 사이드 레일 ===== */
+.side-rail { gap: 10px; }
+.rail-btn {
+  width: 56px;
+  height: 56px;
+  border-radius: 18px;
+  font-size: 25px;
+  box-shadow: 0 5px 0 rgba(58, 42, 48, 0.18), 0 8px 14px rgba(120, 70, 60, 0.2);
+}
+.rail-btn::after { font-size: 10px; bottom: -1px; }
+.rail-btn .dot { width: 15px; height: 15px; }
+
+/* ===== 하단 성장 미션 ===== */
+.quest-banner { gap: 10px; padding: 9px 11px 9px 9px; border-radius: 18px; }
+.quest-icon { width: 40px; height: 40px; border-radius: 13px; font-size: 20px; }
+.quest-title { font-size: 13.5px; }
+.quest-step { font-size: 10.5px; }
+.quest-desc { font-size: 11px; }
+.quest-prog { height: 8px; }
+.quest-claim { font-size: 13px; padding: 8px 14px; }
+
+/* ===== 하단 네비 ===== */
+.bottom-nav .nav-icon { font-size: 23px; }
+.bottom-nav .nav-label { font-size: 11.5px; }
+.bottom-nav .tab-btn { gap: 3px; }
+
+/* ===== 좁은 화면(≤400px) — 키운 값을 되돌려 겹침을 막는다 ===== */
+@media (max-width: 400px) {
+  .wallet { width: 178px; }
+  .wallet-bb { font-size: 17px; }
+  .wallet-rate { font-size: 10px; }
+  .cur-icon { width: 28px; height: 28px; flex-basis: 28px; }
+  .profile-name { font-size: 13.5px; width: 70px; }
+  .avatar-ring { width: 38px; height: 38px; }
+  .xp-bar { width: 64px; }
+  .rail-btn { width: 50px; height: 50px; font-size: 22px; }
+  .bottom-nav .nav-icon { font-size: 20px; }
+  .bottom-nav .nav-label { font-size: 10.5px; }
+}

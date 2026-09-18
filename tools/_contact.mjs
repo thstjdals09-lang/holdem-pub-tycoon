@@ -1,0 +1,22 @@
+import { readFileSync, writeFileSync, readdirSync, mkdirSync } from "node:fs";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+import { decodePng, makeCanvas, toPng } from "./_canvas.mjs";
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
+const dir = join(ROOT, process.argv[2]);
+const out = process.argv[3] || "tools/_preview/contact.png";
+const zoom = Number(process.argv[4] || 3);
+const files = readdirSync(dir).filter((f) => f.endsWith(".png")).sort();
+const imgs = files.map((f) => ({ f, im: decodePng(readFileSync(join(dir, f))) }));
+const CW = Math.max(...imgs.map((i) => i.im.width)) + 10;
+const CH = Math.max(...imgs.map((i) => i.im.height)) + 10;
+const cols = Math.min(12, imgs.length);
+const rows = Math.ceil(imgs.length / cols);
+const s = makeCanvas(cols * CW, rows * CH);
+imgs.forEach(({ im }, i) => {
+  const cx = (i % cols) * CW + CW / 2, by = ((i / cols) | 0) * CH + CH - 4;
+  s.ctx.drawImage(im, 0, 0, im.width, im.height, Math.round(cx - im.width / 2), by - im.height, im.width, im.height);
+});
+mkdirSync(join(ROOT, "tools/_preview"), { recursive: true });
+writeFileSync(join(ROOT, out), toPng(s, zoom, [26, 22, 20]));
+console.log(files.join("  "));

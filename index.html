@@ -17,14 +17,8 @@
      js/account.js·backend.js·shop.js 안의 "./firebase-init.js?v=" 도 같은 숫자로 맞출 것. -->
 <link rel="stylesheet" href="css/style.css?v=20" />
 <link rel="stylesheet" href="css/assets.css?v=20" />
-<script type="importmap">
-{
-  "imports": {
-    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.min.js",
-    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
-  }
-}
-</script>
+<link rel="stylesheet" href="css/style-2d.css?v=2d" />
+<!-- 2D판: three.js importmap 제거 (pub-scene-2d.js는 three를 쓰지 않는다) -->
 </head>
 <body>
 
@@ -457,7 +451,14 @@
 <script type="module" src="js/backend.js?v=20"></script>
 <script type="module" src="js/shop.js?v=20"></script>
 <script type="module" src="js/auth-gate.js?v=20"></script>
-<script type="module" src="js/scene3d.js?v=20"></script>
+<!-- ===== 2D 타일 렌더러 =====
+     scene3d.js 대신 들어간다. game.js 는 한 줄도 고치지 않았다 —
+     pub-scene-2d.js 가 window.PubScene3D 인터페이스를 그대로 구현한다. -->
+<script src="js/pixel/pixel-art.js?v=2d" defer></script>
+<script src="js/pixel/pixel-font.js?v=2d" defer></script>
+<script src="js/pixel/pixel-people.js?v=2d" defer></script>
+<script src="js/pixel/pixel-sprites.js?v=2d" defer></script>
+<script src="js/pub-scene-2d.js?v=2d" defer></script>
 <script src="js/game.js?v=20" defer></script>
 </body>
 </html>
