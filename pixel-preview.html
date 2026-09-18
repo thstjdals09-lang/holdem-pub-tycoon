@@ -46,6 +46,18 @@
 </header>
 
 <main>
+  <section>
+    <h2>캐릭터 밀도 비교</h2>
+    <p class="hint">
+      왼쪽이 인게임용(14×22) · 오른쪽이 고밀도(28×32). 오른쪽은 머리 3톤·피부 2톤·조끼 2톤·볼터치·쟁반까지 들어간다.
+      고밀도를 인게임에 그대로 쓰려면 타일(32×16)과 테이블도 같이 키워야 비율이 맞는다.
+    </p>
+    <div class="card" style="display:flex;gap:28px;align-items:flex-end;justify-content:center">
+      <div style="text-align:center"><canvas id="cvSmall"></canvas><div class="req">인게임 14×22 · ×4</div></div>
+      <div style="text-align:center"><canvas id="cvHD"></canvas><div class="req">고밀도 28×32 · ×4</div></div>
+    </div>
+  </section>
+
   <div class="bar" id="themebar"></div>
   <div class="bar" id="scalebar"></div>
   <div id="stages"></div>
@@ -56,6 +68,7 @@
 <script src="js/pixel/pixel-art.js?v=1"></script>
 <script src="js/pixel/pixel-font.js?v=1"></script>
 <script src="js/pixel/pixel-people.js?v=1"></script>
+<script src="js/pixel/pixel-people-hd.js?v=1"></script>
 <script src="js/pixel/pixel-sprites.js?v=1"></script>
 <script src="js/pixel/pixel-map.js?v=1"></script>
 <script src="js/pixel/pixel-scene.js?v=1"></script>
@@ -111,6 +124,28 @@
   chips("scalebar",
     [{ id: 1, label: "×1" }, { id: 2, label: "×2" }, { id: 3, label: "×3" }],
     () => scale, (v) => (scale = v));
+
+  // 캐릭터 비교 — 1배 오프스크린에 그린 뒤 정수배 확대(도트 유지)
+  function drawCharCompare() {
+    const up = 4;
+    {
+      const off = PixelArt.surface(20, 26);
+      PixelPeople.person(off.ctx, 10, 24, { hair: "#6b4632", skin: "#f2c9a0", cloth: "#3a3a4a", pants: "#2f2f38", style: "short" }, { bowtie: "#8a2f3a" });
+      const c = $("cvSmall");
+      c.width = 20 * up; c.height = 26 * up;
+      const g = c.getContext("2d"); g.imageSmoothingEnabled = false;
+      g.drawImage(off.canvas, 0, 0, 20, 26, 0, 0, 20 * up, 26 * up);
+    }
+    {
+      const off = PixelArt.surface(PixelPeopleHD.W + 4, PixelPeopleHD.H + 4);
+      PixelPeopleHD.draw(off.ctx, (PixelPeopleHD.W + 4) / 2, PixelPeopleHD.H + 2, {});
+      const c = $("cvHD");
+      c.width = (PixelPeopleHD.W + 4) * up; c.height = (PixelPeopleHD.H + 4) * up;
+      const g = c.getContext("2d"); g.imageSmoothingEnabled = false;
+      g.drawImage(off.canvas, 0, 0, PixelPeopleHD.W + 4, PixelPeopleHD.H + 4, 0, 0, (PixelPeopleHD.W + 4) * up, (PixelPeopleHD.H + 4) * up);
+    }
+  }
+  drawCharCompare();
 
   renderAll();
 </script>
