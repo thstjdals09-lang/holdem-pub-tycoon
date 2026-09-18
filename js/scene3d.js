@@ -132,6 +132,7 @@ const THEMES = {
     props: {},
     bottles: [0x5c3a21, 0x2f6b4a, 0x7a2f4a, 0x2f4a7a, 0xc9a24a],
     wallPattern: null,
+    parts: {},
     light: { hemiSky: 0xfff6ec, hemiGround: 0xf0dcc4, hemiInt: 1.0, sun: 0xfff6e4, sunInt: 1.0, fill: 0xffd7ea, fillInt: 0.3 },
     customers: [0xff8fab, 0xffc85c, 0x7bc67e, 0x6fc1ff, 0xd98cff, 0xffa8a8, 0xffe08a],
     dealerTint: null,
@@ -160,6 +161,7 @@ const THEMES = {
     bottles: [0xffb3d2, 0xf0d9ff, 0xffe6b8, 0xd9f0ff, 0xfff0f6],
     wallPattern: "stripe",
     wallTile: 2.8,
+    parts: {},
     light: { hemiSky: 0xfff4fb, hemiGround: 0xffe0ee, hemiInt: 1.15, sun: 0xfff2f8, sunInt: 0.95, fill: 0xffd9ec, fillInt: 0.38 },
     customers: [0xffb3d2, 0xffd6e8, 0xe3c2ff, 0xc2e0ff, 0xfff0b8, 0xffc2c2, 0xd9f0e0],
     dealerTint: 0xffd9ee,
@@ -188,6 +190,7 @@ const THEMES = {
     bottles: [0x4a2f1a, 0x2f5a3a, 0x6b2f2f, 0x3a3a5a, 0xc9a24a],
     wallPattern: "panel",
     wallTile: 3.6,
+    parts: {},
     light: { hemiSky: 0xffe9c8, hemiGround: 0xcbb08a, hemiInt: 0.78, sun: 0xffe0a8, sunInt: 0.92, fill: 0xc9a86b, fillInt: 0.22 },
     customers: [0x8f2f3a, 0x35704a, 0x455680, 0xc2a35a, 0x6b4a6b, 0xa8703a, 0xe8dcc0],
     dealerTint: 0x3a2a1a,
@@ -216,6 +219,8 @@ const THEMES = {
     bottles: [0x00e5ff, 0xff3fae, 0xb26bff, 0x5affc2, 0xffe14a],
     wallPattern: "grid",
     wallTile: 4.6,
+    // 등받이를 비쳐 보이게 해서 아크릴 의자처럼
+    parts: { seatBack: "ghost" },
     light: { hemiSky: 0x9a7aff, hemiGround: 0x241a38, hemiInt: 0.55, sun: 0xbfa8ff, sunInt: 0.45, fill: 0x00e5ff, fillInt: 0.5 },
     customers: [0x00e5ff, 0xff3fae, 0xb26bff, 0x5affc2, 0xffe14a, 0xff7a4a, 0xffffff],
     dealerTint: 0x140c26,
@@ -245,6 +250,9 @@ const THEMES = {
     bottles: [0xf2ece0, 0x27406e, 0x2f5a50, 0xc23a33, 0xe8b04a],
     wallPattern: "shoji",
     wallTile: 6.2,
+    // 등받이를 지워 등받이 없는 좌석처럼, 조명 갓은 비치게 해서 종이등처럼 보이게 한다.
+    // (형태 자체는 다른 테마와 똑같은 표준 가구 그대로다)
+    parts: { seatBack: "hidden", lampShade: "ghost" },
     light: { hemiSky: 0xfff8ec, hemiGround: 0xe6d9b8, hemiInt: 1.08, sun: 0xfff0d4, sunInt: 0.95, fill: 0xffcf9a, fillInt: 0.3 },
     customers: [0x27406e, 0xc23a33, 0xf2ece0, 0x2f5a50, 0xe8b04a, 0xf0a8b8, 0x4a3a6b],
     dealerTint: 0x1f2f52,
@@ -846,18 +854,61 @@ const furnGeo = {
   glass: new THREE.CylinderGeometry(0.06, 0.05, 0.16, 8),
 };
 
+// ============================================================
+// 파트 마스크 — 실제 지오메트리는 그대로 두고 "보이기"만 테마별로 바꾼다.
+//
+// 테마마다 가구를 다른 모양으로 새로 만들면, 테마가 늘거나 "세트가 아니라 부분만 바꾸기"
+// 기능이 생겼을 때 조합마다 새 빌더가 필요해진다. 그래서 표준 가구는 언제나 똑같이 만들고,
+// 파트에 이름표(userData.part)를 붙인 뒤 숨김/반투명만 씌운다.
+//
+//   hidden : 안 보이게 (예: 일본풍 좌석 등받이를 지워 등받이 없는 방석처럼 보이게)
+//   ghost  : 반투명 (예: 일본풍 조명 갓을 비치게 해서 종이등처럼, 네온은 아크릴 등받이처럼)
+//
+// partOverrides는 나중에 "부분 변경" 기능이 붙을 자리다 — 테마 마스크 위에 얹혀 우선한다.
+// ============================================================
+const PART_HIDDEN = "hidden";
+const PART_GHOST = "ghost";
+let partOverrides = {};
+
+const tagPart = (mesh, name) => {
+  mesh.userData.part = name;
+  return mesh;
+};
+
+function applyPartMask(root) {
+  const mask = Object.assign({}, themeDef.parts || {}, partOverrides);
+  if (!Object.keys(mask).length) return root;
+  root.traverse((o) => {
+    const part = o.userData && o.userData.part;
+    if (!part) return;
+    const mode = mask[part];
+    if (mode === PART_HIDDEN) {
+      o.visible = false;
+    } else if (mode === PART_GHOST && o.material) {
+      // 공유 재질을 그대로 건드리면 같은 재질을 쓰는 다른 기물까지 투명해진다 → 복제본에만 적용
+      o.material = o.material.clone();
+      o.material.transparent = true;
+      o.material.opacity = 0.45;
+      o.material.depthWrite = false;
+      // 아웃라인(뒷면 셸)은 반투명일 때 검은 테두리만 남아 지저분해진다
+      for (const c of o.children) if (c.material === outlineMat) c.visible = false;
+    }
+  });
+  return root;
+}
+
 function buildChair(padColor) {
   const g = new THREE.Group();
-  const seat = plain(furnGeo.chairSeat, padColor);
+  const seat = tagPart(plain(furnGeo.chairSeat, padColor), "seatPad");
   seat.position.y = 0.45;
-  const back = plain(furnGeo.chairBack, padColor);
+  const back = tagPart(plain(furnGeo.chairBack, padColor), "seatBack");
   back.position.set(0, 0.7, -0.2);
-  const post = plain(furnGeo.chairPost, PAL.chair);
+  const post = tagPart(plain(furnGeo.chairPost, PAL.chair), "seatPost");
   post.position.y = 0.21;
-  const foot = plain(furnGeo.stoolFoot, PAL.chair);
+  const foot = tagPart(plain(furnGeo.stoolFoot, PAL.chair), "seatFoot");
   foot.position.y = 0.02;
   g.add(seat, back, post, foot);
-  return g;
+  return applyPartMask(g);
 }
 
 function buildBarStool() {
@@ -913,7 +964,7 @@ function buildPendantLamp() {
   const cord = plain(new THREE.CylinderGeometry(0.015, 0.015, 1.5, 6), 0x3a2a30);
   cord.position.y = 3.35;
   // 갓은 어두운 남색이었는데 포스터의 조명은 황동/골드다 — 매장 전체 톤을 좌우하는 부분
-  const shade = meshWO(new THREE.ConeGeometry(0.4, 0.34, 14, 1, true), PAL.lampShade, 1.05);
+  const shade = tagPart(meshWO(new THREE.ConeGeometry(0.4, 0.34, 14, 1, true), PAL.lampShade, 1.05), "lampShade");
   shade.position.y = 2.5;
   const bulb = new THREE.Mesh(
     new THREE.SphereGeometry(0.11, 10, 10),
@@ -927,8 +978,11 @@ function buildPendantLamp() {
     new THREE.MeshBasicMaterial({ color: PAL.lightWarm, transparent: true, opacity: 0.3, depthWrite: false })
   );
   halo.position.y = 2.34;
+  tagPart(cord, "lampCord");
+  tagPart(bulb, "lampBulb");
+  tagPart(halo, "lampHalo");
   g.add(cord, shade, bulb, halo);
-  return g;
+  return applyPartMask(g);
 }
 
 function buildBottleShelf(level) {
