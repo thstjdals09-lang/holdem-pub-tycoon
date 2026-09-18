@@ -20,7 +20,7 @@ import {
   keyMagenta, deFringe, stripGridLines, components, mergeNear,
   cellUnion, gridBoxes, readingOrder, crop, shrink, posterize,
 } from "./sheet-cut.mjs";
-import { PROPS, ACTOR, CAST, THEMES, HMAX, widthOf } from "./pack-spec.mjs";
+import { ACTOR, CAST, THEMES, widthOf, heightOf } from "./pack-spec.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const RAW = join(ROOT, "assets/raw/sheets");
@@ -91,7 +91,7 @@ for (const theme of THEMES) {
     const { img, boxes, n } = pieces(file, 4, 3);
     PROP_ORDER[kind].forEach((name, i) => {
       if (!boxes[i]) return;
-      const out = bake(img, boxes[i], { width: widthOf(name), hmax: HMAX[name] });
+      const out = bake(img, boxes[i], { width: widthOf(name), hmax: heightOf(name) });
       if (WRITE) writeFileSync(join(propDir, name + ".png"), encodePng(out.w, out.h, out.data));
       made++;
     });
