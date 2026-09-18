@@ -19,21 +19,25 @@ import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
 
+// 포스터 키비주얼 기준 팔레트 — 밝은 우드 바닥 + 크림/핑크 벽 + 핑크 벨벳 + 골드 포인트.
+// (예전 값은 겨자색 바닥에 어두운 적갈색 가구라 톤이 탁하고 포스터와 딴판이었다)
 const COLORS = {
-  floorBase: 0xf3c988,
-  wallBack: 0xffd3e6,
-  wallSide: 0xffe6d5,
+  floorBase: 0xefd8b8,
+  wallBack: 0xffe2ee,
+  wallSide: 0xfff0e6,
   wallTrim: 0xff8fab,
-  rail: 0x7a4a33, // 테이블 레일(가죽)
-  railTrim: 0x5e3624,
-  tableLeg: 0x5e4433,
-  chair: 0x8a5a3d,
-  chairPad: 0xc9506b,
+  wainscot: 0xc79a6b, // 벽 아래쪽 우드 패널 — 포스터의 펍 분위기를 만드는 핵심 요소
+  wainscotCap: 0xa87249,
+  rail: 0xb88055, // 테이블 레일(가죽)
+  railTrim: 0x96603b,
+  tableLeg: 0x8a6244,
+  chair: 0xa5714a,
+  chairPad: 0xff9db5,
   emptySlot: 0xffc85c,
-  bar: 0xb97a4a,
-  barTop: 0x8a5334,
+  bar: 0xcb9a6c,
+  barTop: 0xa87249,
   barTrim: 0xff8fab,
-  stool: 0xc9506b,
+  stool: 0xff9db5,
   fridge: 0xf3fdff,
   fridgeDoor: 0x9fe3f2,
   vault: 0x4a4a68,
@@ -50,16 +54,19 @@ const COLORS = {
   outline: 0x3a2a30,
   lightWarm: 0xffcf7a,
   lightPink: 0xff9ec2,
-  wood: 0x9a6b45,
-  sofa: 0x7a4a6b,
+  wood: 0xb98a5f,
+  sofa: 0xd98fb5,
 };
 
 // 딜러 등급별 정장/포인트 색 — 도감 등급이 매장 안에서도 바로 보이게 한다.
+// accent는 js/assets.js의 등급 색(카드 프레임·배지)과 같은 값을 쓴다 — 도감에서 본 색이 매장에서도 그대로 보이게.
 const DEALER_RARITY_LOOK = {
-  common: { suit: 0x5b5b6b, accent: 0xb9b9c6 },
+  common: { suit: 0x5b5b6b, accent: 0x9b9b9b },
+  // uncommon(U)이 빠져 있어서 고급 등급 운영진이 일반과 똑같은 회색으로 보였다(|| common 폴백).
+  uncommon: { suit: 0x2f5a3a, accent: 0x7bc67e },
   rare: { suit: 0x2f4a7a, accent: 0x4fa3ff },
   epic: { suit: 0x4a2f6b, accent: 0xc86bff },
-  legendary: { suit: 0x6b4a10, accent: 0xffc83c },
+  legendary: { suit: 0x6b4a10, accent: 0xffb400 },
   mythic: { suit: 0x7a1a5c, accent: 0xff5fd0 },
   // "staff" = 이름 붙은 운영진이 배치 안 된 테이블을 채우는 기본 운영진(보너스 없음, 시각적 필러 전용)
   staff: { suit: 0x4a4a52, accent: 0x8a8a92 },
@@ -91,31 +98,34 @@ const WALL_H = 7;
 
 const THEMES = {
   classic: {
-    floor: 0xf3c988,
+    floor: 0xefd8b8,
     floorPattern: "plank",
-    wallBack: 0xffd3e6,
-    wallSide: 0xffe6d5,
+    wallBack: 0xffe2ee,
+    wallSide: 0xfff0e6,
     trim: 0xff8fab,
-    sky: ["#fff3e4", "#ffd9c2"],
-    felt: [0x2f8a5a, 0x2a7ba0, 0x8a3a5a, 0x2f6b8a, 0x7a5aa0, 0x2f8a7a],
+    wainscot: 0xc79a6b,
+    sky: ["#fff6ec", "#ffe3d2"],
+    felt: [0x3fa878, 0x3a9bbf, 0xa8527a, 0x4a86a8, 0x8f75b5, 0x3fa895],
   },
   princess: {
-    floor: 0xffd9ec,
+    floor: 0xffe2f0,
     floorPattern: "tile",
     wallBack: 0xffe6f5,
     wallSide: 0xfff0fa,
     trim: 0xff8fd8,
+    wainscot: 0xf0c8dd,
     sky: ["#fff6fb", "#ffdcef"],
-    felt: [0xd9578f, 0xc76bb5, 0xe07aa8, 0xa86bd9, 0xd98fc4, 0xc95a9a],
+    felt: [0xe06b9f, 0xd07ec0, 0xeb8ab5, 0xb87ce0, 0xe09ecd, 0xd96ba5],
   },
   european: {
-    floor: 0xc9a876,
+    floor: 0xd9b98a,
     floorPattern: "plank",
-    wallBack: 0x7a5a3f,
-    wallSide: 0x9a7a54,
+    wallBack: 0x8a6a4a,
+    wallSide: 0xab8a62,
     trim: 0xd4af37,
+    wainscot: 0x6b4a32,
     sky: ["#f0e2c6", "#cbae80"],
-    felt: [0x2a5a3a, 0x6b3a2a, 0x3a4a6b, 0x5a3a5a, 0x6b5a2a, 0x2a4a4a],
+    felt: [0x35704a, 0x7a4534, 0x455680, 0x6b4a6b, 0x7a6a35, 0x35595a],
   },
   neon: {
     floor: 0x2a1a3a,
@@ -123,8 +133,9 @@ const THEMES = {
     wallBack: 0x1a1030,
     wallSide: 0x231640,
     trim: 0x00e5ff,
+    wainscot: 0x3a2358,
     sky: ["#3a2560", "#140c26"],
-    felt: [0x7a1a6b, 0x1a5a7a, 0x6b1a3a, 0x3a1a7a, 0x1a6b5a, 0x7a3a1a],
+    felt: [0x8f2a7d, 0x2a6b8f, 0x7d2a4a, 0x4a2a8f, 0x2a7d6b, 0x8f4a2a],
   },
 };
 
@@ -155,8 +166,11 @@ let pointerStart = null;
 let currentTheme = null;
 let currentPerTableIncome = 0;
 let showCoinPops = true;
-let floorMesh, floorMat, backWallMat, sideWallMat, backTrimMat;
+let floorMesh, floorMat, backWallMat, sideWallMat, backTrimMat, wainscotMat;
 let backWallMesh, leftWallMesh, rightWallMesh, backTrimMesh, stringLightsGroup, doorGroup;
+// 벽 아래쪽 우드 패널(웨인스코팅)과 좌우 트림 — 기존 핑크 트림(y=1.3)이 패널의 갓돌 역할을 한다
+let backWainscotMesh, leftWainscotMesh, rightWainscotMesh, leftTrimMesh, rightTrimMesh;
+const WAINSCOT_H = 1.3;
 
 let roomW = 0;
 let roomD = 0;
@@ -264,8 +278,9 @@ function makeFloorTexture(pattern) {
   const ctx = canvas.getContext("2d");
   ctx.fillStyle = "#ffffff";
   ctx.fillRect(0, 0, size, size);
-  ctx.strokeStyle = "rgba(60,40,30,0.28)";
-  ctx.lineWidth = 3;
+  // 선이 진하면 바닥이 벽돌담처럼 보인다 — 포스터의 마루는 결이 훨씬 은은하다
+  ctx.strokeStyle = "rgba(120,85,60,0.16)";
+  ctx.lineWidth = 2;
 
   if (pattern === "tile") {
     const cells = 6;
@@ -277,7 +292,7 @@ function makeFloorTexture(pattern) {
         }
       }
     }
-    ctx.strokeStyle = "rgba(60,40,30,0.18)";
+    ctx.strokeStyle = "rgba(120,85,60,0.12)";
     for (let i = 0; i <= cells; i++) {
       const p = (size / cells) * i;
       ctx.beginPath();
@@ -301,7 +316,7 @@ function makeFloorTexture(pattern) {
     for (let r = 0; r < rows; r++) {
       const y0 = (size / rows) * r;
       const offset = r % 2 === 0 ? 0 : size / 3;
-      for (let x = -size; x < size * 2; x += size / 1.5) {
+      for (let x = -size; x < size * 2; x += size / 0.75) {
         const xx = x + offset;
         ctx.beginPath();
         ctx.moveTo(xx, y0);
@@ -691,14 +706,22 @@ function buildPendantLamp() {
   const g = new THREE.Group();
   const cord = plain(new THREE.CylinderGeometry(0.015, 0.015, 1.5, 6), 0x3a2a30);
   cord.position.y = 3.35;
-  const shade = meshWO(new THREE.ConeGeometry(0.4, 0.34, 14, 1, true), 0x2f3550, 1.05);
+  // 갓은 어두운 남색이었는데 포스터의 조명은 황동/골드다 — 매장 전체 톤을 좌우하는 부분
+  const shade = meshWO(new THREE.ConeGeometry(0.4, 0.34, 14, 1, true), 0xd9a441, 1.05);
   shade.position.y = 2.5;
   const bulb = new THREE.Mesh(
     new THREE.SphereGeometry(0.11, 10, 10),
-    new THREE.MeshBasicMaterial({ color: COLORS.lightWarm })
+    new THREE.MeshBasicMaterial({ color: 0xfff0c8 })
   );
   bulb.position.y = 2.36;
-  g.add(cord, shade, bulb);
+  // 전구 주변 halo — 실제 빛을 쏘면(PointLight) 테이블 수만큼 광원이 늘어 휴대폰에서 느려지므로
+  // 반투명 구체로 "빛나 보이게"만 한다.
+  const halo = new THREE.Mesh(
+    new THREE.SphereGeometry(0.26, 10, 10),
+    new THREE.MeshBasicMaterial({ color: COLORS.lightWarm, transparent: true, opacity: 0.3, depthWrite: false })
+  );
+  halo.position.y = 2.34;
+  g.add(cord, shade, bulb, halo);
   return g;
 }
 
@@ -1107,7 +1130,26 @@ function applyRoomSize(w, d) {
 
   backTrimMesh.geometry.dispose();
   backTrimMesh.geometry = new THREE.BoxGeometry(w, 0.3, 0.05);
-  backTrimMesh.position.set(0, 1.3, zBack + 0.03);
+  backTrimMesh.position.set(0, WAINSCOT_H, zBack + 0.03);
+
+  // 우드 패널은 바닥에서 트림 높이까지. 벽면보다 살짝 안쪽으로 빼서 z-fighting을 피한다.
+  backWainscotMesh.geometry.dispose();
+  backWainscotMesh.geometry = new THREE.PlaneGeometry(w, WAINSCOT_H);
+  backWainscotMesh.position.set(0, WAINSCOT_H / 2, zBack + 0.02);
+
+  const sideWainscotGeo = new THREE.PlaneGeometry(d, WAINSCOT_H);
+  const sideTrimGeo = new THREE.PlaneGeometry(d, 0.3);
+  for (const [mesh, trim, sign] of [
+    [leftWainscotMesh, leftTrimMesh, -1],
+    [rightWainscotMesh, rightTrimMesh, 1],
+  ]) {
+    mesh.geometry.dispose();
+    mesh.geometry = sideWainscotGeo;
+    mesh.position.set(sign * (w / 2 - 0.02), WAINSCOT_H / 2, ROOM_CENTER_Z);
+    trim.geometry.dispose();
+    trim.geometry = sideTrimGeo;
+    trim.position.set(sign * (w / 2 - 0.03), WAINSCOT_H, ROOM_CENTER_Z);
+  }
 
   const sideGeo = new THREE.PlaneGeometry(d, WALL_H);
   leftWallMesh.geometry.dispose();
@@ -1171,8 +1213,9 @@ export function init(containerEl) {
     controls.target.copy(isoTarget);
     controls.update();
 
-    scene.add(new THREE.HemisphereLight(0xfff0e0, 0xd9a35f, 0.9));
-    const sun = new THREE.DirectionalLight(0xfff3d6, 1.0);
+    // 바닥 반사광이 진한 주황(0xd9a35f)이라 우드 바닥이 겨자색으로 떴다 → 크림으로 낮춤
+    scene.add(new THREE.HemisphereLight(0xfff6ec, 0xf0dcc4, 1.0));
+    const sun = new THREE.DirectionalLight(0xfff6e4, 1.0);
     sun.position.set(6, 14, 7);
     sun.castShadow = true;
     sun.shadow.mapSize.set(2048, 2048);
@@ -1212,6 +1255,22 @@ export function init(containerEl) {
     rightWallMesh.rotation.y = -Math.PI / 2;
     rightWallMesh.receiveShadow = true;
     scene.add(leftWallMesh, rightWallMesh);
+
+    // 벽 아래쪽 우드 패널 + 좌우 트림. 크기는 applyRoomSize()가 매장 크기에 맞춰 다시 잡는다.
+    // 벽과 똑같이 단면(Plane)으로 만든다. Box로 하면 우측 벽처럼 카메라가 바깥에 있는 면에서
+    // 뒷면이 보여 바닥 가장자리에 갈색 판때기가 생긴다(벽 Plane은 앞면만 그려져서 안 보이는 것).
+    wainscotMat = toonMat(COLORS.wainscot);
+    backWainscotMesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), wainscotMat);
+    leftWainscotMesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), wainscotMat);
+    leftWainscotMesh.rotation.y = Math.PI / 2;
+    rightWainscotMesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), wainscotMat);
+    rightWainscotMesh.rotation.y = -Math.PI / 2;
+    leftTrimMesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), backTrimMat);
+    leftTrimMesh.rotation.y = Math.PI / 2;
+    rightTrimMesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), backTrimMat);
+    rightTrimMesh.rotation.y = -Math.PI / 2;
+    for (const m of [backWainscotMesh, leftWainscotMesh, rightWainscotMesh]) m.receiveShadow = true;
+    scene.add(backWainscotMesh, leftWainscotMesh, rightWainscotMesh, leftTrimMesh, rightTrimMesh);
 
     applyRoomSize(ROOM_MIN_W, ROOM_MIN_D);
 
@@ -1254,6 +1313,7 @@ function applyTheme(themeId) {
   backWallMat.color.set(t.wallBack);
   sideWallMat.color.set(t.wallSide);
   backTrimMat.color.set(t.trim);
+  wainscotMat.color.set(t.wainscot || COLORS.wainscot);
   if (scene.background && scene.background.dispose) scene.background.dispose();
   scene.background = makeSkyTexture(t.sky[0], t.sky[1]);
 }
@@ -1572,6 +1632,15 @@ export function update(snapshot) {
   // ---------- 장식품 (레벨이 오를수록 개수가 늘어난다) ----------
   clearGroup(groups.decor);
   const lv = (id) => decor[id] || 0;
+
+  // 기본 화분 — 장식품을 하나도 안 산 초반에도 매장이 휑해 보이지 않게 뒷쪽 두 모서리에 항상 둔다.
+  // (레벨로 늘어나는 아래쪽 화분과는 자리가 겹치지 않는다: 이쪽은 뒷벽, 저쪽은 앞쪽)
+  for (const sx of [-1, 1]) {
+    const p = buildPlant();
+    p.position.set(sx * (halfW - 0.9), 0, ROOM_CENTER_Z + 1.4);
+    p.scale.setScalar(1.3);
+    groups.decor.add(p);
+  }
 
   if (lv("plant")) {
     groups.decor.add(placeDecorRow(buildPlant, lv("plant"), -halfW + 0.9, 0, zFront - 2.2, 0, 1));
