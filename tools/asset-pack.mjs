@@ -390,6 +390,7 @@ const JOBS = [
   { group: "theme", raw: "theme-princess.png", out: "theme/princess", key: false, sizes: [256] },
   { group: "theme", raw: "theme-european.png", out: "theme/european", key: false, sizes: [256] },
   { group: "theme", raw: "theme-neon.png",     out: "theme/neon",     key: false, sizes: [256] },
+  { group: "theme", raw: "theme-japanese.png", out: "theme/japanese", key: false, sizes: [256] },
 ];
 
 const onlyIdx = process.argv.indexOf("--only");

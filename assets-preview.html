@@ -198,7 +198,7 @@
 
   <section>
     <h2>인테리어 테마 썸네일</h2>
-    <p class="hint"><code>data.js</code>의 <code>themes</code> 4종. 인테리어 탭의 테마 카드에 쓴다.</p>
+    <p class="hint"><code>data.js</code>의 <code>themes</code> 5종. 인테리어 탭의 테마 카드에 쓴다.</p>
     <div class="card"><div class="grid grid-wide" id="themes"></div></div>
   </section>
 
@@ -317,7 +317,8 @@
 
   // ---------- 테마 ----------
   $("themes").innerHTML = [
-    ["classic", "클래식"], ["princess", "공주풍"], ["european", "유럽풍"], ["neon", "네온 라운지"],
+    ["classic", "클래식"], ["princess", "공주풍"], ["european", "유럽풍"],
+    ["neon", "네온 라운지"], ["japanese", "일본풍"],
   ]
     .map(
       ([id, name]) =>

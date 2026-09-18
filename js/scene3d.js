@@ -88,7 +88,6 @@ const DEALER_RARITY_LOOK = {
   staff: { suit: 0x4a4a52, accent: 0x8a8a92 },
 };
 
-const CUSTOMER_SHIRT_COLORS = [0xff8fab, 0xffc85c, 0x7bc67e, 0x6fc1ff, 0xd98cff, 0xffa8a8, 0xffe08a];
 const COIN_POP_INTERVAL = 2.6;
 
 // 레이스트랙 테이블 규격 (실제 홀덤 테이블 비율 ≒ 2.1m x 1.1m)
@@ -112,6 +111,13 @@ const ROOM_MIN_W = 17;
 const ROOM_MIN_D = 16;
 const WALL_H = 7;
 
+// 테마 = 매장 전체의 "옷 한 벌".
+//   floor/wall/trim/wainscot/sky/felt : 매장 골격
+//   props        : COLORS 위에 덮어쓰는 기물·가구 색 (테이블 레일, 의자, 바, 냉장고, 조명…)
+//   customers    : 손님 셔츠 팔레트
+//   dealerTint / dealerMix : 딜러 정장을 테마 쪽으로 얼마나 끌어올지.
+//                  등급색(accent)은 그대로 둬서 도감 등급은 계속 알아볼 수 있게 한다.
+//   lights       : "bulb"(전구 줄) | "lantern"(제등)
 const THEMES = {
   classic: {
     floor: 0xefd8b8,
@@ -122,6 +128,11 @@ const THEMES = {
     wainscot: 0xc79a6b,
     sky: ["#fff6ec", "#ffe3d2"],
     felt: [0x3fa878, 0x3a9bbf, 0xa8527a, 0x4a86a8, 0x8f75b5, 0x3fa895],
+    props: {},
+    customers: [0xff8fab, 0xffc85c, 0x7bc67e, 0x6fc1ff, 0xd98cff, 0xffa8a8, 0xffe08a],
+    dealerTint: null,
+    dealerMix: 0,
+    lights: "bulb",
   },
   princess: {
     floor: 0xffe2f0,
@@ -132,6 +143,19 @@ const THEMES = {
     wainscot: 0xf0c8dd,
     sky: ["#fff6fb", "#ffdcef"],
     felt: [0xe06b9f, 0xd07ec0, 0xeb8ab5, 0xb87ce0, 0xe09ecd, 0xd96ba5],
+    props: {
+      rail: 0xf5e2ef, railTrim: 0xe0b7d2, tableLeg: 0xe8cfe0,
+      chair: 0xf0dcea, chairPad: 0xff9ecb, stool: 0xff9ecb,
+      bar: 0xfaeaf4, barTop: 0xe8c6dd, barTrim: 0xffd166,
+      wood: 0xefd7e8, sofa: 0xf0a8cf,
+      fridge: 0xfff7fc, fridgeDoor: 0xf3c9e4,
+      emptySlot: 0xffd166, lightWarm: 0xfff0c8, lightPink: 0xffb3dd,
+      serverShirt: 0xffd1e8, marketerShirt: 0xd9c2ff, bartenderAccent: 0xff8fd8,
+    },
+    customers: [0xffb3d2, 0xffd6e8, 0xe3c2ff, 0xc2e0ff, 0xfff0b8, 0xffc2c2, 0xd9f0e0],
+    dealerTint: 0xffd9ee,
+    dealerMix: 0.42,
+    lights: "bulb",
   },
   european: {
     floor: 0xd9b98a,
@@ -142,6 +166,19 @@ const THEMES = {
     wainscot: 0x6b4a32,
     sky: ["#f0e2c6", "#cbae80"],
     felt: [0x35704a, 0x7a4534, 0x455680, 0x6b4a6b, 0x7a6a35, 0x35595a],
+    props: {
+      rail: 0x6b4630, railTrim: 0x4e3122, tableLeg: 0x5a3c28,
+      chair: 0x6b4630, chairPad: 0x8f2f3a, stool: 0x8f2f3a,
+      bar: 0x7a5236, barTop: 0x5a3a24, barTrim: 0xd4af37,
+      wood: 0x7a5236, sofa: 0x7a3340,
+      fridge: 0xe8e0d0, fridgeDoor: 0xc2b393,
+      emptySlot: 0xd4af37, lightWarm: 0xffd98f, lightPink: 0xe8c06b,
+      serverShirt: 0xe8dcc0, marketerShirt: 0x6b7a9a, bartenderAccent: 0xd4af37,
+    },
+    customers: [0x8f2f3a, 0x35704a, 0x455680, 0xc2a35a, 0x6b4a6b, 0xa8703a, 0xe8dcc0],
+    dealerTint: 0x3a2a1a,
+    dealerMix: 0.34,
+    lights: "bulb",
   },
   neon: {
     floor: 0x2a1a3a,
@@ -152,6 +189,43 @@ const THEMES = {
     wainscot: 0x3a2358,
     sky: ["#3a2560", "#140c26"],
     felt: [0x8f2a7d, 0x2a6b8f, 0x7d2a4a, 0x4a2a8f, 0x2a7d6b, 0x8f4a2a],
+    props: {
+      rail: 0x3a2358, railTrim: 0x241540, tableLeg: 0x2a1a44,
+      chair: 0x2f1d4a, chairPad: 0xff3fae, stool: 0xff3fae,
+      bar: 0x2a1a44, barTop: 0x1c1030, barTrim: 0x00e5ff,
+      wood: 0x3a2358, sofa: 0x6b2a8f,
+      fridge: 0x2f2050, fridgeDoor: 0x00e5ff,
+      emptySlot: 0x00e5ff, lightWarm: 0x00e5ff, lightPink: 0xff3fae,
+      serverShirt: 0x00e5ff, marketerShirt: 0xff3fae, bartenderAccent: 0x00e5ff,
+    },
+    customers: [0x00e5ff, 0xff3fae, 0xb26bff, 0x5affc2, 0xffe14a, 0xff7a4a, 0xffffff],
+    dealerTint: 0x140c26,
+    dealerMix: 0.46,
+    lights: "bulb",
+  },
+  // 일본풍 — 다다미 바닥 + 격자(쇼지) 벽 + 제등. 펠트는 남색/주칠 계열.
+  japanese: {
+    floor: 0xd9cf9e,
+    floorPattern: "tatami",
+    wallBack: 0xf7f0de,
+    wallSide: 0xfdf8ec,
+    trim: 0x8a4a32,
+    wainscot: 0x6e4630,
+    sky: ["#fdf6e6", "#f0dcc0"],
+    felt: [0x27406e, 0x8a2f2f, 0x2f5a50, 0x4a3a6b, 0x6e4a2a, 0x2f4a6b],
+    props: {
+      rail: 0x8a5c3a, railTrim: 0x5e3b24, tableLeg: 0x6e4630,
+      chair: 0x8a5c3a, chairPad: 0xc23a33, stool: 0xc23a33,
+      bar: 0x7a5236, barTop: 0x5e3b24, barTrim: 0xc23a33,
+      wood: 0x8a5c3a, sofa: 0x2f4a6b,
+      fridge: 0xf2ece0, fridgeDoor: 0xbfd4cf,
+      emptySlot: 0xe0a84a, lightWarm: 0xffd9a0, lightPink: 0xe8604a,
+      serverShirt: 0x27406e, marketerShirt: 0xc23a33, bartenderAccent: 0xc23a33,
+    },
+    customers: [0x27406e, 0xc23a33, 0xf2ece0, 0x2f5a50, 0xe8b04a, 0xf0a8b8, 0x4a3a6b],
+    dealerTint: 0x1f2f52,
+    dealerMix: 0.4,
+    lights: "lantern",
   },
 };
 
@@ -180,6 +254,8 @@ let outlineMat;
 let raycaster;
 let pointerStart = null;
 let currentTheme = null;
+let themeDef = THEMES.classic;                 // 적용 중인 테마 — 딜러 틴트·조명 종류를 여기서 읽는다
+let customerShirts = THEMES.classic.customers; // 손님 상의 팔레트 — applyTheme()이 교체한다
 let currentPerTableIncome = 0;
 let showCoinPops = true;
 let floorMesh, floorMat, backWallMat, sideWallMat, backTrimMat, wainscotMat;
@@ -298,7 +374,34 @@ function makeFloorTexture(pattern) {
   ctx.strokeStyle = "rgba(120,85,60,0.16)";
   ctx.lineWidth = 2;
 
-  if (pattern === "tile") {
+  if (pattern === "tatami") {
+    // 다다미 — 가로로 긴 돗자리 2장씩, 가장자리에 진한 헤리(가선) 띠. 결은 촘촘한 세로선.
+    const rows = 3;
+    const h = size / rows;
+    for (let r = 0; r < rows; r++) {
+      const y = h * r;
+      for (let c = 0; c < 2; c++) {
+        const x = (size / 2) * c + (r % 2 === 1 ? size / 4 : 0);
+        ctx.fillStyle = "rgba(120,110,60,0.05)";
+        ctx.fillRect(x, y, size / 2, h);
+        // 헤리(가선) — 네 변을 다 둘러야 "돗자리 여러 장"으로 보인다.
+        // 위아래만 그리면 텍스처가 늘어나면서 그냥 줄무늬 바닥이 된다.
+        ctx.fillStyle = "rgba(60,70,50,0.5)";
+        ctx.fillRect(x, y, size / 2, 4);
+        ctx.fillRect(x, y + h - 4, size / 2, 4);
+        ctx.fillRect(x, y, 4, h);
+        ctx.fillRect(x + size / 2 - 4, y, 4, h);
+      }
+    }
+    ctx.strokeStyle = "rgba(130,115,70,0.14)";
+    ctx.lineWidth = 1;
+    for (let x = 0; x < size; x += 5) {
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, size);
+      ctx.stroke();
+    }
+  } else if (pattern === "tile") {
     const cells = 6;
     for (let ry = 0; ry < cells; ry++) {
       for (let rx = 0; rx < cells; rx++) {
@@ -526,7 +629,7 @@ const HAIR_STYLES = ["short", "bob", "long", "ponytail", "spiky", "bun"];
 function randomCustomerLook() {
   const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
   return {
-    shirt: pick(CUSTOMER_SHIRT_COLORS),
+    shirt: pick(customerShirts),
     pants: pick(PANTS_COLORS),
     hair: pick(HAIR_COLORS),
     style: pick(HAIR_STYLES),
@@ -577,6 +680,7 @@ function makePersonMesh(opts = {}) {
   const torso = meshWO(torsoGeo, shirt, 1.07);
   torso.position.y = torsoY;
   group.add(torso);
+  group.userData.torso = torso; // 테마가 바뀌면 이 참조로 손님 옷 색만 바로 갈아입힌다
 
   if (vest !== null) {
     const v = plain(personGeo.vest, vest);
@@ -1006,11 +1110,13 @@ function buildHoldemTable({ index, dealer, feltColor, seatCount }) {
 
   if (dealer) {
     const look = DEALER_RARITY_LOOK[dealer.rarity] || DEALER_RARITY_LOOK.common;
+    // 정장은 테마 톤으로 물들이되 보타이·바이저(accent)는 등급색 그대로 — 매장에서 등급을 한눈에 보게.
+    const suit = tint(look.suit, themeDef.dealerTint, themeDef.dealerMix);
     // 딜러 유니폼: 흰 셔츠 + 등급색 조끼 + 보타이 + 딜러 바이저
     const person = makePersonMesh({
       shirt: 0xfdfdfd,
-      pants: look.suit,
-      vest: look.suit,
+      pants: suit,
+      vest: suit,
       bowtie: look.accent,
       hat: "visor",
       hatColor: look.accent,
@@ -1117,12 +1223,28 @@ function rebuildStringLights() {
     const t = i / (count - 1);
     const x = (t - 0.5) * (roomW - 2);
     const sag = Math.sin(t * Math.PI) * 0.5;
-    const bulb = new THREE.Mesh(
-      new THREE.SphereGeometry(0.09, 8, 8),
-      new THREE.MeshBasicMaterial({ color: i % 2 === 0 ? PAL.lightWarm : PAL.lightPink })
-    );
-    bulb.position.set(x, 6.1 - sag, zBack + 0.1);
-    stringLightsGroup.add(bulb);
+    const color = i % 2 === 0 ? PAL.lightWarm : PAL.lightPink;
+    let lamp;
+    if (themeDef.lights === "lantern") {
+      // 제등 — 원통 몸통 + 위아래 어두운 테두리로 종이등처럼 보이게 한다
+      lamp = new THREE.Group();
+      const body = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.17, 0.17, 0.26, 10),
+        new THREE.MeshBasicMaterial({ color })
+      );
+      const cap = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.1, 0.1, 0.04, 10),
+        new THREE.MeshBasicMaterial({ color: 0x3a2a24 })
+      );
+      cap.position.y = 0.15;
+      const cap2 = cap.clone();
+      cap2.position.y = -0.15;
+      lamp.add(body, cap, cap2);
+    } else {
+      lamp = new THREE.Mesh(new THREE.SphereGeometry(0.09, 8, 8), new THREE.MeshBasicMaterial({ color }));
+    }
+    lamp.position.set(x, 6.1 - sag, zBack + 0.1);
+    stringLightsGroup.add(lamp);
   }
   scene.add(stringLightsGroup);
 }
@@ -1318,6 +1440,21 @@ function applyTheme(themeId) {
   const t = THEMES[themeId] || THEMES.classic;
   if (themeId === currentTheme) return;
   currentTheme = themeId;
+  themeDef = t;
+
+  // 기물 팔레트 교체. 항상 COLORS(기본값)부터 다시 깔아야 이전 테마 색이 남지 않는다.
+  Object.assign(PAL, COLORS, t.props || {});
+
+  // 손님 옷. 이미 매장에 있는 손님을 그대로 두면 옛 테마 색이 섞여 보이므로 그 자리에서 갈아입힌다.
+  customerShirts = t.customers || THEMES.classic.customers;
+  for (const c of customers) {
+    if (!c.mesh) continue;
+    const shirt = customerShirts[Math.floor(Math.random() * customerShirts.length)];
+    for (const part of c.mesh.children) {
+      if (part.userData && part.userData.torso) part.userData.torso.material.color.setHex(shirt);
+    }
+  }
+
   floorMat.color.set(t.floor);
   if (floorMat.userData.pattern !== t.floorPattern) {
     const repeat = floorMat.map.repeat.clone();
@@ -1332,6 +1469,7 @@ function applyTheme(themeId) {
   wainscotMat.color.set(t.wainscot || PAL.wainscot);
   if (scene.background && scene.background.dispose) scene.background.dispose();
   scene.background = makeSkyTexture(t.sky[0], t.sky[1]);
+  if (stringLightsGroup) rebuildStringLights(); // 조명 줄은 테마마다 모양(전구/제등)과 색이 다르다
 }
 
 function applyFrustum(aspect) {

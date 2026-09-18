@@ -341,6 +341,7 @@ const GAME_DATA = {
     { id: "princess", name: "공주풍", emoji: "👑", desc: "파스텔 핑크의 우아한 공주풍 매장", cost: 4000 },
     { id: "european", name: "유럽풍", emoji: "🏛️", desc: "고풍스러운 유럽 클래식 인테리어", cost: 9000 },
     { id: "neon", name: "네온 라운지", emoji: "🌃", desc: "화려한 밤의 네온 라운지 스타일", cost: 18000 },
+    { id: "japanese", name: "일본풍", emoji: "🏮", desc: "다다미와 제등이 있는 차분한 일본풍 매장", cost: 30000 },
   ],
   themeUpgrade: {
     baseCost: 1200,

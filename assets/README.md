@@ -43,7 +43,7 @@ CSS는 `css/assets.css` — 크기 프리셋(`.ga-sm`/`.ga-md`/…), 재화 표�
 | --- | --- | --- | --- |
 | `trophy/{local,city,national,asia,world}-{192,96}.png` | 5단계 | 6~28KB | 대회 탭 — `data.js`의 `tournament.tiers`와 id가 1:1 |
 | `prestige/{pub,club,premium,empire}-{256,128}.png` | 4단계 | 8~70KB | 리뉴얼 단계 외관 |
-| `theme/{classic,princess,european,neon}.png` | 4종 | ~100KB | 인테리어 탭 — `data.js`의 `themes`와 id가 1:1 |
+| `theme/{classic,princess,european,neon,japanese}.png` | 5종 | ~100KB | 인테리어 탭 — `data.js`의 `themes`와 id가 1:1 |
 | `brand/app-icon-{512,192,180,32}.png` | — | 2~315KB | 파비콘 / PWA / iOS 홈화면 |
 | `brand/loading-pub-{720,360}.png` | — | 153·520KB | 로딩 화면 디오라마 |
 
@@ -75,8 +75,9 @@ node tools/asset-pack.mjs --only trophy # 한 묶음만
 
 새 원본을 추가하려면 `tools/asset-pack.mjs` 아래쪽 `JOBS` 배열에 한 줄 넣으면 된다.
 
-## 4. 아직 게임에 연결되진 않았다
+## 4. 게임 연결 상태
 
-지금은 에셋과 프리뷰 페이지까지다. `index.html`·`game.js`의 이모지를 실제로 갈아끼우는
-작업은 별도다 — `game.js`가 3,300줄이고 0.5초마다 목록을 다시 그리는 구조라,
-탭 하나씩 바꾸면서 확인하는 편이 안전하다.
+HUD 지갑·하단 네비·사이드 레일·업그레이드 목록·대회 트로피·인테리어 테마 썸네일·파비콘은
+모두 연결돼 있다. 3D 매장(딜러·테이블·손님·기물)은 이미지 에셋이 아니라 `js/scene3d.js`가
+Three.js로 만드는 지오메트리이고, 테마별 색은 `THEMES`의 `props`/`customers`/`dealerTint`가
+`PAL` 팔레트를 덮어쓰는 방식으로 입힌다 — 자세한 건 그 파일의 THEMES 주석을 볼 것.
