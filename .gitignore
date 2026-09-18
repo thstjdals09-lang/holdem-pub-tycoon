@@ -1,3 +1,6 @@
 .DS_Store
 Thumbs.db
 node_modules/
+
+# 에셋 원본(2048px) — assets/img/의 가공본만 배포에 쓴다. tools/asset-pack.mjs로 다시 만들 수 있다.
+assets/raw/

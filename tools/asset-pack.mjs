@@ -204,28 +204,50 @@ function encodePng({ width, height, data }) {
  * 전체 픽셀을 밝기로 자르면 그림 안쪽의 크림색 면까지 뚫려버리기 때문에,
  * 바깥과 연결된 흰 영역만 따라가는 방식이 필요하다.
  */
-function keyOutBackground(img, { tolerance = 30, feather = 2 } = {}) {
+function keyOutBackground(img, { tolerance = 30, feather = 2, mode = "white", brightMin = 172 } = {}) {
   const { width: w, height: h, data } = img;
+  // mode "white": 거의 순백만 배경으로 본다.
+  // mode "pale": 밝고 채도가 낮으면 배경으로 본다. 생성 이미지의 배경은 순백이 아니라
+  //   옅은 회색·베이지 비네트가 깔려 있는 경우가 많아서, 순백 기준으로는 테두리 근처에서 멈춰
+  //   사각형 배경이 그대로 남는다. 그림 안쪽의 밝은 크림색 면도 조건 자체는 만족하지만
+  //   flood fill이 진한 아웃라인에서 막히므로 바깥과 연결된 부분만 지워진다.
   const isPale = (i) => {
     const r = data[i], g = data[i + 1], b = data[i + 2];
+    if (mode === "pale") {
+      const mx = Math.max(r, g, b), mn = Math.min(r, g, b);
+      return mx >= brightMin && mx - mn <= tolerance;
+    }
     return 255 - r <= tolerance && 255 - g <= tolerance && 255 - b <= tolerance;
   };
+  // mode "adaptive": 이미 배경으로 판정된 이웃과 색이 비슷하면 배경으로 본다.
+  // 흰색이 아니라 부드러운 그라데이션 배경을 벗길 때 쓴다 — 천천히 변하는 면은 계속 따라가고,
+  // 그림의 진한 아웃라인에서 멈춘다.
+  const near = (i, j) =>
+    Math.abs(data[i] - data[j]) <= tolerance &&
+    Math.abs(data[i + 1] - data[j + 1]) <= tolerance &&
+    Math.abs(data[i + 2] - data[j + 2]) <= tolerance;
 
   const bg = new Uint8Array(w * h);
   const stack = [];
-  for (let x = 0; x < w; x++) { stack.push(x, (h - 1) * w + x); }
-  for (let y = 0; y < h; y++) { stack.push(y * w, y * w + w - 1); }
+  const seed = (p) => {
+    if (mode === "adaptive" || isPale(p * 4)) stack.push(p, -1);
+  };
+  for (let x = 0; x < w; x++) { seed(x); seed((h - 1) * w + x); }
+  for (let y = 0; y < h; y++) { seed(y * w); seed(y * w + w - 1); }
 
   while (stack.length) {
+    const from = stack.pop();
     const p = stack.pop();
     if (bg[p]) continue;
-    if (!isPale(p * 4)) continue;
+    if (mode === "adaptive") {
+      if (from >= 0 && !near(p * 4, from * 4)) continue;
+    } else if (!isPale(p * 4)) continue;
     bg[p] = 1;
     const x = p % w, y = (p / w) | 0;
-    if (x > 0) stack.push(p - 1);
-    if (x < w - 1) stack.push(p + 1);
-    if (y > 0) stack.push(p - w);
-    if (y < h - 1) stack.push(p + w);
+    if (x > 0) stack.push(p - 1, p);
+    if (x < w - 1) stack.push(p + 1, p);
+    if (y > 0) stack.push(p - w, p);
+    if (y < h - 1) stack.push(p + w, p);
   }
 
   // 경계를 부드럽게: 배경에 닿은 픽셀은 거리에 따라 알파를 깎는다.
@@ -345,21 +367,23 @@ const save = (img, rel) => {
 // 원본 파일명 → 출력 정의
 const JOBS = [
   // 프레스티지 건물: 배경 투명 + 정사각 트림 + 두 사이즈
-  { group: "prestige", raw: "prestige-1-pub.png",     out: "prestige/pub",     key: true, sizes: [256, 128] },
-  { group: "prestige", raw: "prestige-2-club.png",    out: "prestige/club",    key: true, sizes: [256, 128] },
-  { group: "prestige", raw: "prestige-3-premium.png", out: "prestige/premium", key: true, sizes: [256, 128] },
-  { group: "prestige", raw: "prestige-4-empire.png",  out: "prestige/empire",  key: true, sizes: [256, 128] },
+  { group: "prestige", raw: "prestige-1-pub.png",     out: "prestige/pub",     key: true, mode: "pale", tolerance: 42, sizes: [256, 128] },
+  { group: "prestige", raw: "prestige-2-club.png",    out: "prestige/club",    key: true, mode: "pale", tolerance: 42, sizes: [256, 128] },
+  { group: "prestige", raw: "prestige-3-premium.png", out: "prestige/premium", key: true, mode: "pale", tolerance: 42, sizes: [256, 128] },
+  { group: "prestige", raw: "prestige-4-empire.png",  out: "prestige/empire",  key: true, mode: "pale", tolerance: 42, sizes: [256, 128] },
 
   // 대회 트로피: 배경 투명 + 정사각 트림
-  { group: "trophy", raw: "trophy-1-local.png",    out: "trophy/local",    key: true, sizes: [192, 96] },
-  { group: "trophy", raw: "trophy-2-city.png",     out: "trophy/city",     key: true, sizes: [192, 96] },
-  { group: "trophy", raw: "trophy-3-national.png", out: "trophy/national", key: true, sizes: [192, 96] },
-  { group: "trophy", raw: "trophy-4-asia.png",     out: "trophy/asia",     key: true, sizes: [192, 96] },
-  { group: "trophy", raw: "trophy-5-world.png",    out: "trophy/world",    key: true, sizes: [192, 96] },
+  { group: "trophy", raw: "trophy-1-local.png",    out: "trophy/local",    key: true, mode: "pale", tolerance: 42, sizes: [192, 96] },
+  { group: "trophy", raw: "trophy-2-city.png",     out: "trophy/city",     key: true, mode: "pale", tolerance: 42, sizes: [192, 96] },
+  { group: "trophy", raw: "trophy-3-national.png", out: "trophy/national", key: true, mode: "pale", tolerance: 42, sizes: [192, 96] },
+  { group: "trophy", raw: "trophy-4-asia.png",     out: "trophy/asia",     key: true, mode: "pale", tolerance: 42, sizes: [192, 96] },
+  { group: "trophy", raw: "trophy-5-world.png",    out: "trophy/world",    key: true, mode: "pale", tolerance: 42, sizes: [192, 96] },
 
-  // 브랜드: 배경을 살려야 하므로 키잉 없음
-  { group: "brand", raw: "app-icon.png",        out: "brand/app-icon",  key: false, sizes: [512, 192, 180, 32] },
-  { group: "brand", raw: "loading-key-art.png", out: "brand/loading",   key: false, sizes: [1080] },
+  // 브랜드
+  { group: "brand", raw: "app-icon.png", out: "brand/app-icon", key: false, crop: [0.1, 0.1, 0.8, 0.8], sizes: [512, 192, 180, 32] },
+  // 로딩 키아트는 핑크 그라데이션 배경을 벗겨 디오라마만 남긴다 —
+  // 배경은 CSS 그라데이션이 대신하면 어떤 화면 비율에도 맞고, 2MB → 200KB대로 줄어든다.
+  { group: "brand", raw: "loading-key-art.png", out: "brand/loading-pub", key: true, mode: "adaptive", tolerance: 10, square: false, sizes: [720, 360] },
 
   // 인테리어 테마 썸네일
   { group: "theme", raw: "theme-classic.png",  out: "theme/classic",  key: false, sizes: [256] },
@@ -386,9 +410,11 @@ for (const job of JOBS) {
   console.log(`${job.raw}`);
   try {
     let img = decodePng(readFileSync(src));
+    // job.crop = [x, y, w, h] (0~1 비율). 생성 모델이 자꾸 넣는 바깥 테두리를 확실하게 잘라낸다.
+    if (job.crop) img = crop(img, ...job.crop);
     if (job.key) {
-      img = keyOutBackground(img, { tolerance: job.tolerance ?? 30 });
-      img = trim(img, { marginRatio: 0.05, square: true });
+      img = keyOutBackground(img, { tolerance: job.tolerance ?? 30, mode: job.mode ?? "white", brightMin: job.brightMin });
+      img = trim(img, { marginRatio: 0.05, square: job.square !== false });
     }
     for (const size of job.sizes) {
       const ratio = img.height / img.width;

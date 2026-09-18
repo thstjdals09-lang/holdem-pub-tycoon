@@ -1,0 +1,116 @@
+/* ============================================================
+   에셋 유틸리티 — js/assets.js가 만드는 SVG와 assets/img/의 PNG를 화면에 놓는 규칙.
+   style.css의 :root 변수와 같은 팔레트를 쓴다.
+   ============================================================ */
+
+/* 인라인 SVG 아이콘 기본값 — 글자 옆에 놓아도 베이스라인이 흔들리지 않게 */
+.ga {
+  display: inline-block;
+  vertical-align: -0.16em;
+  flex: 0 0 auto;
+  overflow: visible;
+}
+
+/* 이모지를 아이콘으로 바꿀 때 쓰는 크기 프리셋.
+   이모지는 글자라 font-size로 커졌지만 SVG는 아니라서, 자주 쓰는 치수를 미리 잡아둔다. */
+.ga-xs { width: 14px; height: 14px; }
+.ga-sm { width: 18px; height: 18px; }
+.ga-md { width: 24px; height: 24px; }
+.ga-lg { width: 32px; height: 32px; }
+.ga-xl { width: 44px; height: 44px; }
+
+/* 재화 숫자 앞에 붙는 아이콘 — HUD 지갑, 버튼 가격표 */
+.ga-cur {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+.ga-cur .ga { vertical-align: 0; }
+
+/* 눌리는 아이콘(네비/사이드 레일)은 살짝 들어가는 느낌 */
+.ga-tap { transition: transform 0.08s ease; }
+.ga-tap:active { transform: translateY(1px) scale(0.96); }
+
+/* ---------- PNG 에셋 ---------- */
+.ga-img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  image-rendering: auto;
+}
+
+/* 트로피·건물처럼 투명 배경 PNG는 바닥 그림자를 CSS로 더해 3D 씬과 톤을 맞춘다 */
+.ga-drop {
+  filter: drop-shadow(0 3px 0 rgba(58, 42, 48, 0.1)) drop-shadow(0 6px 10px rgba(120, 70, 60, 0.18));
+}
+
+/* ---------- 등급 프레임 ---------- */
+.ga-frame { display: block; }
+
+/* 등급별 카드 뒤 광채 — 프레임 SVG 뒤에 깔아 쓴다 */
+.ga-aura {
+  position: absolute;
+  inset: -12%;
+  border-radius: 50%;
+  filter: blur(14px);
+  opacity: 0.55;
+  pointer-events: none;
+  z-index: -1;
+}
+.ga-aura-common    { background: #b9b2ae; opacity: 0.25; }
+.ga-aura-uncommon  { background: #7bc67e; }
+.ga-aura-rare      { background: #4fa3ff; }
+.ga-aura-epic      { background: #c86bff; }
+.ga-aura-legendary { background: #ffc85c; }
+.ga-aura-mythic    { background: #ff5fd0; }
+
+/* SSR 이상은 천천히 도는 광채 */
+@keyframes ga-spin { to { transform: rotate(360deg); } }
+.ga-frame-legendary .ga-rays,
+.ga-frame-mythic .ga-rays { animation: ga-spin 18s linear infinite; transform-origin: 100px 120px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .ga-frame-legendary .ga-rays,
+  .ga-frame-mythic .ga-rays { animation: none; }
+}
+
+/* ---------- 로딩 화면 ----------
+   배경 그라데이션은 CSS가 그리고 PNG는 디오라마만 얹는다.
+   덕분에 어떤 화면 비율에서도 잘리지 않고, 이미지 용량도 2MB → 150KB대로 줄었다. */
+.ga-loading {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 22px;
+  background: radial-gradient(120% 80% at 50% 18%, #ffe3ec 0%, #ffd4e0 42%, #fff0e4 100%);
+  z-index: 9000;
+}
+.ga-loading__art {
+  width: min(76vw, 360px);
+  filter: drop-shadow(0 10px 24px rgba(176, 90, 120, 0.28));
+}
+.ga-loading__logo { width: min(80vw, 340px); }
+.ga-loading__bar {
+  width: min(70vw, 300px);
+  height: 14px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.65);
+  box-shadow: inset 0 2px 0 rgba(209, 60, 104, 0.12);
+  overflow: hidden;
+}
+.ga-loading__fill {
+  height: 100%;
+  width: 0%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #ff8fab, #ffc85c);
+  transition: width 0.3s ease;
+}
+.ga-loading__tip {
+  font-family: "Gowun Dodum", system-ui, sans-serif;
+  font-size: 13px;
+  color: #a5798a;
+}

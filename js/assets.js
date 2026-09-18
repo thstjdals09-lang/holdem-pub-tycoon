@@ -92,18 +92,19 @@ const GameAssets = (() => {
     // ---------- 재화 ----------
     // BB 칩: 골드 포커칩 + 엣지 노치 + 스페이드 각인
     bb: `
-      <circle cx="24" cy="25" r="18" ${P(C.goldDD, 0.35)}/>
-      <circle cx="24" cy="23" r="18" ${F(C.gold)}/>
-      ${[0, 60, 120, 180, 240, 300]
+      <circle cx="24" cy="26" r="18" ${P(C.goldDD, 0.32)}/>
+      <circle cx="24" cy="24" r="18" ${F(C.goldD)}/>
+      ${[0, 90, 180, 270]
         .map(
           (a) =>
-            `<rect x="22" y="3.6" width="4" height="7" rx="1.6" ${F(C.pinkD)} transform="rotate(${a} 24 23)"/>`
+            `<rect x="20.8" y="5.4" width="6.4" height="6" rx="1.6" ${P(C.cream)} transform="rotate(${a} 24 24)"/>`
         )
         .join("")}
-      <circle cx="24" cy="23" r="11.5" ${F(C.goldL)}/>
-      <path d="M24 16.5c3.4 3.2 5.6 4.9 5.6 7.4a3 3 0 0 1-5.6 1.5 3 3 0 0 1-5.6-1.5c0-2.5 2.2-4.2 5.6-7.4Z" ${F(C.pinkD)}/>
-      <path d="M22.4 28.8h3.2l-.7 2.6h-1.8Z" ${P(C.pinkDD)}/>
-      <ellipse cx="19.5" cy="17.5" rx="4.6" ry="2.6" ${glow(C.white, 0.5)} transform="rotate(-28 19.5 17.5)"/>`,
+      <circle cx="24" cy="24" r="12.2" ${F(C.gold)}/>
+      <circle cx="24" cy="24" r="12.2" fill="none" stroke="${C.goldL}" stroke-width="1.8"/>
+      <path d="M24 17.6c3.6 3.5 5.9 5.2 5.9 7.8a3.1 3.1 0 0 1-5.9 1.5 3.1 3.1 0 0 1-5.9-1.5c0-2.6 2.3-4.3 5.9-7.8Z" ${F(C.pinkD)}/>
+      <path d="M22.3 29.4h3.4l-.8 2.8h-1.8Z" ${P(C.pinkDD)}/>
+      <path d="M12.5 17.5A14 14 0 0 1 22 11" stroke="${C.white}" stroke-width="2.8" stroke-linecap="round" fill="none" opacity="0.55"/>`,
 
     // 다이아: 시안 보석, 위 크라운 면 + 아래 파빌리온
     diamond: `
@@ -140,12 +141,14 @@ const GameAssets = (() => {
     build: `
       <rect x="4" y="4" width="40" height="40" rx="12" ${F(C.pink)}/>
       <rect x="7.5" y="7.5" width="33" height="16" rx="8" ${glow(C.white, 0.22)}/>
-      <path d="M17 32 30 19" stroke="${C.ink}" stroke-width="6.4" stroke-linecap="round" fill="none"/>
-      <path d="M17 32 30 19" stroke="${C.goldL}" stroke-width="3.4" stroke-linecap="round" fill="none"/>
-      <path d="M28.5 12.5a7 7 0 0 1 9.6 9.1l-4.3-4.3-2.6 2.6-4.3-4.3Z" ${F(C.cream)}/>
-      <path d="M14 29.5 11 33a3.2 3.2 0 0 0 4.5 4.5l3.5-3" ${F(C.goldD)}/>
-      <path d="M31 30.5 21 20.5l4-4 10 10Z" ${F(C.cream)}/>
-      <path d="M33 25.5 37.5 30a3.6 3.6 0 0 1-5 5L28 30.5Z" ${F(C.goldD)}/>`,
+      <g transform="rotate(38 24 24)">
+        <rect x="20.5" y="19" width="7" height="21" rx="3.4" ${F(C.goldD)}/>
+        <path d="M17 8.5a7.4 7.4 0 1 0 14 0l-4.4 4.6h-5.2Z" ${F(C.cream)}/>
+        <path d="M17 8.5 21.4 13v9h-4.2a7.4 7.4 0 0 1-.2-13.5Z" ${P(C.grayL, 0.65)}/>
+        <path d="M17 8.5a7.4 7.4 0 1 0 14 0l-4.4 4.6h-5.2Z" ${OUT}/>
+        <path d="M20.5 19h7" ${OUT} stroke-width="2.2"/>
+      </g>
+      <path d="M38 12.5l1.6 3.6 3.6 1.6-3.6 1.6L38 23l-1.6-3.7-3.6-1.6 3.6-1.6Z" ${P(C.goldL)}/>`,
 
     // 운영진(CREW): 세 명의 치비 실루엣
     crew: `
@@ -173,24 +176,27 @@ const GameAssets = (() => {
     shop: `
       <rect x="4" y="4" width="40" height="40" rx="12" ${F(C.pink)}/>
       <rect x="7.5" y="7.5" width="33" height="16" rx="8" ${glow(C.white, 0.22)}/>
-      <path d="M11 19h26l-2.4 19H13.4Z" ${F(C.cream)}/>
-      <path d="M18 19v-2.5a6 6 0 0 1 12 0V19" ${OUT}/>
-      <path d="M18.5 24h11l4 5.5-9.5 9.5-9.5-9.5Z" ${F(C.cyan)}/>
-      <path d="M18.5 24 15.5 29.5h17L29.5 24Z" ${P(C.cyanL, 0.95)}/>
-      <path d="M18.5 24h11l4 5.5-9.5 9.5-9.5-9.5Z" ${OUT} stroke-width="2.2"/>
-      <path d="M15.5 29.5h17" ${OUT} stroke-width="2"/>`,
+      <path d="M18 20v-4a6 6 0 0 1 12 0v4" ${OUT} stroke-width="3"/>
+      <path d="M11.5 19.5h25a1.6 1.6 0 0 1 1.6 1.8l-2.2 17a2 2 0 0 1-2 1.7H14.1a2 2 0 0 1-2-1.7l-2.2-17a1.6 1.6 0 0 1 1.6-1.8Z" ${F(C.cream)}/>
+      <path d="M11.5 19.5h7l-1 20.5h-3.4a2 2 0 0 1-2-1.7l-2.2-17a1.6 1.6 0 0 1 1.6-1.8Z" ${P(C.cream2, 0.9)}/>
+      <path d="M11.5 19.5h25a1.6 1.6 0 0 1 1.6 1.8l-2.2 17a2 2 0 0 1-2 1.7H14.1a2 2 0 0 1-2-1.7l-2.2-17a1.6 1.6 0 0 1 1.6-1.8Z" ${OUT}/>
+      <path d="M20.5 25.5h7l2.8 3.8L24 36.6l-6.3-7.3Z" ${F(C.cyan)}/>
+      <path d="M20.5 25.5 17.7 29.3h12.6L27.5 25.5Z" ${P(C.cyanL, 0.95)}/>
+      <path d="M20.5 25.5h7l2.8 3.8L24 36.6l-6.3-7.3Z" ${OUT} stroke-width="2"/>`,
 
     // ---------- 업그레이드 세부 탭 ----------
     // 테이블: 위에서 본 오벌 홀덤 테이블 + 카드 2장
     table: `
       <rect x="4" y="15" width="40" height="22" rx="11" ${F(C.woodD)}/>
       <rect x="4" y="12" width="40" height="22" rx="11" ${F(C.wood)}/>
-      <rect x="7.5" y="15.5" width="33" height="15" rx="7.5" ${F(C.felt)}/>
-      <rect x="10.5" y="18.5" width="27" height="9" rx="4.5" ${P(C.greenL, 0.22)}/>
-      <g transform="rotate(-14 20 24)"><rect x="16" y="19" width="7.5" height="10.5" rx="1.8" ${F(C.cream)}/></g>
-      <g transform="rotate(12 27 24)"><rect x="24" y="19" width="7.5" height="10.5" rx="1.8" ${F(C.cream)}/></g>
-      <circle cx="12.5" cy="24" r="2.6" ${F(C.pinkD)}/>
-      <circle cx="35.5" cy="24" r="2.6" ${F(C.gold)}/>`,
+      <rect x="7.5" y="15.5" width="33" height="15" rx="7.5" ${F(C.green)}/>
+      <rect x="10.5" y="18.5" width="27" height="9" rx="4.5" fill="none" stroke="${C.greenL}" stroke-width="1.6" opacity="0.8"/>
+      <g transform="rotate(-13 19 23)"><rect x="15.5" y="17.5" width="8" height="11.5" rx="2" ${F(C.cream)} stroke-width="2"/>
+        <path d="M19.5 20.4c1.7 1.6 2.7 2.4 2.7 3.5a1.4 1.4 0 0 1-2.7.7 1.4 1.4 0 0 1-2.7-.7c0-1.1 1-1.9 2.7-3.5Z" ${P(C.ink)}/></g>
+      <g transform="rotate(13 28 23)"><rect x="24.5" y="17.5" width="8" height="11.5" rx="2" ${F(C.cream)} stroke-width="2"/>
+        <path d="M28.5 20.4c1.7 1.6 2.7 2.4 2.7 3.5a1.4 1.4 0 0 1-2.7.7 1.4 1.4 0 0 1-2.7-.7c0-1.1 1-1.9 2.7-3.5Z" ${P(C.pinkD)}/></g>
+      <circle cx="12.5" cy="23" r="2.6" ${F(C.pinkD)}/>
+      <circle cx="35.5" cy="23" r="2.6" ${F(C.gold)}/>`,
 
     // 시설: 바 카운터 + 술병 선반
     fixture: `
@@ -250,24 +256,28 @@ const GameAssets = (() => {
       <path d="M19 27.5v9M15 30l8 4M23 30l-8 4" stroke="${C.cyanD}" stroke-width="2.2" stroke-linecap="round" fill="none"/>`,
 
     // ---------- 직원 개별 ----------
+    // 칵테일 셰이커 — 위가 넓고 아래로 좁아지는 몸통 + 뚜껑, 옆에 튀는 물방울
     bartender: `
-      <path d="M17 6h14l-1 5H18Z" ${F(C.silverD)}/>
-      <path d="M18 11h12l-1.6 22a4.4 4.4 0 0 1-8.8 0Z" ${F(C.silver)}/>
-      <path d="M19.2 11h5l-1.4 25a4.4 4.4 0 0 1-3-3Z" ${glow(C.white, 0.55)}/>
-      <path d="M18 11h12l-1.6 22a4.4 4.4 0 0 1-8.8 0Z" ${OUT}/>
-      <path d="M33 16c4 1.4 7 5.2 7 9.6" stroke="${C.pinkD}" stroke-width="2.6" stroke-linecap="round" fill="none"/>
-      <circle cx="39" cy="12" r="3.2" ${F(C.gold)}/>
-      <circle cx="10" cy="30" r="2.6" ${F(C.pink)}/>`,
+      <path d="M16.5 4h15a2 2 0 0 1 2 2.4l-.7 3.6h-17.6l-.7-3.6A2 2 0 0 1 16.5 4Z" ${F(C.silverD)}/>
+      <path d="M13.6 12.5a2.4 2.4 0 0 1 2.4-2.5h16a2.4 2.4 0 0 1 2.4 2.5l-2.8 27a4 4 0 0 1-4 3.5h-7.2a4 4 0 0 1-4-3.5Z" ${F(C.silver)}/>
+      <path d="M17.6 10h4.4l-2.6 33a4 4 0 0 1-2.4-3.5Z" ${glow(C.white, 0.7)}/>
+      <path d="M13.6 12.5a2.4 2.4 0 0 1 2.4-2.5h16a2.4 2.4 0 0 1 2.4 2.5l-2.8 27a4 4 0 0 1-4 3.5h-7.2a4 4 0 0 1-4-3.5Z" ${OUT}/>
+      <path d="M14.2 18h19.6" ${OUT} stroke-width="2.2"/>
+      <circle cx="40.5" cy="13" r="3.4" ${F(C.gold)}/>
+      <circle cx="44" cy="22" r="2.2" ${F(C.pink)}/>
+      <circle cx="7.5" cy="17" r="2.6" ${F(C.cyan)}/>`,
 
+    // 클로슈(뚜껑) 덮은 접시를 손으로 받쳐 든 모습
     server: `
-      <path d="M24 8v3" ${OUT}/>
-      <ellipse cx="24" cy="22" rx="19" ry="5.6" ${F(C.silverD)}/>
-      <ellipse cx="24" cy="20.5" rx="19" ry="5.6" ${F(C.grayL)}/>
-      <path d="M12 19.5a12 9 0 0 1 24 0Z" ${F(C.cream)}/>
-      <circle cx="24" cy="12" r="2.4" ${F(C.pinkD)}/>
-      <path d="M16 17a9 7 0 0 1 6-4.4" stroke="${C.white}" stroke-width="2.2" stroke-linecap="round" fill="none"/>
-      <path d="M24 26v8" ${OUT}/>
-      <path d="M14 42c0-5.2 4.4-8 10-8s10 2.8 10 8Z" ${F(C.pink)}/>`,
+      <path d="M24 5v3.5" ${OUT} stroke-width="3"/>
+      <circle cx="24" cy="4" r="2.6" ${F(C.pinkD)}/>
+      <path d="M9 24a15 12 0 0 1 30 0Z" ${F(C.grayL)}/>
+      <path d="M14 22a10 9 0 0 1 8-7.6" stroke="${C.white}" stroke-width="3" stroke-linecap="round" fill="none"/>
+      <path d="M9 24a15 12 0 0 1 30 0Z" ${OUT}/>
+      <rect x="4" y="24" width="40" height="5" rx="2.5" ${F(C.silver)}/>
+      <path d="M24 29v5" ${OUT} stroke-width="3"/>
+      <path d="M12 44c0-6 5.4-10 12-10s12 4 12 10Z" ${F(C.pink)}/>
+      <path d="M17 41c1-3.4 3.6-5.4 7-5.8" stroke="${C.pinkL}" stroke-width="2.6" stroke-linecap="round" fill="none"/>`,
 
     marketer: `
       <path d="M8 19h7l17-10v30L15 29H8a3 3 0 0 1-3-3v-4a3 3 0 0 1 3-3Z" ${F(C.pink)}/>
@@ -343,12 +353,16 @@ const GameAssets = (() => {
       <path d="M20 16.5 38 12.5" ${OUT} stroke-width="2.6"/>
       <path d="M8 12l2.5 5 5 .7-3.6 3.5.9 5L8 23.8 3.5 26.2l.9-5L.8 17.7l5-.7Z" ${F(C.gold)} transform="translate(2 -4) scale(0.8)"/>`,
 
+    // 전구 + 톱니 — "두뇌"는 뇌 그림보다 아이디어/머리 굴리기 쪽이 작은 크기에서 훨씬 잘 읽힌다
     traitBrain: `
-      <path d="M24 9c-6 0-9 3.4-9 7.2-3 1-4.6 3.4-4.6 6 0 2.4 1.2 4.2 3 5.2-.4 3.6 2.4 6.6 6.4 6.6 1.6 0 3-.5 4.2-1.4Z" ${F(C.pinkL)}/>
-      <path d="M24 9c6 0 9 3.4 9 7.2 3 1 4.6 3.4 4.6 6 0 2.4-1.2 4.2-3 5.2.4 3.6-2.4 6.6-6.4 6.6-1.6 0-3-.5-4.2-1.4Z" ${F(C.pink)}/>
-      <path d="M24 9v25" ${OUT} stroke-width="2.2"/>
-      <path d="M24 9c-6 0-9 3.4-9 7.2-3 1-4.6 3.4-4.6 6 0 2.4 1.2 4.2 3 5.2-.4 3.6 2.4 6.6 6.4 6.6 1.6 0 3-.5 4.2-1.4 1.2.9 2.6 1.4 4.2 1.4 4 0 6.8-3 6.4-6.6 1.8-1 3-2.8 3-5.2 0-2.6-1.6-5-4.6-6C33 12.4 30 9 24 9Z" ${OUT}/>
-      <path d="M19 40h10l-1 4h-8Z" ${F(C.goldD)}/>`,
+      <path d="M24 4a13 13 0 0 1 8 23.2V32H16v-4.8A13 13 0 0 1 24 4Z" ${F(C.goldL)}/>
+      <path d="M19.5 22.5A8.5 8.5 0 0 1 21 9.5" stroke="${C.white}" stroke-width="3" stroke-linecap="round" fill="none"/>
+      <path d="M24 4a13 13 0 0 1 8 23.2V32H16v-4.8A13 13 0 0 1 24 4Z" ${OUT}/>
+      <rect x="16" y="32" width="16" height="4.6" rx="2.3" ${F(C.goldD)}/>
+      <rect x="18" y="37.4" width="12" height="4.4" rx="2.2" ${F(C.goldD)}/>
+      <path d="M21 43.5h6" ${OUT} stroke-width="3"/>
+      <path d="M24 12.5c2.6 2.4 4.2 3.6 4.2 5.4a2.2 2.2 0 0 1-4.2 1.1 2.2 2.2 0 0 1-4.2-1.1c0-1.8 1.6-3 4.2-5.4Z" ${P(C.pinkD, 0.85)}/>
+      <path d="M7 14l-3.4-1M9 6 6.6 3.4M41 14l3.4-1M39 6l2.4-2.6" ${OUT} stroke="${C.gold}" stroke-width="2.8"/>`,
 
     // ---------- 사이드 레일 ----------
     gift: `
@@ -594,9 +608,9 @@ const GameAssets = (() => {
       const parts = [];
       for (let i = 0; i < r.rays; i++) {
         const a = (360 / r.rays) * i;
-        parts.push(`<path d="M100 120 L92 -40 L108 -40 Z" fill="${C.white}" opacity="0.22" transform="rotate(${a} 100 120)"/>`);
+        parts.push(`<path d="M100 106 L90 -80 L110 -80 Z" fill="${r.b}" opacity="0.55" transform="rotate(${a} 100 106)"/>`);
       }
-      rays = `<g>${parts.join("")}</g>`;
+      rays = `<g class="ga-rays">${parts.join("")}</g>`;
     }
 
     const portrait = opts.portrait
@@ -604,7 +618,7 @@ const GameAssets = (() => {
       : `<g opacity="0.35" transform="translate(64 52) scale(1.5)">${ICONS.profile}</g>`;
 
     const crownTop = rarityId === "legendary" || rarityId === "mythic"
-      ? `<g transform="translate(74 -6) scale(0.44)">${ICONS.crown}</g>`
+      ? `<g transform="translate(126 4) scale(0.52)">${ICONS.crown}</g>`
       : "";
 
     const inner =
