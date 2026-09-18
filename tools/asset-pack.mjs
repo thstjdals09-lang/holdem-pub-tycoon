@@ -1,0 +1,407 @@
+// asset-pack — 생성된 원본 PNG를 게임에 바로 쓸 수 있는 에셋으로 가공한다.
+//
+//  1) 흰 배경을 테두리에서 flood fill로 지운다 (안쪽 크림색은 살린다)
+//  2) 남은 그림에 딱 맞게 잘라내고 여백을 일정하게 준다
+//  3) 지정한 크기로 축소(박스 필터)해서 저장한다
+//
+// 외부 패키지 없이 Node 내장 zlib만 쓴다 — npm install 없이 어디서든 돌아가게.
+// 다루는 PNG는 8비트 RGB/RGBA 비인터레이스(이미지 생성 모델 출력)만 가정한다.
+//
+//   node tools/asset-pack.mjs
+//   node tools/asset-pack.mjs --only prestige
+
+import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync } from "node:fs";
+import { inflateSync, deflateSync } from "node:zlib";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const RAW = join(ROOT, "assets", "raw");
+const OUT = join(ROOT, "assets", "img");
+
+// ============================================================
+//  PNG 디코드 / 인코드
+// ============================================================
+const SIG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+
+const CRC_TABLE = (() => {
+  const t = new Int32Array(256);
+  for (let n = 0; n < 256; n++) {
+    let c = n;
+    for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+    t[n] = c;
+  }
+  return t;
+})();
+
+function crc32(buf) {
+  let c = -1;
+  for (let i = 0; i < buf.length; i++) c = CRC_TABLE[(c ^ buf[i]) & 0xff] ^ (c >>> 8);
+  return (c ^ -1) >>> 0;
+}
+
+function decodePng(buf) {
+  if (!buf.subarray(0, 8).equals(SIG)) throw new Error("PNG 시그니처가 아님");
+  let pos = 8;
+  let ihdr = null;
+  const idat = [];
+  let palette = null;
+  let trns = null;
+
+  while (pos < buf.length) {
+    const len = buf.readUInt32BE(pos);
+    const type = buf.toString("ascii", pos + 4, pos + 8);
+    const data = buf.subarray(pos + 8, pos + 8 + len);
+    if (type === "IHDR") {
+      ihdr = {
+        width: data.readUInt32BE(0),
+        height: data.readUInt32BE(4),
+        bitDepth: data[8],
+        colorType: data[9],
+        interlace: data[12],
+      };
+    } else if (type === "PLTE") palette = Buffer.from(data);
+    else if (type === "tRNS") trns = Buffer.from(data);
+    else if (type === "IDAT") idat.push(Buffer.from(data));
+    else if (type === "IEND") break;
+    pos += 12 + len;
+  }
+  if (!ihdr) throw new Error("IHDR 없음");
+  if (ihdr.interlace) throw new Error("인터레이스 PNG는 지원 안 함");
+  if (ihdr.bitDepth !== 8) throw new Error(`비트깊이 ${ihdr.bitDepth}는 지원 안 함`);
+
+  const CHANNELS = { 0: 1, 2: 3, 3: 1, 4: 2, 6: 4 };
+  const ch = CHANNELS[ihdr.colorType];
+  if (!ch) throw new Error(`컬러타입 ${ihdr.colorType}는 지원 안 함`);
+
+  const raw = inflateSync(Buffer.concat(idat));
+  const { width: w, height: h } = ihdr;
+  const stride = w * ch;
+  const lines = Buffer.alloc(h * stride);
+
+  // 스캔라인 필터 해제
+  let src = 0;
+  for (let y = 0; y < h; y++) {
+    const filter = raw[src++];
+    const row = src;
+    src += stride;
+    const cur = y * stride;
+    for (let x = 0; x < stride; x++) {
+      const a = x >= ch ? lines[cur + x - ch] : 0;
+      const b = y > 0 ? lines[cur - stride + x] : 0;
+      const c = x >= ch && y > 0 ? lines[cur - stride + x - ch] : 0;
+      const v = raw[row + x];
+      let out;
+      switch (filter) {
+        case 0: out = v; break;
+        case 1: out = v + a; break;
+        case 2: out = v + b; break;
+        case 3: out = v + ((a + b) >> 1); break;
+        case 4: {
+          const p = a + b - c;
+          const pa = Math.abs(p - a), pb = Math.abs(p - b), pc = Math.abs(p - c);
+          out = v + (pa <= pb && pa <= pc ? a : pb <= pc ? b : c);
+          break;
+        }
+        default: throw new Error(`알 수 없는 필터 ${filter}`);
+      }
+      lines[cur + x] = out & 0xff;
+    }
+  }
+
+  // 무엇이 오든 RGBA로 통일
+  const rgba = new Uint8ClampedArray(w * h * 4);
+  for (let i = 0, n = w * h; i < n; i++) {
+    const s = i * ch, d = i * 4;
+    if (ihdr.colorType === 6) {
+      rgba[d] = lines[s]; rgba[d + 1] = lines[s + 1]; rgba[d + 2] = lines[s + 2]; rgba[d + 3] = lines[s + 3];
+    } else if (ihdr.colorType === 2) {
+      rgba[d] = lines[s]; rgba[d + 1] = lines[s + 1]; rgba[d + 2] = lines[s + 2]; rgba[d + 3] = 255;
+    } else if (ihdr.colorType === 0) {
+      rgba[d] = rgba[d + 1] = rgba[d + 2] = lines[s]; rgba[d + 3] = 255;
+    } else if (ihdr.colorType === 4) {
+      rgba[d] = rgba[d + 1] = rgba[d + 2] = lines[s]; rgba[d + 3] = lines[s + 1];
+    } else if (ihdr.colorType === 3) {
+      const p = lines[s] * 3;
+      rgba[d] = palette[p]; rgba[d + 1] = palette[p + 1]; rgba[d + 2] = palette[p + 2];
+      rgba[d + 3] = trns && lines[s] < trns.length ? trns[lines[s]] : 255;
+    }
+  }
+  return { width: w, height: h, data: rgba };
+}
+
+function chunk(type, data) {
+  const len = Buffer.alloc(4);
+  len.writeUInt32BE(data.length, 0);
+  const body = Buffer.concat([Buffer.from(type, "ascii"), data]);
+  const crc = Buffer.alloc(4);
+  crc.writeUInt32BE(crc32(body), 0);
+  return Buffer.concat([len, body, crc]);
+}
+
+/**
+ * 스캔라인마다 필터 5종을 다 만들어보고 절대값 합이 가장 작은 것을 고른다(PNG 표준 권장 휴리스틱).
+ * 필터 0 고정으로 두면 그라데이션 배경이 거의 안 줄어서 로딩 이미지가 3MB까지 부푼다.
+ */
+function filterScanlines(data, width, height) {
+  const stride = width * 4;
+  const BPP = 4;
+  const out = Buffer.alloc(height * (stride + 1));
+  const cand = [Buffer.alloc(stride), Buffer.alloc(stride), Buffer.alloc(stride), Buffer.alloc(stride), Buffer.alloc(stride)];
+
+  for (let y = 0; y < height; y++) {
+    const cur = y * stride;
+    const prev = cur - stride;
+    for (let x = 0; x < stride; x++) {
+      const v = data[cur + x];
+      const a = x >= BPP ? data[cur + x - BPP] : 0;
+      const b = y > 0 ? data[prev + x] : 0;
+      const c = x >= BPP && y > 0 ? data[prev + x - BPP] : 0;
+      cand[0][x] = v;
+      cand[1][x] = (v - a) & 0xff;
+      cand[2][x] = (v - b) & 0xff;
+      cand[3][x] = (v - ((a + b) >> 1)) & 0xff;
+      const p = a + b - c;
+      const pa = Math.abs(p - a), pb = Math.abs(p - b), pc = Math.abs(p - c);
+      cand[4][x] = (v - (pa <= pb && pa <= pc ? a : pb <= pc ? b : c)) & 0xff;
+    }
+    let best = 0, bestScore = Infinity;
+    for (let f = 0; f < 5; f++) {
+      let s = 0;
+      for (let x = 0; x < stride; x++) {
+        const v = cand[f][x];
+        s += v < 128 ? v : 256 - v; // 부호 있는 값의 크기로 본다
+      }
+      if (s < bestScore) { bestScore = s; best = f; }
+    }
+    out[y * (stride + 1)] = best;
+    cand[best].copy(out, y * (stride + 1) + 1);
+  }
+  return out;
+}
+
+function encodePng({ width, height, data }) {
+  const raw = filterScanlines(data, width, height);
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(width, 0);
+  ihdr.writeUInt32BE(height, 4);
+  ihdr[8] = 8;   // bit depth
+  ihdr[9] = 6;   // RGBA
+  return Buffer.concat([
+    SIG,
+    chunk("IHDR", ihdr),
+    chunk("IDAT", deflateSync(raw, { level: 9 })),
+    chunk("IEND", Buffer.alloc(0)),
+  ]);
+}
+
+// ============================================================
+//  이미지 연산
+// ============================================================
+
+/**
+ * 테두리에서 시작하는 flood fill로 "바깥 흰 배경"만 지운다.
+ * 전체 픽셀을 밝기로 자르면 그림 안쪽의 크림색 면까지 뚫려버리기 때문에,
+ * 바깥과 연결된 흰 영역만 따라가는 방식이 필요하다.
+ */
+function keyOutBackground(img, { tolerance = 30, feather = 2 } = {}) {
+  const { width: w, height: h, data } = img;
+  const isPale = (i) => {
+    const r = data[i], g = data[i + 1], b = data[i + 2];
+    return 255 - r <= tolerance && 255 - g <= tolerance && 255 - b <= tolerance;
+  };
+
+  const bg = new Uint8Array(w * h);
+  const stack = [];
+  for (let x = 0; x < w; x++) { stack.push(x, (h - 1) * w + x); }
+  for (let y = 0; y < h; y++) { stack.push(y * w, y * w + w - 1); }
+
+  while (stack.length) {
+    const p = stack.pop();
+    if (bg[p]) continue;
+    if (!isPale(p * 4)) continue;
+    bg[p] = 1;
+    const x = p % w, y = (p / w) | 0;
+    if (x > 0) stack.push(p - 1);
+    if (x < w - 1) stack.push(p + 1);
+    if (y > 0) stack.push(p - w);
+    if (y < h - 1) stack.push(p + w);
+  }
+
+  // 경계를 부드럽게: 배경에 닿은 픽셀은 거리에 따라 알파를 깎는다.
+  const alpha = new Float32Array(w * h);
+  for (let i = 0; i < w * h; i++) alpha[i] = bg[i] ? 0 : 1;
+  for (let pass = 0; pass < feather; pass++) {
+    const next = Float32Array.from(alpha);
+    for (let y = 1; y < h - 1; y++) {
+      for (let x = 1; x < w - 1; x++) {
+        const i = y * w + x;
+        if (alpha[i] === 0) continue;
+        const min = Math.min(alpha[i - 1], alpha[i + 1], alpha[i - w], alpha[i + w]);
+        if (min < alpha[i]) next[i] = Math.min(alpha[i], min + 0.5);
+      }
+    }
+    alpha.set(next);
+  }
+
+  for (let i = 0; i < w * h; i++) data[i * 4 + 3] = Math.round(alpha[i] * 255);
+  return img;
+}
+
+/** 알파가 있는 영역에 딱 맞게 자르고, 짧은 변 기준 비율만큼 여백을 준다. */
+function trim(img, { marginRatio = 0.04, square = true } = {}) {
+  const { width: w, height: h, data } = img;
+  let x0 = w, y0 = h, x1 = -1, y1 = -1;
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      if (data[(y * w + x) * 4 + 3] > 12) {
+        if (x < x0) x0 = x;
+        if (x > x1) x1 = x;
+        if (y < y0) y0 = y;
+        if (y > y1) y1 = y;
+      }
+    }
+  }
+  if (x1 < 0) return img; // 전부 투명 — 원본 그대로
+
+  let cw = x1 - x0 + 1;
+  let chh = y1 - y0 + 1;
+  if (square) {
+    const side = Math.max(cw, chh);
+    x0 -= Math.floor((side - cw) / 2);
+    y0 -= Math.floor((side - chh) / 2);
+    cw = chh = side;
+  }
+  const m = Math.round(Math.max(cw, chh) * marginRatio);
+  x0 -= m; y0 -= m; cw += m * 2; chh += m * 2;
+
+  const out = new Uint8ClampedArray(cw * chh * 4);
+  for (let y = 0; y < chh; y++) {
+    const sy = y0 + y;
+    if (sy < 0 || sy >= h) continue;
+    for (let x = 0; x < cw; x++) {
+      const sx = x0 + x;
+      if (sx < 0 || sx >= w) continue;
+      const s = (sy * w + sx) * 4, d = (y * cw + x) * 4;
+      out[d] = data[s]; out[d + 1] = data[s + 1]; out[d + 2] = data[s + 2]; out[d + 3] = data[s + 3];
+    }
+  }
+  return { width: cw, height: chh, data: out };
+}
+
+/** 사각형으로 잘라내기 (비율 지정). x/y/w/h는 0~1 비율. */
+function crop(img, fx, fy, fw, fh) {
+  const x0 = Math.round(img.width * fx), y0 = Math.round(img.height * fy);
+  const cw = Math.round(img.width * fw), chh = Math.round(img.height * fh);
+  const out = new Uint8ClampedArray(cw * chh * 4);
+  for (let y = 0; y < chh; y++) {
+    for (let x = 0; x < cw; x++) {
+      const s = ((y0 + y) * img.width + (x0 + x)) * 4, d = (y * cw + x) * 4;
+      out[d] = img.data[s]; out[d + 1] = img.data[s + 1]; out[d + 2] = img.data[s + 2]; out[d + 3] = img.data[s + 3];
+    }
+  }
+  return { width: cw, height: chh, data: out };
+}
+
+/** 박스 필터 축소. 알파를 곱해 평균 내야 투명 가장자리에 검은 테두리가 안 생긴다. */
+function resize(img, nw, nh) {
+  const { width: w, height: h, data } = img;
+  const out = new Uint8ClampedArray(nw * nh * 4);
+  const sx = w / nw, sy = h / nh;
+  for (let y = 0; y < nh; y++) {
+    const y0 = Math.floor(y * sy), y1 = Math.max(y0 + 1, Math.floor((y + 1) * sy));
+    for (let x = 0; x < nw; x++) {
+      const x0 = Math.floor(x * sx), x1 = Math.max(x0 + 1, Math.floor((x + 1) * sx));
+      let r = 0, g = 0, b = 0, a = 0, n = 0;
+      for (let yy = y0; yy < y1 && yy < h; yy++) {
+        for (let xx = x0; xx < x1 && xx < w; xx++) {
+          const s = (yy * w + xx) * 4;
+          const al = data[s + 3] / 255;
+          r += data[s] * al; g += data[s + 1] * al; b += data[s + 2] * al;
+          a += data[s + 3];
+          n++;
+        }
+      }
+      const d = (y * nw + x) * 4;
+      const aAvg = a / n;
+      const wgt = aAvg > 0 ? n * (aAvg / 255) : 1;
+      out[d] = r / wgt; out[d + 1] = g / wgt; out[d + 2] = b / wgt; out[d + 3] = aAvg;
+    }
+  }
+  return { width: nw, height: nh, data: out };
+}
+
+// ============================================================
+//  파이프라인
+// ============================================================
+const save = (img, rel) => {
+  const path = join(OUT, rel);
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, encodePng(img));
+  const kb = (existsSync(path) ? readFileSync(path).length : 0) / 1024;
+  console.log(`  ✓ ${rel}  ${img.width}x${img.height}  ${kb.toFixed(0)}KB`);
+};
+
+// 원본 파일명 → 출력 정의
+const JOBS = [
+  // 프레스티지 건물: 배경 투명 + 정사각 트림 + 두 사이즈
+  { group: "prestige", raw: "prestige-1-pub.png",     out: "prestige/pub",     key: true, sizes: [256, 128] },
+  { group: "prestige", raw: "prestige-2-club.png",    out: "prestige/club",    key: true, sizes: [256, 128] },
+  { group: "prestige", raw: "prestige-3-premium.png", out: "prestige/premium", key: true, sizes: [256, 128] },
+  { group: "prestige", raw: "prestige-4-empire.png",  out: "prestige/empire",  key: true, sizes: [256, 128] },
+
+  // 대회 트로피: 배경 투명 + 정사각 트림
+  { group: "trophy", raw: "trophy-1-local.png",    out: "trophy/local",    key: true, sizes: [192, 96] },
+  { group: "trophy", raw: "trophy-2-city.png",     out: "trophy/city",     key: true, sizes: [192, 96] },
+  { group: "trophy", raw: "trophy-3-national.png", out: "trophy/national", key: true, sizes: [192, 96] },
+  { group: "trophy", raw: "trophy-4-asia.png",     out: "trophy/asia",     key: true, sizes: [192, 96] },
+  { group: "trophy", raw: "trophy-5-world.png",    out: "trophy/world",    key: true, sizes: [192, 96] },
+
+  // 브랜드: 배경을 살려야 하므로 키잉 없음
+  { group: "brand", raw: "app-icon.png",        out: "brand/app-icon",  key: false, sizes: [512, 192, 180, 32] },
+  { group: "brand", raw: "loading-key-art.png", out: "brand/loading",   key: false, sizes: [1080] },
+
+  // 인테리어 테마 썸네일
+  { group: "theme", raw: "theme-classic.png",  out: "theme/classic",  key: false, sizes: [256] },
+  { group: "theme", raw: "theme-princess.png", out: "theme/princess", key: false, sizes: [256] },
+  { group: "theme", raw: "theme-european.png", out: "theme/european", key: false, sizes: [256] },
+  { group: "theme", raw: "theme-neon.png",     out: "theme/neon",     key: false, sizes: [256] },
+];
+
+const onlyIdx = process.argv.indexOf("--only");
+const only = onlyIdx > -1 ? process.argv[onlyIdx + 1] : null;
+
+if (!existsSync(RAW)) {
+  console.error(`원본 폴더가 없습니다: ${RAW}\n생성한 PNG를 여기에 넣고 다시 실행하세요.`);
+  process.exit(1);
+}
+
+console.log(`원본: ${RAW}\n출력: ${OUT}\n`);
+let done = 0, skipped = 0;
+
+for (const job of JOBS) {
+  if (only && job.group !== only) continue;
+  const src = join(RAW, job.raw);
+  if (!existsSync(src)) { skipped++; continue; }
+  console.log(`${job.raw}`);
+  try {
+    let img = decodePng(readFileSync(src));
+    if (job.key) {
+      img = keyOutBackground(img, { tolerance: job.tolerance ?? 30 });
+      img = trim(img, { marginRatio: 0.05, square: true });
+    }
+    for (const size of job.sizes) {
+      const ratio = img.height / img.width;
+      const out = resize(img, size, Math.round(size * ratio));
+      save(out, `${job.out}${job.sizes.length > 1 ? `-${size}` : ""}.png`);
+    }
+    done++;
+  } catch (e) {
+    console.error(`  ✗ 실패: ${e.message}`);
+  }
+}
+
+console.log(`\n완료 ${done}개${skipped ? ` · 원본 없어 건너뜀 ${skipped}개` : ""}`);
+if (skipped) {
+  console.log(`(${RAW} 안의 파일: ${readdirSync(RAW).join(", ") || "없음"})`);
+}

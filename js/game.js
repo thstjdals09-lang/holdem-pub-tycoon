@@ -69,7 +69,7 @@
     giftReadyAt: keep.giftReadyAt ?? Date.now(),
     prestige: keep.prestige ?? { points: 0 },
 
-    settings: { showTableIncome: true, autoAssign: true },
+    settings: { showTableIncome: true, autoAssign: true, sfxVolume: 0.6 },
     // lastSub: 네비 묶음별로 마지막에 본 세부 탭 / autoPull: 연속 뽑기 설정(묶음 크기 index, 멈춤 조건, 뽑기권만)
     ui: { buyQty: 1, codexFilter: "all", lastSub: {}, autoPull: { sizeIdx: 1, stop: "legendary", ticketOnly: false } },
 
@@ -504,6 +504,7 @@
     }
     state.diamonds -= cost;
     state.permanentUpgrades[id] = permanentLevel(id) + 1;
+    sfx("buy");
     burst(0xffd24a);
     refresh();
   }
@@ -583,6 +584,7 @@
     state.profileRewardedLevel = level;
     addDiamonds(totalDia);
     toast(`🆙 레벨 ${level} 달성! 💎${totalDia} 지급`);
+    sfx("star");
     burst(0xffd24a);
   }
 
@@ -652,6 +654,8 @@
     setTimeout(() => el.remove(), 2400);
   }
   const burst = (color) => window.PubScene3D && window.PubScene3D.chipBurst(color);
+  // 효과음 (js/sfx.js — 외부 파일 없이 WebAudio로 합성, 설정 탭에서 음량 조절)
+  const sfx = (name, arg) => window.Sfx && window.Sfx.play(name, arg);
 
   // ============================================================
   // 재화 / 보상
@@ -670,6 +674,7 @@
   function grantReward(reward) {
     let chips = 0;
     let dia = 0;
+    sfx("reward"); // 퀘스트·미션·출석·선물 보상은 전부 여기를 지나간다
     if (reward.chipSeconds) {
       chips = chipSecondsToChips(reward.chipSeconds);
       addChips(chips);
@@ -949,6 +954,7 @@
     }
     state.boosts.active[id] = Date.now() + def.durationMs;
     trackMission("boost");
+    sfx("boost");
     toast(`${def.emoji} ${def.name} 발동! 수익 x${def.mult}`);
     burst("#ffb43c");
     renderBoostModal();
@@ -1032,6 +1038,7 @@
     const amount = b.diamondsMin + Math.floor(Math.random() * (b.diamondsMax - b.diamondsMin + 1));
     addDiamonds(amount);
     trackMission("diamondBubble");
+    sfx("gem");
     refresh();
     return amount;
   }
@@ -1140,6 +1147,7 @@
     toast(`${r.pay.label} (${a.place}위) · ${parts.join(" ")}`);
     const opened = T.tiers.find((t, i) => tierUnlocked(i) && !unlockedBefore[i]);
     if (opened) setTimeout(() => toast(`🔓 ${opened.emoji} ${opened.name} 참가 가능!`), 1100);
+    sfx(r.pay.id === "bust" ? "lose" : "win");
     burst(a.place <= 3 ? 0xffd24a : 0x7bc67e);
     refresh();
   }
@@ -1163,6 +1171,7 @@
     }
     state.trophies -= cost;
     state.trophyUpgrades[id] = trophyLevel(id) + 1;
+    sfx("buy");
     burst(0xffd24a);
     refresh();
   }
@@ -1211,6 +1220,7 @@
     state.tables += n;
     sceneDirty = true;
     trackMission("buyTable", n);
+    sfx("buy");
     burst();
     refresh();
     return n;
@@ -1225,6 +1235,7 @@
     state.tableLevel += n;
     sceneDirty = true;
     trackMission("upgradeTable", n);
+    sfx("buy");
     refresh();
     return n;
   }
@@ -1242,6 +1253,7 @@
     state.store.expansions += n;
     sceneDirty = true;
     trackMission("expand", n);
+    sfx("buy");
     refresh();
     return n;
   }
@@ -1257,6 +1269,7 @@
     state.fixtures[id] += n;
     sceneDirty = true;
     trackMission("upgradeFixture", n);
+    sfx("buy");
     refresh();
     return n;
   }
@@ -1272,6 +1285,7 @@
     state.staff[id] += n;
     sceneDirty = true;
     trackMission("hireStaff", n);
+    sfx("buy");
     refresh();
     return n;
   }
@@ -1287,6 +1301,7 @@
     state.decor[id] = owned + n;
     sceneDirty = true;
     trackMission("upgradeDecor", n);
+    sfx("buy");
     refresh();
     return n;
   }
@@ -1317,6 +1332,7 @@
     if (state.chips < cost) return 0;
     state.chips -= cost;
     state.themeLevels[id] = owned + n;
+    sfx("buy");
     sceneDirty = true;
     refresh();
     return n;
@@ -1456,6 +1472,7 @@
     // 새 얼굴이 들어왔을 때만 테이블 딜러가 바뀐다 — 연속 뽑기 중 매번 매장 전체를 다시 그리지 않게
     if (results.some((r) => r.isNew)) sceneDirty = true;
     const best = results.reduce((a, b) => (rarityRank(b.rarity.id) > rarityRank(a.rarity.id) ? b : a));
+    sfx("gacha", rarityRank(best.rarity.id)); // 등급이 높을수록 화려한 소리
     return { results, free, best };
   }
 
@@ -1605,6 +1622,7 @@
     owned.shards -= starUpCost(dealerId);
     owned.star += 1;
     sceneDirty = true;
+    sfx("star");
     burst(rarityDef(rosterDef(dealerId).rarity).color);
     renderDealerModal(dealerId);
     refresh();
@@ -1628,6 +1646,7 @@
       return;
     }
     sceneDirty = true;
+    sfx("star");
     burst(0xffc83c);
     toast(`⭐ ${people.size}명 승급 완료 (별 +${stars})`);
     refresh();
@@ -1726,15 +1745,8 @@
     refresh();
   }
 
-  async function resetGame() {
-    if (!window.confirm("정말 모든 진행 상황을 초기화할까요? 되돌릴 수 없어요.")) return;
-    state = defaultState();
-    ensureDailyState();
-    await GameBackend.resetState();
-    sceneDirty = true;
-    toast("초기화 완료");
-    refresh();
-  }
+  // (전체 초기화·저장 코드 내보내기/가져오기 UI는 설정에서 뺐다. 필요하면 GameBackend.resetState/
+  //  exportState/importState가 그대로 남아 있으니 버튼만 다시 붙이면 된다)
 
 
   // ============================================================
@@ -2398,6 +2410,7 @@
   function renderSettingsTab() {
     $("show-table-income-toggle").checked = state.settings.showTableIncome;
     $("auto-assign-toggle").checked = state.settings.autoAssign;
+    $("sfx-volume").value = Math.round((state.settings.sfxVolume ?? 0.6) * 100);
     renderAccountInfo();
     renderBackupBox();
   }
@@ -3204,6 +3217,7 @@
 
     await loadGameAndComputeOffline();
     ensureDailyState();
+    if (window.Sfx) window.Sfx.setVolume(state.settings.sfxVolume ?? 0.6);
     setupControlBar();
 
     // 시트 내부 액션
@@ -3301,24 +3315,15 @@
       sceneDirty = true;
       refresh();
     });
-    $("export-btn").addEventListener("click", async () => {
-      await saveGame();
-      $("save-code").value = await GameBackend.exportState();
-      toast("저장 코드를 생성했어요");
+    $("sfx-volume").addEventListener("input", (e) => {
+      state.settings.sfxVolume = Number(e.target.value) / 100;
+      window.Sfx.setVolume(state.settings.sfxVolume);
     });
-    $("import-btn").addEventListener("click", async () => {
-      const code = $("save-code").value;
-      if (!code.trim()) return toast("가져올 코드를 붙여넣어 주세요");
-      const res = await GameBackend.importState(code);
-      if (res.ok) {
-        state = mergeWithDefaults(res.state);
-        ensureDailyState();
-        sceneDirty = true;
-        refresh();
-        toast("가져오기 완료!");
-      } else toast("코드를 확인해주세요");
+    // 슬라이더에서 손을 뗄 때 한 번 들려주고 저장한다
+    $("sfx-volume").addEventListener("change", () => {
+      sfx("buy");
+      saveGame();
     });
-    $("reset-btn").addEventListener("click", resetGame);
 
     sceneDirty = true;
     refresh();
