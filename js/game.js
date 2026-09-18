@@ -2813,6 +2813,8 @@
       theme: state.theme,
       occupancy: tableOccupancy(),
       tournamentWins: state.tournament.wins || 0,
+      // 명성 단계 — 3D 매장의 구조물(사인·메자닌·아치)이 리뉴얼 탭 외관 그림과 같은 기준을 쓴다
+      stage: BUILDING_STEPS.indexOf(buildingStep()),
     });
   }
 
