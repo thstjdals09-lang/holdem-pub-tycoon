@@ -44,7 +44,10 @@ const PubScene2D = (() => {
     "pendant", "chandelier", "sconce", "art_large", "art_small", "menu_board", "neon",
     "dartboard", "jukebox", "clock", "trophy_case", "palm",
     "door", "board", "stanchion", "coat_rack", "host_desk", "street_lamp", "tree", "bush",
-    "bench", "flower_bed", "trash_bin", "taxi"];
+    "bench", "flower_bed", "trash_bin", "taxi",
+    // 좌석 방향 세트 — 앞/뒤 두 장을 좌우반전해 4방향을 만든다
+    "chair_f", "chair_b", "dealer_chair_f", "dealer_chair_b",
+    "armchair_f", "armchair_b", "sofa_f", "sofa_b", "bench_f", "bench_b"];
   // 사람: 앞/뒤 2장을 좌우반전해 4방향을 만든다. 걷기는 4프레임 사이클.
   const ACTORS = [
     "a_walk_f1", "a_walk_f2", "a_walk_f3", "a_walk_f4",
@@ -52,7 +55,10 @@ const PubScene2D = (() => {
     "a_stand_f", "a_sit_f", "a_stand_b", "a_sit_b",
     "b_stand_f", "b_sit_f", "b_stand_b", "b_sit_b",
     "c_stand_f", "c_sit_f", "c_stand_b", "c_sit_b",
-    "pd_stand", "pd_deal", "sv_stand", "sv_tray"];
+    "pd_stand", "pd_deal", "sv_stand", "sv_tray",
+    "pd_idle", "pd_deal2", "bt_idle", "bt_pour",
+    "sv_walk_f1", "sv_walk_f2", "sv_walk_f3", "sv_walk_f4",
+    "sv_walk_b1", "sv_walk_b2", "sv_walk_b3", "sv_walk_b4"];
   const SRC = {};
   for (const k of PROPS) SRC[k] = "props/" + k + ".png";
   for (const k of ACTORS) SRC[k] = "actors/" + k + ".png";
@@ -186,6 +192,16 @@ const PubScene2D = (() => {
     const a = artAxis(key);
     return a !== "sym" && placeAxis && a !== placeAxis;
   }
+  /** 앞/뒤 두 장이 있는 가구(의자·소파)를 방향에 맞춰 그린다.
+   *  hx,hy = 그 가구가 바라보는 방향. 없으면 기본 한 장으로 떨어진다. */
+  function blitSeat(base, cx, cy, hx, hy) {
+    const f = facing(hx, hy);
+    const key = base + (f.back ? "_b" : "_f");
+    const im = A(key);
+    if (!im) return blitProp(base, cx, cy, "gy");
+    return blit(key, sx(cx, cy), sy(cx, cy) + (im.width * S) / 4, f.flip);
+  }
+
   function blitProp(key, cx, cy, placeAxis) {
     const im = A(key);
     if (!im) return null;
@@ -302,7 +318,10 @@ const PubScene2D = (() => {
   // 좌석은 **화면 좌표 타원**으로 잡는다. 격자에서 원을 그리면 화면에서는 대각선으로
   // 늘어난 타원이 되어, 위쪽 자리가 테이블에 파묻히고 옆자리는 너무 멀어진다.
   // 테이블 그림이 화면에서 128×96 이므로 그보다 한 바퀴 큰 타원에 앉힌다.
-  const SIT_K = 0.95;                  // 사람은 의자 바로 앞 — 테이블 가장자리에 붙어야 "앉았다"로 읽힌다                  // 사람은 의자보다 조금 안쪽
+  // 의자와 앉은 사람은 **같은 자리**에 둔다. 예전엔 사람 0.95 / 의자 1.08 로 떨어뜨려
+  // 두었는데, 그러면 사람 발이 테이블 그림 안쪽(0.95×반지름 < 테이블 반폭)에 찍혀
+  // "테이블 위에 서 있는" 모습이 됐다. 의자가 테이블에 살짝 밀려 들어간 거리 하나만 쓴다.
+  const SEAT_K = 0.86;
   /** 좌석 타원의 화면 반지름 — 테이블 그림에서 직접 뽑는다.
    *  고정값으로 두면 테마마다 테이블 폭이 달라질 때 사람이 테이블 위에 올라간다. */
   function seatRX() {
@@ -346,9 +365,14 @@ const PubScene2D = (() => {
     let bob = 0;
     let sprite;
     if (n.mode === "staff") {
-      // 직원도 움직여야 한다 — 딜러는 딜/대기를 번갈아, 걷는 직원은 한 픽셀 흔들린다
-      sprite = n.anim ? n.anim[Math.floor(t / (n.animMs || 900) + n.seed) % n.anim.length] : n.sprite;
-      if (n.walk) bob = Math.floor(t / 220 + n.seed) % 2 ? -1 : 0;
+      if (n.walkSet && A(n.walkSet + "_f1")) {
+        // 서빙 직원도 4프레임으로 걷는다 — 고정 그림이 미끄러지던 것을 고쳤다
+        const fr = Math.floor(t / 150 + n.seed) % 4;
+        sprite = n.walkSet + "_" + (f.back ? "b" : "f") + (fr + 1);
+      } else {
+        sprite = n.anim ? n.anim[Math.floor(t / (n.animMs || 900) + n.seed) % n.anim.length] : n.sprite;
+        if (n.walk) bob = Math.floor(t / 220 + n.seed) % 2 ? -1 : 0;
+      }
     }
     else if (n.mode === "walk") {
       const frame = Math.floor(t / 150 + n.seed) % 4;
@@ -450,8 +474,8 @@ const PubScene2D = (() => {
     slots.filter((x) => x.owned).forEach((t) => {
       // 딜러는 테이블 북쪽에 서서 손님 쪽(+gy)을 본다
       if (s.assignedDealers && s.assignedDealers[t.i]) {
-        const [dgx, dgy] = seatAt(t.cx, t.cy, -90, 1.62);   // 딜러는 테이블 뒤로 한 걸음
-        people.push({ gx: dgx, gy: dgy, mode: "staff", anim: ["pd_stand", "pd_deal"], animMs: 1100,
+        const [dgx, dgy] = seatAt(t.cx, t.cy, -90, 1.05);   // 딜러는 테이블 북쪽 가장자리 바로 뒤
+        people.push({ gx: dgx, gy: dgy, mode: "staff", anim: ["pd_idle", "pd_deal2"], animMs: 1100,
                       hx: 0, hy: 1, seed: t.i * 17 + 3 });
       }
       const filled = Math.max(1, Math.round(seatsPerTable * occ));
@@ -459,7 +483,7 @@ const PubScene2D = (() => {
         const deg = SEAT_ANGLE[k];
         const ang = (deg * Math.PI) / 180;
         const seed = t.i * 100 + k * 7;
-        const [sgx, sgy] = seatAt(t.cx, t.cy, deg, SIT_K);
+        const [sgx, sgy] = seatAt(t.cx, t.cy, deg, SEAT_K);
         // 앉은 사람은 반드시 테이블 쪽을 본다 — 이걸 안 하면 등지고 앉은 것처럼 보인다
         people.push({
           gx: sgx, gy: sgy,
@@ -470,7 +494,7 @@ const PubScene2D = (() => {
       }
       // 구경꾼 — 테이블 오른쪽에 서서 테이블을 본다
       if (occ > 0.5) {
-        const [wgx, wgy] = seatAt(t.cx, t.cy, 0, 1.5);
+        const [wgx, wgy] = seatAt(t.cx, t.cy, 0, 1.35);
         people.push({ gx: wgx, gy: wgy, mode: "stand",
                       who: pick(WHO, t.i * 31), hx: t.cx - wgx, hy: t.cy - wgy, seed: t.i * 31 });
       }
@@ -480,7 +504,7 @@ const PubScene2D = (() => {
       const bt = Math.min(2, (s.staff && s.staff.bartender) || 0);
       for (let i = 0; i < bt; i++) {
         people.push({ gx: 0.85, gy: bar.cy - 1.2 + i * 2.4, mode: "staff",
-                      anim: ["sv_stand", "sv_tray"], animMs: 1600, hx: 1, hy: 0, seed: 770 + i });
+                      anim: ["bt_idle", "bt_pour"], animMs: 1600, hx: 1, hy: 0, seed: 770 + i });
       }
       bar.stools.forEach((gy, i) => {
         if (hash(900 + i) % 5 === 0) return;              // 한두 자리는 비워 둔다
@@ -488,6 +512,18 @@ const PubScene2D = (() => {
         people.push({ gx: 2.5, gy, mode: "sit", who: pick(WHO, seed), hx: -1, hy: 0, seat: true, seed });
       });
     }
+    // 소파 손님 — 소파가 +gx 를 보므로 손님도 같은 쪽을 본다(앞모습). 소파 앉는 면이
+    // 중심에서 살짝 +gx 라 그림 순서상 등받이 앞에 놓인다.
+    booths.forEach((bs, i) => {
+      if (occ < 0.25) return;
+      const n = occ > 0.7 ? 2 : 1;
+      for (let j = 0; j < n; j++) {
+        const seed = 600 + i * 17 + j * 5;
+        people.push({ gx: bs[0] + 0.7, gy: bs[1] - 0.5 + j * 1.0, mode: "sit",
+                      who: pick(WHO, seed), hx: 1, hy: 0, seat: true, seed,
+                      emote: hash(seed) % 4 === 0 ? pick(EMOTE, seed + 1) : null });
+      }
+    });
     // 서버 — 홀을 가로지른다 (쟁반 든 그림은 한 장뿐이라 방향만 맞춘다)
     const blocks = makeBlocks(slots, bar, booths, host);
     const taken = [];          // 걸어다니는 사람들의 출발점 — 서로 떨어뜨린다
@@ -497,7 +533,7 @@ const PubScene2D = (() => {
       const path = freePath(blocks, W, D, seed, taken);
       if (!path) continue;
       taken.push(path.from);
-      people.push({ gx: path.from[0], gy: path.from[1], mode: "staff", sprite: "sv_tray", seed,
+      people.push({ gx: path.from[0], gy: path.from[1], mode: "staff", sprite: "sv_tray", walkSet: "sv_walk", seed,
                     walk: { ...path, speed: 0.00012 + i * 0.00003 } });
     }
     // 돌아다니는 손님 — 4프레임 보행 사이클, 진행 방향을 보고 걷는다
@@ -523,6 +559,11 @@ const PubScene2D = (() => {
     for (let i = 0; i < Math.min(plantLv, plantSpots.length); i++) {
       const sp = plantSpots[i];
       P("flower_bed", sp[0], sp[1], sp[2]);
+    }
+    // 소파존과 겹치는 화분은 뺀다 — 야자수가 소파를 뚫고 서 있던 원인
+    for (let i = props.length - 1; i >= 0; i--) {
+      const q = props[i];
+      if (booths.some((bb) => Math.abs(bb[0] - q.cx) < 2.4 && Math.abs(bb[1] - q.cy) < 2.0)) props.splice(i, 1);
     }
     // 냉장고는 바 끝에 붙인다(오른쪽 벽은 화면 밖이다)
     if ((s.fixtures && s.fixtures.fridge) > 0) props.push({ a: "fridge", cx: 1.3, cy: 6.9, fixture: "fridge" });
@@ -710,9 +751,10 @@ const PubScene2D = (() => {
 
   /** 소파 — 에셋 벤치보다 덩치가 커서 라운지가 라운지답게 보인다. */
   function booth(cx, cy) {
-    if (A("sofa")) blitProp("sofa", cx, cy, "gx");
-    else isoBox(cx, cy, 1.9, 0.85, 8 * S, PAL.leather);       // 에셋이 없으면 박스로라도
-    isoBox(cx + 1.45, cy + 0.35, 0.7, 0.7, 11 * S, PAL.wood); // 옆 탁자
+    // 소파는 서쪽을 등지고 +gx(홀 안쪽·카메라 쪽)를 본다 — 앞벽을 등지게 두면
+    // 등받이만 보여서 앉은 손님이 통째로 가려진다.
+    blitSeat("sofa", cx, cy, 1, 0);
+    blitProp("lounge_table", cx + 1.4, cy + 0.1, "gx");
   }
 
   /** 허리 높이 앞벽 — 이게 있어야 "건물 안"으로 보인다. */
@@ -871,12 +913,11 @@ const PubScene2D = (() => {
         continue;
       }
       SEAT_ANGLE.forEach((deg) => {
-        const a = (deg * Math.PI) / 180;
-        const [gx, gy] = seatAt(s.cx, s.cy, deg, 1.08);
-        // 의자는 앉은 사람보다 한쪽만 앞이다 — 가까운 쪽(아래)은 등받이가 사람을 가리고,
-        // 먼 쪽(위)은 사람 뒤에 놓인다. 그래야 "앉아 있다"로 보인다.
-        const near = Math.sin(a) > 0;
-        add(gx + gy + (near ? 0.12 : -0.12), () => blitProp("chair", gx, gy));
+        const [gx, gy] = seatAt(s.cx, s.cy, deg, SEAT_K);
+        // 의자는 **언제나 사람보다 먼저** 그린다. 물리적으로는 앞자리 의자 등받이가
+        // 사람 앞에 와야 맞지만, 등받이(0.9m)가 앉은 2등신(1.27m)을 어깨까지 덮어
+        // 손님이 통째로 사라진다. 사람을 위에 얹으면 의자 옆·다리가 둘러싸 "앉았다"로 읽힌다.
+        add(gx + gy - 0.12, () => blitSeat("chair", gx, gy, s.cx - gx, s.cy - gy));
       });
       add(s.cx + s.cy, () => {
         const r = blitProp("table_6", s.cx, s.cy, "gy");
@@ -906,7 +947,7 @@ const PubScene2D = (() => {
         ctx.globalAlpha = 1;
         blit(st.sprite, px, py + st.bob * S, st.flip);
         const im = A(st.sprite);
-        const headY = py - (im ? im.height * S : 32 * S);
+        const headY = py - (im ? im.height * S : 32 * S) - 3 * S;
         const b = bubbles.find((q) => q.seed === n.seed);
         if (b) {
           const r = diamondBubble(px, headY, t);

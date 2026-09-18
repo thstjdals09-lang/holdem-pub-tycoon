@@ -57,7 +57,8 @@ globalThis.Image = FakeImage;
 globalThis.addEventListener = () => {};
 // 매니페스트(fetch)도 로컬 파일에서 읽어 준다
 globalThis.fetch = (u) => Promise.resolve({ json: () => JSON.parse(readFileSync(join(ROOT, u), "utf8")) });
-globalThis.performance = { now: () => 1500 };
+const NOW = Number(process.env.PVT || 1500);
+globalThis.performance = { now: () => NOW };
 globalThis.requestAnimationFrame = (fn) => { frameFn = fn; return 1; };
 
 // ---- 모듈 로드 ----
@@ -119,10 +120,10 @@ if (missing.length) console.log("⚠ 못 찾은 에셋 " + missing.length + "개
 else console.log("✓ 에셋 전부 로드");
 
 if (!frameFn) throw new Error("렌더 루프가 안 돈다");
-frameFn(1500);
+frameFn(NOW);
 
 mkdirSync(join(ROOT, "tools/_preview"), { recursive: true });
-writeFileSync(join(ROOT, "tools/_preview/scene2d.png"), toPng(surface, 1, [20, 16, 13]));
+writeFileSync(join(ROOT, process.env.PVOUT || "tools/_preview/scene2d.png"), toPng(surface, 1, [20, 16, 13]));
 console.log(`✓ scene2d.png ${VW}×${VH}`);
 
 // ---- 탭 판정 훑기: 화면을 격자로 눌러 보고 어떤 상호작용이 잡히는지 센다 ----

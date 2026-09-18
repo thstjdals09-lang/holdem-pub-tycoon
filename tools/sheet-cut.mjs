@@ -141,23 +141,60 @@ export function deFringe(img) {
  *  판별: 이미지 가로(세로)의 70%를 넘게 이어지는 어두운 줄. 오브젝트는 그렇게 길지 않다. */
 export function stripGridLines(img) {
   const { width: w, height: h, data } = img;
-  const dark = (o) => data[o + 3] > 40 && (data[o] + data[o + 1] + data[o + 2]) / 3 < 70;
-  let killed = 0;
+  const on = (o) => data[o + 3] > 40;
+
+  // 칸이 4열·3행이므로 어떤 물건도 시트 가로(세로)의 70%를 덮을 수 없다.
+  // 그만큼 이어지는 줄은 모델이 그어 놓은 칸 구분선이다.
+  //
+  // 색은 보지 않는다 — 처음엔 "어두운 줄"만 지웠는데 공주풍 시트는 흰 선을 그어 놓아
+  // 선이 그대로 남았고, 테이블 바운딩 박스가 선까지 먹어 54×40 이어야 할 그림이
+  // 40×40 으로 줄고 바닥에 흰 막대가 붙어 나왔다.
+  //
+  // 대신 두 가지를 본다. **얇을 것**과 **한 색일 것**.
+  //   - 얇을 것: 사람 시트에서는 인물 여섯을 관통하는 세로줄도 70%를 넘는다. 그런 줄은
+  //     수백 개가 연달아 붙어 띠를 이룬다. 24픽셀 이하로 끊기는 줄만 지운다.
+  //   - 한 색일 것: 그어 놓은 선은 평탄한 한 색이다.
+  const uniform = (get, n) => {
+    let r = 0, g = 0, b = 0, m = 0;
+    for (let i = 0; i < n; i++) { const o = get(i); if (!on(o)) continue; r += data[o]; g += data[o + 1]; b += data[o + 2]; m++; }
+    if (!m) return false;
+    r /= m; g /= m; b /= m;
+    let near = 0;
+    for (let i = 0; i < n; i++) {
+      const o = get(i); if (!on(o)) continue;
+      if (Math.abs(data[o] - r) < 46 && Math.abs(data[o + 1] - g) < 46 && Math.abs(data[o + 2] - b) < 46) near++;
+    }
+    return near > m * 0.85;
+  };
+  /** 연속한 후보 번호를 묶어 8개 이하인 묶음만 남긴다. */
+  const thin = (list) => {
+    const keep = [];
+    for (let i = 0; i < list.length; ) {
+      let j = i;
+      while (j + 1 < list.length && list[j + 1] === list[j] + 1) j++;
+      if (j - i + 1 <= 24) for (let k = i; k <= j; k++) keep.push(list[k]);
+      i = j + 1;
+    }
+    return keep;
+  };
+
+  let rows = [], cols = [];
   for (let y = 0; y < h; y++) {
     let n = 0;
-    for (let x = 0; x < w; x++) if (dark((y * w + x) * 4)) n++;
-    if (n > w * 0.7) {
-      for (let x = 0; x < w; x++) { const o = (y * w + x) * 4; if (dark(o)) { data[o + 3] = 0; killed++; } }
-    }
+    for (let x = 0; x < w; x++) if (on((y * w + x) * 4)) n++;
+    if (n > w * 0.7 && uniform((x) => (y * w + x) * 4, w)) rows.push(y);
   }
   for (let x = 0; x < w; x++) {
     let n = 0;
-    for (let y = 0; y < h; y++) if (dark((y * w + x) * 4)) n++;
-    if (n > h * 0.7) {
-      for (let y = 0; y < h; y++) { const o = (y * w + x) * 4; if (dark(o)) { data[o + 3] = 0; killed++; } }
-    }
+    for (let y = 0; y < h; y++) if (on((y * w + x) * 4)) n++;
+    if (n > h * 0.7 && uniform((y) => (y * w + x) * 4, h)) cols.push(x);
   }
-  if (killed) console.log(`  격자선 ${killed}픽셀 제거`);
+  rows = thin(rows); cols = thin(cols);
+
+  let killed = 0;
+  for (const y of rows) for (let x = 0; x < w; x++) { const o = (y * w + x) * 4; if (on(o)) { data[o + 3] = 0; killed++; } }
+  for (const x of cols) for (let y = 0; y < h; y++) { const o = (y * w + x) * 4; if (on(o)) { data[o + 3] = 0; killed++; } }
+  if (killed) console.log("  격자선 " + killed + "픽셀 제거 (가로 " + rows.length + "줄 · 세로 " + cols.length + "줄)");
   return img;
 }
 

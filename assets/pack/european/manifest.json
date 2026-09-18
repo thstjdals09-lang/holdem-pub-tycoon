@@ -146,12 +146,12 @@
  },
  "menu_board": {
   "w": 13,
-  "h": 13,
+  "h": 12,
   "axis": "sym"
  },
  "neon": {
   "w": 16,
-  "h": 16,
+  "h": 15,
   "axis": "sym"
  },
  "dartboard": {
@@ -237,6 +237,66 @@
  "taxi": {
   "w": 76,
   "h": 73,
+  "axis": "sym"
+ },
+ "chair_f": {
+  "w": 15,
+  "h": 23,
+  "axis": "gy"
+ },
+ "chair_b": {
+  "w": 16,
+  "h": 23,
+  "axis": "gx"
+ },
+ "dealer_chair_f": {
+  "w": 16,
+  "h": 26,
+  "axis": "gy"
+ },
+ "dealer_chair_b": {
+  "w": 18,
+  "h": 26,
+  "axis": "gy"
+ },
+ "armchair_f": {
+  "w": 23,
+  "h": 29,
+  "axis": "sym"
+ },
+ "armchair_b": {
+  "w": 26,
+  "h": 29,
+  "axis": "gy"
+ },
+ "sofa_f": {
+  "w": 36,
+  "h": 35,
+  "axis": "gy"
+ },
+ "sofa_b": {
+  "w": 41,
+  "h": 35,
+  "axis": "gy"
+ },
+ "bench_f": {
+  "w": 34,
+  "h": 26,
+  "axis": "gy"
+ },
+ "bench_b": {
+  "w": 34,
+  "h": 26,
+  "axis": "gy"
+ },
+ "stool2": {
+  "w": 10,
+  "h": 19,
+  "axis": "sym"
+ },
+ "lounge_table2": {
+  "w": 19,
+  "h": 25,
   "axis": "sym"
  }
 }

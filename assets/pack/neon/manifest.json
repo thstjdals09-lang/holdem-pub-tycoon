@@ -1,18 +1,18 @@
 {
  "table_6": {
-  "w": 49,
+  "w": 51,
   "h": 40,
   "axis": "gy"
  },
  "table_8": {
-  "w": 53,
+  "w": 64,
   "h": 45,
   "axis": "gy"
  },
  "chair": {
-  "w": 15,
+  "w": 14,
   "h": 23,
-  "axis": "gy"
+  "axis": "sym"
  },
  "dealer_chair": {
   "w": 14,
@@ -22,30 +22,30 @@
  "stool": {
   "w": 9,
   "h": 19,
-  "axis": "sym"
+  "axis": "gy"
  },
  "sofa": {
-  "w": 38,
+  "w": 40,
   "h": 35,
   "axis": "gy"
  },
  "armchair": {
-  "w": 27,
+  "w": 28,
   "h": 29,
   "axis": "sym"
  },
  "lounge_table": {
-  "w": 25,
-  "h": 25,
+  "w": 26,
+  "h": 24,
   "axis": "sym"
  },
  "rug_rect": {
-  "w": 66,
+  "w": 68,
   "h": 35,
   "axis": "gy"
  },
  "rug_round": {
-  "w": 62,
+  "w": 63,
   "h": 35,
   "axis": "sym"
  },
@@ -57,7 +57,7 @@
  "partition": {
   "w": 29,
   "h": 33,
-  "axis": "gx"
+  "axis": "gy"
  },
  "bar_straight": {
   "w": 43,
@@ -238,5 +238,65 @@
   "w": 92,
   "h": 73,
   "axis": "gy"
+ },
+ "chair_f": {
+  "w": 15,
+  "h": 23,
+  "axis": "sym"
+ },
+ "chair_b": {
+  "w": 16,
+  "h": 20,
+  "axis": "sym"
+ },
+ "dealer_chair_f": {
+  "w": 14,
+  "h": 26,
+  "axis": "gy"
+ },
+ "dealer_chair_b": {
+  "w": 16,
+  "h": 26,
+  "axis": "gy"
+ },
+ "armchair_f": {
+  "w": 25,
+  "h": 29,
+  "axis": "sym"
+ },
+ "armchair_b": {
+  "w": 28,
+  "h": 29,
+  "axis": "gy"
+ },
+ "sofa_f": {
+  "w": 35,
+  "h": 35,
+  "axis": "gy"
+ },
+ "sofa_b": {
+  "w": 41,
+  "h": 35,
+  "axis": "gy"
+ },
+ "bench_f": {
+  "w": 32,
+  "h": 31,
+  "axis": "gy"
+ },
+ "bench_b": {
+  "w": 34,
+  "h": 28,
+  "axis": "gy"
+ },
+ "stool2": {
+  "w": 10,
+  "h": 19,
+  "axis": "sym"
+ },
+ "lounge_table2": {
+  "w": 20,
+  "h": 25,
+  "axis": "sym"
  }
 }

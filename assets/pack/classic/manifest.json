@@ -238,5 +238,65 @@
   "w": 96,
   "h": 61,
   "axis": "gy"
+ },
+ "chair_f": {
+  "w": 15,
+  "h": 23,
+  "axis": "gy"
+ },
+ "chair_b": {
+  "w": 16,
+  "h": 22,
+  "axis": "gx"
+ },
+ "dealer_chair_f": {
+  "w": 16,
+  "h": 26,
+  "axis": "gy"
+ },
+ "dealer_chair_b": {
+  "w": 19,
+  "h": 26,
+  "axis": "gx"
+ },
+ "armchair_f": {
+  "w": 25,
+  "h": 29,
+  "axis": "sym"
+ },
+ "armchair_b": {
+  "w": 28,
+  "h": 28,
+  "axis": "sym"
+ },
+ "sofa_f": {
+  "w": 37,
+  "h": 35,
+  "axis": "gx"
+ },
+ "sofa_b": {
+  "w": 41,
+  "h": 35,
+  "axis": "gy"
+ },
+ "bench_f": {
+  "w": 31,
+  "h": 31,
+  "axis": "gy"
+ },
+ "bench_b": {
+  "w": 34,
+  "h": 29,
+  "axis": "gy"
+ },
+ "stool2": {
+  "w": 11,
+  "h": 19,
+  "axis": "sym"
+ },
+ "lounge_table2": {
+  "w": 20,
+  "h": 25,
+  "axis": "sym"
  }
 }

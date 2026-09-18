@@ -67,6 +67,33 @@ function pieces(file, cols, rows) {
   return { img, boxes: ordered, n: boxes.length };
 }
 
+/** 시트가 몇 줄인지 스스로 고른다.
+ *  "12칸(4×3)으로 그려라"라고 적어도 모델이 16칸(4×4)을 그려 보내는 일이 있다.
+ *  줄 수를 모르고 4×3으로 자르면 칸 경계가 어긋나 한 칸에 두 물건이 들어온다
+ *  (유럽풍 좌석 시트에서 소파 두 개가 겹쳐 나온 원인).
+ *
+ *  판정은 간단하다 — **맞는 격자에서는 어떤 성분도 칸 경계를 넘지 않는다.**
+ *  후보 줄 수마다 "칸 하나 안에 온전히 들어간 성분"을 세어 많은 쪽을 쓴다.
+ *  (중심 y 를 띠로 묶는 방법은 물건 높이가 제각각이라 3줄/4줄을 뒤집어 골랐다.) */
+function rowBands(file, cols, candidates) {
+  const img = deFringe(stripGridLines(keyMagenta(decodePng(readFileSync(file)))));
+  const minArea = Math.round((img.width * img.height) / 4000);
+  const boxes = mergeNear(components(img, minArea), Math.round(img.width * 0.01))
+    .filter((b) => (b.x1 - b.x0) > 8 && (b.y1 - b.y0) > 8);
+  let best = candidates[0], bestFit = -1;
+  for (const rows of candidates) {
+    const cw = img.width / cols, ch = img.height / rows;
+    let fit = 0;
+    for (const b of boxes) {
+      if (Math.floor(b.x0 / cw) === Math.floor(b.x1 / cw) &&
+          Math.floor(b.y0 / ch) === Math.floor(b.y1 / ch)) fit++;
+    }
+    const score = fit / Math.max(1, boxes.length);
+    if (score > bestFit + 0.02) { bestFit = score; best = rows; }
+  }
+  return best;
+}
+
 /** 목표 폭(또는 키)에 맞춰 줄이고 색을 평탄화한다. */
 function bake(img, box, { width, height, hmax, scale }) {
   let piece = crop(img, box);
@@ -132,9 +159,9 @@ for (const theme of THEMES) {
   const refIdx = CAST.findIndex(([nm]) => nm === "a_stand_f");
   const refBox = boxes[refIdx] || boxes[0];
   const k = ACTOR.stand / (refBox.y1 - refBox.y0 + 1);
-  CAST.forEach(([name], i) => {
+  CAST.forEach(([name, pose], i) => {
     if (!boxes[i]) return;
-    const out = bake(img, boxes[i], { scale: k });
+    const out = bake(img, boxes[i], { scale: k, hmax: pose === "sit" ? ACTOR.sit : null });
     if (WRITE) writeFileSync(join(actDir, name + ".png"), encodePng(out.w, out.h, out.data));
     made++;
   });
@@ -154,10 +181,53 @@ for (const theme of THEMES) {
     const kb = ACTOR.stand / (rb.y1 - rb.y0 + 1);
     BACK.forEach((name, i) => {
       if (!r.boxes[i]) return;
-      const out = bake(r.img, r.boxes[i], { scale: kb });
+      const out = bake(r.img, r.boxes[i], { scale: kb, hmax: /_sit_/.test(name) ? ACTOR.sit : null });
       if (WRITE) writeFileSync(join(actDir, name + ".png"), encodePng(out.w, out.h, out.data));
     });
     console.log(`  ${theme}/back     성분 ${String(r.n).padStart(2)} → 12개 (배율 ${kb.toFixed(3)})`);
+  }
+
+  // ── 직원 동작 시트 ── 서빙 4프레임 × 앞뒤 + 딜러/바텐더 대기·동작
+  const moFile = join(RAW, "staffmo", theme + ".png");
+  if (existsSync(moFile)) {
+    const MO = ["sv_walk_f1", "sv_walk_f2", "sv_walk_f3", "sv_walk_f4",
+                "sv_walk_b1", "sv_walk_b2", "sv_walk_b3", "sv_walk_b4",
+                "pd_idle", "pd_deal2", "bt_idle", "bt_pour"];
+    const r = pieces(moFile, 4, 3);
+    const rb = r.boxes[8] || r.boxes[0];                   // 서 있는 딜러로 배율을 잡는다
+    const km = ACTOR.stand / (rb.y1 - rb.y0 + 1);
+    MO.forEach((name, i) => {
+      if (!r.boxes[i]) return;
+      const out = bake(r.img, r.boxes[i], { scale: km });
+      if (WRITE) writeFileSync(join(actDir, name + ".png"), encodePng(out.w, out.h, out.data));
+    });
+    console.log(`  ${theme}/staffmo  성분 ${String(r.n).padStart(2)} → 12개`);
+  }
+
+  // ── 좌석 방향 시트 ── 의자·소파가 앞/뒤 두 장 있어야 반전으로 4방향이 된다
+  const seatFile = join(RAW, "seat", theme + ".png");
+  if (existsSync(seatFile)) {
+    const SEAT = ["chair_f", "chair_b", "dealer_chair_f", "dealer_chair_b",
+                  "armchair_f", "armchair_b", "sofa_f", "sofa_b",
+                  "bench_f", "bench_b", "stool2", "lounge_table2"];
+    const WIDTHS = { chair_f: "chair", chair_b: "chair", dealer_chair_f: "dealer_chair",
+                     dealer_chair_b: "dealer_chair", armchair_f: "armchair", armchair_b: "armchair",
+                     sofa_f: "sofa", sofa_b: "sofa", bench_f: "bench", bench_b: "bench",
+                     stool2: "stool", lounge_table2: "lounge_table" };
+    // 4줄로 그려 온 시트(유럽풍)는 16칸이다. 필요한 12칸만 골라 쓴다 —
+    // 3·4번째 줄의 소파·벤치 중복 칸(8·9·11·12)을 버린다.
+    const rows = rowBands(seatFile, 4, [3, 4]);
+    const PICK4 = [0, 1, 2, 3, 4, 5, 6, 7, 10, 13, 14, 15];
+    const r = pieces(seatFile, 4, rows);
+    SEAT.forEach((name, i) => {
+      const bi = rows === 4 ? PICK4[i] : i;
+      if (!r.boxes[bi]) return;
+      const ref = WIDTHS[name];
+      const out = bake(r.img, r.boxes[bi], { width: widthOf(ref), hmax: heightOf(ref) });
+      manifest[name] = { w: out.w, h: out.h, axis: axisOf(out) };
+      if (WRITE) writeFileSync(join(propDir, name + ".png"), encodePng(out.w, out.h, out.data));
+    });
+    console.log(`  ${theme}/seat     성분 ${String(r.n).padStart(2)} → 12개 (${rows}줄)`);
   }
   if (WRITE) writeFileSync(join(ROOT, "assets/pack", theme, "manifest.json"), JSON.stringify(manifest, null, 1));
 }
