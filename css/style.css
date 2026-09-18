@@ -372,6 +372,38 @@ body.sheet-open .side-rail {
 @keyframes dotPop { 0%,100% { transform: scale(1); } 50% { transform: scale(1.22); } }
 
 /* ===== 바닥 안내 ===== */
+/* 층 전환 알약 — 2층(VIP 라운지)이 열렸을 때만 보인다 */
+.floor-switch {
+  position: absolute;
+  left: 12px;
+  bottom: calc(var(--nav-h) + var(--safe-b) + 68px);
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 999px;
+  background: var(--glass);
+  border: 1px solid var(--glass-line);
+  box-shadow: var(--shadow-card);
+  z-index: 6;
+}
+.floor-switch[hidden] { display: none; }
+.floor-btn {
+  border: 0;
+  border-radius: 999px;
+  padding: 6px 13px;
+  font-family: "Jua", system-ui, sans-serif;
+  font-size: 13px;
+  color: var(--ink-soft);
+  background: transparent;
+  cursor: pointer;
+}
+.floor-btn.active {
+  background: linear-gradient(180deg, var(--pink), var(--pink-d));
+  color: #fff;
+  box-shadow: 0 2px 0 var(--pink-sh);
+}
+body.sheet-open .floor-switch { display: none; }
+
 .floor-note {
   position: absolute;
   left: 50%;

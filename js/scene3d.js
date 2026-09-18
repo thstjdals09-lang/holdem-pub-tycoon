@@ -110,7 +110,9 @@ let obstacles = [];
 const ROOM_CENTER_Z = -1;
 const ROOM_MIN_W = 17;
 const ROOM_MIN_D = 16;
-const WALL_H = 7;
+// 도트 경영 시뮬은 벽이 낮은 띠라 바닥이 넓게 읽힌다. 7은 "방 안에 들어온 3D" 느낌이 강했다.
+// 여기 딸린 높이(조명·사인·기둥·소품)는 아래에서 전부 같이 낮춰 뒀다.
+const WALL_H = 3.6;
 
 // 테마 = 매장 전체의 "옷 한 벌".
 //   floor/wall/trim/wainscot/sky/felt : 매장 골격
@@ -298,9 +300,11 @@ let backWallMesh, leftWallMesh, rightWallMesh, backTrimMesh, stringLightsGroup, 
 let backWainscotMesh, leftWainscotMesh, rightWainscotMesh, leftTrimMesh, rightTrimMesh;
 let outsideGroup = null;    // 벽 너머 동네
 let themeDecorGroup = null; // 테마 전용 인테리어 소품
-let structureGroup = null;  // 명성 단계별 구조물(사인·메자닌·아치 등)
+let structureGroup = null;  // 명성 단계별 구조물(사인·아치 등)
+let floor2Group = null;     // 2층 VIP 라운지 (별도 화면)
+let activeFloor = 1;        // 지금 보고 있는 층
 let venueStage = 0;         // 0 로컬 펍 / 1 인기 클럽 / 2 프리미엄 하우스 / 3 포커 제국
-const WAINSCOT_H = 1.3;
+const WAINSCOT_H = 0.95;
 
 let roomW = 0;
 let roomD = 0;
@@ -474,91 +478,31 @@ function makeWallTexture(style) {
   return tex;
 }
 
-function makeFloorTexture(pattern) {
+// 바닥은 테마와 무관하게 "타일 한 칸"으로 통일한다.
+// 격자가 또렷해야 어디에 놓을지 한눈에 보이고 배치하는 맛이 산다(경영 시뮬의 기본).
+// 색만 테마가 정하고(floorMat.color) 무늬는 이 한 장을 모든 테마가 공유한다.
+const FLOOR_TILE = 1.8; // 타일 한 변(m)
+
+function makeFloorTexture() {
   const size = 256;
   const canvas = document.createElement("canvas");
   canvas.width = canvas.height = size;
   const ctx = canvas.getContext("2d");
   ctx.fillStyle = "#ffffff";
   ctx.fillRect(0, 0, size, size);
-  // 선이 진하면 바닥이 벽돌담처럼 보인다 — 포스터의 마루는 결이 훨씬 은은하다
-  ctx.strokeStyle = "rgba(120,85,60,0.16)";
-  ctx.lineWidth = 2;
 
-  if (pattern === "tatami") {
-    // 다다미 — 가로로 긴 돗자리 2장씩, 가장자리에 진한 헤리(가선) 띠. 결은 촘촘한 세로선.
-    const rows = 3;
-    const h = size / rows;
-    for (let r = 0; r < rows; r++) {
-      const y = h * r;
-      for (let c = 0; c < 2; c++) {
-        const x = (size / 2) * c + (r % 2 === 1 ? size / 4 : 0);
-        ctx.fillStyle = "rgba(120,110,60,0.05)";
-        ctx.fillRect(x, y, size / 2, h);
-        // 헤리(가선) — 네 변을 다 둘러야 "돗자리 여러 장"으로 보인다.
-        // 위아래만 그리면 텍스처가 늘어나면서 그냥 줄무늬 바닥이 된다.
-        ctx.fillStyle = "rgba(60,70,50,0.5)";
-        ctx.fillRect(x, y, size / 2, 4);
-        ctx.fillRect(x, y + h - 4, size / 2, 4);
-        ctx.fillRect(x, y, 4, h);
-        ctx.fillRect(x + size / 2 - 4, y, 4, h);
-      }
-    }
-    ctx.strokeStyle = "rgba(130,115,70,0.2)";
-    ctx.lineWidth = 1;
-    for (let x = 0; x < size; x += 4) {
-      ctx.beginPath();
-      ctx.moveTo(x, 0);
-      ctx.lineTo(x, size);
-      ctx.stroke();
-    }
-  } else if (pattern === "tile") {
-    const cells = 6;
-    for (let ry = 0; ry < cells; ry++) {
-      for (let rx = 0; rx < cells; rx++) {
-        if ((rx + ry) % 2 === 0) {
-          ctx.fillStyle = "rgba(0,0,0,0.05)";
-          ctx.fillRect((size / cells) * rx, (size / cells) * ry, size / cells, size / cells);
-        }
-      }
-    }
-    ctx.strokeStyle = "rgba(120,85,60,0.12)";
-    for (let i = 0; i <= cells; i++) {
-      const p = (size / cells) * i;
-      ctx.beginPath();
-      ctx.moveTo(p, 0);
-      ctx.lineTo(p, size);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(0, p);
-      ctx.lineTo(size, p);
-      ctx.stroke();
-    }
-  } else {
-    const rows = 5;
-    for (let r = 0; r <= rows; r++) {
-      const y = (size / rows) * r;
-      ctx.beginPath();
-      ctx.moveTo(0, y);
-      ctx.lineTo(size, y);
-      ctx.stroke();
-    }
-    for (let r = 0; r < rows; r++) {
-      const y0 = (size / rows) * r;
-      const offset = r % 2 === 0 ? 0 : size / 3;
-      for (let x = -size; x < size * 2; x += size / 0.75) {
-        const xx = x + offset;
-        ctx.beginPath();
-        ctx.moveTo(xx, y0);
-        ctx.lineTo(xx, y0 + size / rows);
-        ctx.stroke();
-      }
-    }
-  }
+  // 타일 한 장 = 위/왼쪽 이음매를 진하게, 아래/오른쪽은 옅게 → 칸이 도드라진다
+  ctx.fillStyle = "rgba(255,255,255,0.5)";
+  ctx.fillRect(9, 9, size - 18, size - 18);
+  ctx.fillStyle = "rgba(112,84,58,0.24)";
+  ctx.fillRect(0, 0, size, 7);
+  ctx.fillRect(0, 0, 7, size);
+  ctx.fillStyle = "rgba(112,84,58,0.10)";
+  ctx.fillRect(0, size - 5, size, 5);
+  ctx.fillRect(size - 5, 0, 5, size);
 
   const tex = new THREE.CanvasTexture(canvas);
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-  tex.repeat.set(6, 4.5);
   tex.colorSpace = THREE.SRGBColorSpace;
   return tex;
 }
@@ -978,23 +922,23 @@ function buildRug(w, d, color) {
 // 테이블 위 펜던트 조명 — 펍 분위기의 핵심
 function buildPendantLamp() {
   const g = new THREE.Group();
-  const cord = plain(new THREE.CylinderGeometry(0.015, 0.015, 1.5, 6), 0x3a2a30);
-  cord.position.y = 3.35;
+  const cord = plain(new THREE.CylinderGeometry(0.015, 0.015, 1.0, 6), 0x3a2a30);
+  cord.position.y = 2.6;
   // 갓은 어두운 남색이었는데 포스터의 조명은 황동/골드다 — 매장 전체 톤을 좌우하는 부분
   const shade = tagPart(meshWO(new THREE.ConeGeometry(0.4, 0.34, 14, 1, true), PAL.lampShade, 1.05), "lampShade");
-  shade.position.y = 2.5;
+  shade.position.y = 1.95;
   const bulb = new THREE.Mesh(
     new THREE.SphereGeometry(0.11, 10, 10),
     new THREE.MeshBasicMaterial({ color: 0xfff0c8 })
   );
-  bulb.position.y = 2.36;
+  bulb.position.y = 1.82;
   // 전구 주변 halo — 실제 빛을 쏘면(PointLight) 테이블 수만큼 광원이 늘어 휴대폰에서 느려지므로
   // 반투명 구체로 "빛나 보이게"만 한다.
   const halo = new THREE.Mesh(
     new THREE.SphereGeometry(0.26, 10, 10),
     new THREE.MeshBasicMaterial({ color: PAL.lightWarm, transparent: true, opacity: 0.3, depthWrite: false })
   );
-  halo.position.y = 2.34;
+  halo.position.y = 1.8;
   tagPart(cord, "lampCord");
   tagPart(bulb, "lampBulb");
   tagPart(halo, "lampHalo");
@@ -1865,37 +1809,37 @@ function buildFrames(frameColor, artColors) {
 // 테마별 배치표: [빌더, x, y, z, rotY, scale]
 const THEME_DECOR = {
   classic: (zBack, halfW) => [
-    [buildHangingMugs, -halfW + 3.4, 3.2, zBack + 0.3, 0, 1],
-    [buildWoodSign, 3.0, 3.5, zBack + 0.12, 0, 1],
-    [() => buildFrames(0x8a5c3a, [0xd9b98f, 0xa8c4d9, 0xd9a8b5]), -1.4, 2.5, zBack + 0.12, 0, 1],
+    [buildHangingMugs, -halfW + 3.4, 2.45, zBack + 0.3, 0, 0.9],
+    [buildWoodSign, 3.0, 2.7, zBack + 0.12, 0, 0.85],
+    [() => buildFrames(0x8a5c3a, [0xd9b98f, 0xa8c4d9, 0xd9a8b5]), -1.4, 1.95, zBack + 0.12, 0, 0.8],
     [buildBeerTaps, -halfW + 1.3, 1.12, zBack + 1.2, 0, 1],
   ],
   princess: (zBack, halfW) => [
-    [buildCanopyArch, 0, 0, zBack + 1.8, 0, 1],
-    [() => buildFrames(0xfff2fa, [0xffd9ec, 0xffe8f5, 0xf0d9ff]), 3.6, 3.2, zBack + 0.12, 0, 1],
+    [buildCanopyArch, 0, 0, zBack + 1.8, 0, 0.6],
+    [() => buildFrames(0xfff2fa, [0xffd9ec, 0xffe8f5, 0xf0d9ff]), 3.6, 2.0, zBack + 0.12, 0, 0.8],
     [buildRoseVase, -halfW + 1.2, 1.12, zBack + 1.2, 0, 1],
     [buildRoseVase, halfW - 1.4, 0, zBack + 1.4, 0, 1.5],
-    [buildChandelier, -3.6, 4.6, zBack + 4.6, 0, 1],
-    [buildChandelier, 3.6, 4.6, zBack + 4.6, 0, 1],
+    [buildChandelier, -3.6, 2.85, zBack + 3.0, 0, 0.8],
+    [buildChandelier, 3.6, 2.85, zBack + 3.0, 0, 0.8],
   ],
   european: (zBack, halfW) => [
     // 바 카운터는 뒷벽 왼쪽(-halfW+3, 폭 3.6)을 쓰므로 기둥·벽난로는 그 오른쪽에만 둔다
     [buildFireplace, 5.2, 0, zBack + 0.5, 0, 1],
-    [buildColumn, -2.4, 0, zBack + 0.6, 0, 1],
-    [buildColumn, 2.4, 0, zBack + 0.6, 0, 1],
-    [() => buildFrames(0xd4af37, [0x6b4a32, 0x3f5a45, 0x5a3a2a]), 0, 3.2, zBack + 0.12, 0, 1.1],
+    [buildColumn, -2.4, 0, zBack + 0.6, 0, 0.72],
+    [buildColumn, 2.4, 0, zBack + 0.6, 0, 0.72],
+    [() => buildFrames(0xd4af37, [0x6b4a32, 0x3f5a45, 0x5a3a2a]), 0, 2.0, zBack + 0.12, 0, 0.85],
     [buildCandelabra, -halfW + 3.0, 1.18, zBack + 0.5, 0, 1],
   ],
   neon: (zBack, halfW) => [
-    [() => buildNeonSign(0x00e5ff), -3.6, 3.6, zBack + 0.14, 0, 1],
-    [() => buildNeonSign(0xff3fae), 3.6, 3.6, zBack + 0.14, 0, 1],
-    [buildDiscoBall, 0, 4.4, zBack + 4.6, 0, 1],
-    [buildDiscoBall, -4.6, 4.8, zBack + 6.6, 0, 0.8],
+    [() => buildNeonSign(0x00e5ff), -3.6, 2.45, zBack + 0.14, 0, 0.85],
+    [() => buildNeonSign(0xff3fae), 3.6, 2.45, zBack + 0.14, 0, 0.85],
+    [buildDiscoBall, 0, 2.85, zBack + 3.0, 0, 0.85],
+    [buildDiscoBall, -4.6, 2.95, zBack + 4.6, 0, 0.7],
   ],
   japanese: (zBack, halfW) => [
-    [buildNoren, -halfW + 2.8, 3.2, zBack + 0.2, 0, 1],
-    [buildShojiWindow, 2.8, 3.3, zBack + 0.1, 0, 1],
-    [buildShojiWindow, -1.2, 3.3, zBack + 0.1, 0, 1],
+    [buildNoren, -halfW + 2.8, 2.5, zBack + 0.2, 0, 0.85],
+    [buildShojiWindow, 2.8, 2.1, zBack + 0.1, 0, 0.85],
+    [buildShojiWindow, -1.2, 2.1, zBack + 0.1, 0, 0.85],
     [buildSakeBarrels, halfW - 1.7, 0, zBack + 1.0, 0, 1],
     [buildBonsai, -halfW + 1.1, 1.12, zBack + 1.2, 0, 1],
     [buildStoneLantern, halfW - 1.5, 0, zBack + 4.2, 0, 0.9],
@@ -1935,7 +1879,8 @@ const VENUE_STAGES = [
   { id: "pub", sign: false, awning: false, runner: false, chandelier: false, columns: false, gate: false, trophyCase: false, mezzanine: false, arch: false },
   { id: "club", sign: true, awning: true, runner: true, chandelier: false, columns: false, gate: false, trophyCase: false, mezzanine: false, arch: false },
   { id: "premium", sign: true, awning: true, runner: true, chandelier: true, columns: true, gate: true, trophyCase: true, mezzanine: false, arch: false },
-  { id: "empire", sign: true, awning: true, runner: true, chandelier: true, columns: true, gate: true, trophyCase: true, mezzanine: true, arch: true },
+  // 메자닌은 낮은 벽 안에 안 들어간다 → 2층은 별도 화면(floor 2)으로 분리했다
+  { id: "empire", sign: true, awning: true, runner: true, chandelier: true, columns: true, gate: true, trophyCase: true, mezzanine: false, arch: true },
 ];
 
 // 뒷벽 대형 사인 — 포스터의 "GOOD PLAY BETTER PEOPLE" 자리.
@@ -2133,14 +2078,14 @@ function rebuildStructure() {
   const VZF = Math.min(zFront - 2.4, ROOM_CENTER_Z + 7.2);
 
   if (cfg.sign) {
-    const sign = buildWallSign(cfg.mezzanine ? 5.2 : Math.min(roomW * 0.42, 7.2));
+    const sign = buildWallSign(Math.min(roomW * 0.42, 7.2));
     // 메자닌이 생기면 사인은 그 위로 올라간다
-    sign.position.set(cfg.mezzanine ? -3.4 : 0, cfg.mezzanine ? 5.9 : 5.3, zBack + 0.12);
+    sign.position.set(0, 2.55, zBack + 0.12);
     structureGroup.add(sign);
   }
   if (cfg.awning) {
     const aw = buildAwning();
-    aw.position.set(-halfW + 0.72, 2.9, entrancePos.z);
+    aw.position.set(-halfW + 0.72, 2.2, entrancePos.z);
     aw.rotation.y = Math.PI / 2;
     structureGroup.add(aw);
   }
@@ -2167,7 +2112,7 @@ function rebuildStructure() {
     const ch = buildGrandChandelier();
     // 아이소메트릭에서는 높이 올릴수록 화면 "위"(=뒤쪽 바닥 자리)로 간다.
     // 그래서 앞쪽에 매달아야 화면상 매장 한가운데 빈 바닥 위에 걸린 것처럼 보인다.
-    ch.position.set(0, 6.6, ROOM_CENTER_Z + 4.2);
+    ch.position.set(0, 3.1, ROOM_CENTER_Z + 2.2);
     structureGroup.add(ch);
   }
   if (cfg.columns) {
@@ -2179,6 +2124,7 @@ function rebuildStructure() {
       if (Math.abs(cx - barX) < 2.8) cx = barX + 2.8;
       const col = buildColumn();
       col.position.set(cx, 0, zBack + 0.4);
+      col.scale.setScalar(0.72); // 벽(WALL_H)보다 낮게
       structureGroup.add(col);
     }
   }
@@ -2187,8 +2133,139 @@ function rebuildStructure() {
     const arch = buildGoldArch();
     arch.position.set(-halfW + 2.2, 0, entrancePos.z - 1.6);
     arch.rotation.y = Math.PI / 2;
+    arch.scale.setScalar(0.6);
     structureGroup.add(arch);
   }
+}
+
+// ============================================================
+// 2층 — 별도 화면으로 분리한다.
+//
+// 벽을 낮추고 나니 한 화면에 1·2층을 겹쳐 보여줄 수가 없다(2층 바닥이 벽보다 높다).
+// 도트 경영 시뮬도 층을 겹쳐 그리지 않고 층마다 화면을 바꾼다 — 같은 방식으로 간다.
+//
+// 구현은 "멀리 떨어진 곳에 2층 방을 따로 지어 두고 카메라만 옮기는" 방식이다.
+// 같은 씬 안에 있으니 조명·테마 팔레트를 그대로 공유하고, 층 전환에 로딩이 없다.
+// ============================================================
+const FLOOR2_ORIGIN = new THREE.Vector3(0, 0, -400); // 1층과 안 겹치게 충분히 멀리
+const FLOOR2_SIZE = { w: 13, d: 11 };
+
+function buildFloor2() {
+  if (!floor2Group) return;
+  clearGroup(floor2Group);
+  if (venueStage < 3) return; // 포커 제국 단계에서만 열린다
+
+  const w = FLOOR2_SIZE.w;
+  const d = FLOOR2_SIZE.d;
+  const ox = FLOOR2_ORIGIN.x;
+  const oz = FLOOR2_ORIGIN.z;
+  const zBack = oz - d / 2;
+
+  // 바닥 (1층과 같은 타일, 같은 테마 색)
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(w, d), toonMat(PAL.floorBase, { map: makeFloorTexture() }));
+  floor.material.map.repeat.set(w / FLOOR_TILE, d / FLOOR_TILE);
+  floor.rotation.x = -Math.PI / 2;
+  floor.position.set(ox, 0, oz);
+  floor2Group.add(floor);
+
+  // 뒷벽 / 왼쪽벽 + 우드 패널
+  const back = new THREE.Mesh(new THREE.PlaneGeometry(w, WALL_H), backWallMat);
+  back.position.set(ox, WALL_H / 2, zBack);
+  const left = new THREE.Mesh(new THREE.PlaneGeometry(d, WALL_H), sideWallMat);
+  left.rotation.y = Math.PI / 2;
+  left.position.set(ox - w / 2, WALL_H / 2, oz);
+  const backWain = new THREE.Mesh(new THREE.PlaneGeometry(w, WAINSCOT_H), wainscotMat);
+  backWain.position.set(ox, WAINSCOT_H / 2, zBack + 0.02);
+  const leftWain = new THREE.Mesh(new THREE.PlaneGeometry(d, WAINSCOT_H), wainscotMat);
+  leftWain.rotation.y = Math.PI / 2;
+  leftWain.position.set(ox - w / 2 + 0.02, WAINSCOT_H / 2, oz);
+  const backTrim = new THREE.Mesh(new THREE.BoxGeometry(w, 0.3, 0.05), backTrimMat);
+  backTrim.position.set(ox, WAINSCOT_H, zBack + 0.03);
+  floor2Group.add(back, left, backWain, leftWain, backTrim);
+
+  // 난간 — 1층을 내려다보는 앞쪽 가장자리
+  const railZ = oz + d / 2 - 0.3;
+  const rail = meshWO(new THREE.BoxGeometry(w - 1, 0.12, 0.12), PAL.emptySlot, 1.05);
+  rail.position.set(ox, 1.05, railZ);
+  floor2Group.add(rail);
+  const posts = Math.max(5, Math.round((w - 1) / 0.8));
+  for (let i = 0; i <= posts; i++) {
+    const post = plain(new THREE.CylinderGeometry(0.05, 0.05, 1.0, 7), PAL.emptySlot);
+    post.position.set(ox - (w - 1) / 2 + ((w - 1) * i) / posts, 0.5, railZ);
+    floor2Group.add(post);
+  }
+
+  // VIP 라운지 구성
+  const sofa = buildSofa(2.6);
+  sofa.position.set(ox - 3.0, 0, zBack + 1.4);
+  floor2Group.add(sofa);
+  const lowTable = buildLowTable();
+  lowTable.position.set(ox - 3.0, 0, zBack + 2.7);
+  floor2Group.add(lowTable);
+  const sofa2 = buildSofa(2.2);
+  sofa2.position.set(ox + 3.2, 0, zBack + 1.4);
+  floor2Group.add(sofa2);
+  const lowTable2 = buildLowTable();
+  lowTable2.position.set(ox + 3.2, 0, zBack + 2.7);
+  floor2Group.add(lowTable2);
+
+  const tc = buildTrophyCase();
+  tc.position.set(ox + w / 2 - 1.4, 0, zBack + 0.5);
+  floor2Group.add(tc);
+
+  // VIP 사인
+  const vipFrame = meshWO(new RoundedBoxGeometry(2.6, 0.9, 0.12, 2, 0.05), PAL.emptySlot, 1.04);
+  vipFrame.position.set(ox, 2.5, zBack + 0.08);
+  const vipGlow = new THREE.Mesh(new THREE.PlaneGeometry(2.2, 0.5), glowMat(PAL.barTrim));
+  vipGlow.position.set(ox, 2.5, zBack + 0.16);
+  floor2Group.add(vipFrame, vipGlow);
+
+  // 조명 + 화분
+  for (const lx of [-3.0, 3.2]) {
+    const lamp = buildPendantLamp();
+    lamp.position.set(ox + lx, 0, zBack + 2.7);
+    floor2Group.add(lamp);
+  }
+  for (const px of [-w / 2 + 0.9, w / 2 - 0.9]) {
+    const plant = buildPlant();
+    plant.position.set(ox + px, 0, oz + 1.6);
+    plant.scale.setScalar(1.3);
+    floor2Group.add(plant);
+  }
+  // 계단참 — "여기로 내려간다"는 표시
+  for (let i = 0; i < 4; i++) {
+    const st = meshWO(new THREE.BoxGeometry(1.6, 0.16, 0.42), PAL.wainscot, 1.04);
+    st.position.set(ox - w / 2 + 1.4, 0.08 - i * 0.02, oz + d / 2 - 1.2 + i * 0.42);
+    floor2Group.add(st);
+  }
+}
+
+// 층 전환 — 카메라(와 컨트롤 타깃)만 옮긴다.
+function setFloorInternal(n) {
+  const next = n === 2 && venueStage >= 3 ? 2 : 1;
+  activeFloor = next;
+  const t = next === 2 ? FLOOR2_ORIGIN.clone() : new THREE.Vector3(0, 0, ROOM_CENTER_Z);
+  controls.target.copy(t);
+  camera.position.copy(t).add(ISO_OFFSET);
+  controls.update();
+  // 안 보는 층은 그리지 않는다
+  for (const g of [groups.tables, groups.fixtures, groups.staff, groups.decor, groups.customers, groups.bubbles, structureGroup, themeDecorGroup, outsideGroup, stringLightsGroup, doorGroup]) {
+    if (g) g.visible = next === 1;
+  }
+  if (floorMesh) floorMesh.visible = next === 1;
+  for (const m of [backWallMesh, leftWallMesh, rightWallMesh, backTrimMesh, backWainscotMesh, leftWainscotMesh, rightWainscotMesh, leftTrimMesh, rightTrimMesh]) {
+    if (m) m.visible = next === 1;
+  }
+  if (floor2Group) floor2Group.visible = next === 2;
+}
+
+export function setFloor(n) {
+  if (!ready) return;
+  setFloorInternal(n);
+}
+
+export function getFloorInfo() {
+  return { active: activeFloor, unlocked: venueStage >= 3 ? 2 : 1 };
 }
 
 function rebuildStringLights() {
@@ -2220,7 +2297,7 @@ function rebuildStringLights() {
     } else {
       lamp = new THREE.Mesh(new THREE.SphereGeometry(0.09, 8, 8), new THREE.MeshBasicMaterial({ color }));
     }
-    lamp.position.set(x, 6.1 - sag, zBack + 0.1);
+    lamp.position.set(x, 3.15 - sag * 0.5, zBack + 0.1);
     stringLightsGroup.add(lamp);
   }
   scene.add(stringLightsGroup);
@@ -2237,7 +2314,7 @@ function applyRoomSize(w, d) {
   floorMesh.geometry.dispose();
   floorMesh.geometry = new THREE.PlaneGeometry(w, d);
   floorMesh.position.set(0, 0, ROOM_CENTER_Z);
-  floorMat.map.repeat.set(w / 4.6, d / 4.4);
+  floorMat.map.repeat.set(w / FLOOR_TILE, d / FLOOR_TILE);
 
   backWallMesh.geometry.dispose();
   backWallMesh.geometry = new THREE.PlaneGeometry(w, WALL_H);
@@ -2353,8 +2430,7 @@ export function init(containerEl) {
     scene.add(fill);
     fillLight = fill;
 
-    floorMat = toonMat(PAL.floorBase, { map: makeFloorTexture("plank") });
-    floorMat.userData.pattern = "plank";
+    floorMat = toonMat(PAL.floorBase, { map: makeFloorTexture() });
     floorMesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), floorMat);
     floorMesh.rotation.x = -Math.PI / 2;
     floorMesh.receiveShadow = true;
@@ -2397,7 +2473,9 @@ export function init(containerEl) {
     outsideGroup = new THREE.Group();
     themeDecorGroup = new THREE.Group();
     structureGroup = new THREE.Group();
-    scene.add(outsideGroup, themeDecorGroup, structureGroup);
+    floor2Group = new THREE.Group();
+    floor2Group.visible = false;
+    scene.add(outsideGroup, themeDecorGroup, structureGroup, floor2Group);
 
     applyRoomSize(ROOM_MIN_W, ROOM_MIN_D);
 
@@ -2444,14 +2522,7 @@ function applyTheme(themeId) {
     }
   }
 
-  floorMat.color.set(t.floor);
-  if (floorMat.userData.pattern !== t.floorPattern) {
-    const repeat = floorMat.map.repeat.clone();
-    floorMat.map = makeFloorTexture(t.floorPattern);
-    floorMat.map.repeat.copy(repeat);
-    floorMat.needsUpdate = true;
-    floorMat.userData.pattern = t.floorPattern;
-  }
+  floorMat.color.set(t.floor); // 무늬는 전 테마 공통 타일, 색만 테마가 정한다
   backWallMat.color.set(t.wallBack);
   sideWallMat.color.set(t.wallSide);
 
@@ -2493,6 +2564,7 @@ function applyTheme(themeId) {
   rebuildOutside();
   rebuildThemeDecor();
   rebuildStructure(); // 사인·난간 색이 테마 팔레트를 따라간다
+  buildFloor2();
 }
 
 function applyFrustum(aspect) {
@@ -2588,6 +2660,8 @@ export function update(snapshot) {
   if (stage !== venueStage) {
     venueStage = stage;
     rebuildStructure();
+    buildFloor2();
+    if (activeFloor === 2 && venueStage < 3) setFloorInternal(1); // 2층이 잠기면 1층으로
   }
   tableOccupancy = occupancy;
   currentPerTableIncome = perTableIncome;
@@ -3427,12 +3501,17 @@ function updateBursts(dt) {
 }
 
 function clampCameraTarget() {
-  const marginX = Math.max(1, roomW / 2 - 2);
-  const marginZ = Math.max(1, roomD / 2 - 2);
+  // 2층은 1층에서 멀리 떨어진 곳에 따로 지어져 있다.
+  // 층을 구분하지 않고 1층 방 범위로만 clamp하면, 2층으로 옮긴 카메라가 매 프레임 1층으로 튕겨 돌아온다.
+  const on2 = activeFloor === 2;
+  const cx = on2 ? FLOOR2_ORIGIN.x : 0;
+  const cz = on2 ? FLOOR2_ORIGIN.z : ROOM_CENTER_Z;
+  const marginX = Math.max(1, (on2 ? FLOOR2_SIZE.w : roomW) / 2 - 2);
+  const marginZ = Math.max(1, (on2 ? FLOOR2_SIZE.d : roomD) / 2 - 2);
   const t = controls.target;
-  t.x = Math.min(marginX, Math.max(-marginX, t.x));
+  t.x = Math.min(cx + marginX, Math.max(cx - marginX, t.x));
   t.y = 0;
-  t.z = Math.min(ROOM_CENTER_Z + marginZ, Math.max(ROOM_CENTER_Z - marginZ, t.z));
+  t.z = Math.min(cz + marginZ, Math.max(cz - marginZ, t.z));
   camera.position.copy(t).add(ISO_OFFSET);
 }
 
@@ -3460,7 +3539,7 @@ function animate() {
   renderer.render(scene, camera);
 }
 
-window.PubScene3D = { init, update, chipBurst, spawnDiamondBubble };
+window.PubScene3D = { init, update, chipBurst, spawnDiamondBubble, setFloor, getFloorInfo };
 
 // 개발용 점검 훅: 손님이 테이블/카운터 안으로 파고들었는지 실측한다.
 window.__pubDebug = () => {

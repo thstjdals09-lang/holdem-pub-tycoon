@@ -15,8 +15,8 @@
      올리지 않으면 index.html만 새로 받고 js/css는 브라우저 캐시의 옛 파일이 섞여서
      (예: 옛 game.js가 지금은 없는 요소를 건드려 게임이 멈추고 매장이 안 그려짐) 화면이 깨진다.
      js/account.js·backend.js·shop.js 안의 "./firebase-init.js?v=" 도 같은 숫자로 맞출 것. -->
-<link rel="stylesheet" href="css/style.css?v=19" />
-<link rel="stylesheet" href="css/assets.css?v=19" />
+<link rel="stylesheet" href="css/style.css?v=20" />
+<link rel="stylesheet" href="css/assets.css?v=20" />
 <script type="importmap">
 {
   "imports": {
@@ -86,6 +86,12 @@
       <button class="rail-btn" id="mission-btn" data-label="미션">📋<span class="dot" id="mission-dot"></span></button>
       <button class="rail-btn" id="boost-btn" data-label="부스트">⚡<span class="dot" id="boost-dot"></span></button>
     </div>
+  </div>
+
+  <!-- 층 전환 (포커 제국 단계에서 2층이 열리면 나타난다) -->
+  <div class="floor-switch" id="floor-switch" hidden>
+    <button type="button" class="floor-btn active" data-floor="1">1F</button>
+    <button type="button" class="floor-btn" data-floor="2">2F</button>
   </div>
 
   <!-- 좌측 하단 안내 -->
@@ -442,16 +448,16 @@
 
 <div id="toast-wrap"></div>
 
-<script src="js/data.js?v=19" defer></script>
-<script src="js/assets.js?v=19" defer></script>
-<script src="js/portraits.js?v=19" defer></script>
-<script src="js/sfx.js?v=19" defer></script>
-<script src="js/ads.js?v=19" defer></script>
-<script type="module" src="js/account.js?v=19"></script>
-<script type="module" src="js/backend.js?v=19"></script>
-<script type="module" src="js/shop.js?v=19"></script>
-<script type="module" src="js/auth-gate.js?v=19"></script>
-<script type="module" src="js/scene3d.js?v=19"></script>
-<script src="js/game.js?v=19" defer></script>
+<script src="js/data.js?v=20" defer></script>
+<script src="js/assets.js?v=20" defer></script>
+<script src="js/portraits.js?v=20" defer></script>
+<script src="js/sfx.js?v=20" defer></script>
+<script src="js/ads.js?v=20" defer></script>
+<script type="module" src="js/account.js?v=20"></script>
+<script type="module" src="js/backend.js?v=20"></script>
+<script type="module" src="js/shop.js?v=20"></script>
+<script type="module" src="js/auth-gate.js?v=20"></script>
+<script type="module" src="js/scene3d.js?v=20"></script>
+<script src="js/game.js?v=20" defer></script>
 </body>
 </html>

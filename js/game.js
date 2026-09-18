@@ -2796,6 +2796,28 @@
     settings: renderSettingsTab,
   };
 
+  // 층 전환 — 2층(VIP 라운지)은 포커 제국 단계에서 열린다
+  function refreshFloorSwitch() {
+    const box = $("floor-switch");
+    if (!box || !window.PubScene3D || !window.PubScene3D.getFloorInfo) return;
+    const info = window.PubScene3D.getFloorInfo();
+    box.hidden = info.unlocked < 2;
+    for (const b of box.querySelectorAll(".floor-btn")) {
+      b.classList.toggle("active", Number(b.dataset.floor) === info.active);
+    }
+  }
+
+  function bindFloorSwitch() {
+    const box = $("floor-switch");
+    if (!box) return;
+    box.addEventListener("click", (e) => {
+      const btn = e.target.closest(".floor-btn");
+      if (!btn) return;
+      window.PubScene3D.setFloor(Number(btn.dataset.floor));
+      refreshFloorSwitch();
+    });
+  }
+
   function renderScene() {
     if (!window.PubScene3D) return;
     window.PubScene3D.update({
@@ -2813,9 +2835,10 @@
       theme: state.theme,
       occupancy: tableOccupancy(),
       tournamentWins: state.tournament.wins || 0,
-      // 명성 단계 — 3D 매장의 구조물(사인·메자닌·아치)이 리뉴얼 탭 외관 그림과 같은 기준을 쓴다
+      // 명성 단계 — 3D 매장의 구조물(사인·아치·2층)이 리뉴얼 탭 외관 그림과 같은 기준을 쓴다
       stage: BUILDING_STEPS.indexOf(buildingStep()),
     });
+    refreshFloorSwitch();
   }
 
   // 상태가 바뀐 직후 호출 — 열려 있는 탭만 다시 그린다 (전체 재렌더는 비싸다)
@@ -3294,6 +3317,7 @@
     ensureDailyState();
     if (window.Sfx) window.Sfx.setVolume(state.settings.sfxVolume ?? 0.6);
     applyStaticAssets();
+    bindFloorSwitch();
     setupControlBar();
 
     // 시트 내부 액션
